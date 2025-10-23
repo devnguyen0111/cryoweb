@@ -1,0 +1,70 @@
+---
+title: Sidebar
+description: A composable, themeable and customizable sidebar component.
+originalDocs: https://ui.shadcn.com/docs/components/sidebar
+sourceCode: https://github.com/henry-phm/base-stack/blob/main/packages/ui/src/components/Sidebar.tsx
+---
+
+## Demo
+You can view this demo in fullscreen mode <Link href="/layout-preview/dashboard/history" target="_blank">here</Link>.
+<div className="grid mt-4">
+    <div className="overflow-hidden border rounded-xl shadow-lg">
+        <iframe
+            src="/layout-preview/dashboard/history"
+            style={{ width: '1000px', height: '600px' }}
+            title="Sidebar Demo"
+        />
+    </div>
+</div>
+
+---
+
+## Usage
+This is the sidebar component from `shadcn`, with some adjustments to make it easier to use:
+- Added the `SidebarNavigationMenu` component
+- Modified so that icons are clickable when the sidebar is collapsed
+- The <Link href="https://github.com/henry-phm/base-stack/blob/main/apps/next/src/shared/layouts/DashboardLayout.tsx" target="_blank">`DashboardLayout`</Link> is pre-configured in each app, so you can use it out of the box.
+
+<MdxTip>
+When you set up the project, a **sidebar layout** is already configured for each app in `shared/layouts/DashboardLayout.tsx`. This file handles active link highlighting separately for each routing library. See the following examples for how to use it with both routing libraries.
+</MdxTip>
+
+### `Next.js`
+In Next.js, you can use cookies to persist the sidebar's collapsed state.
+```tsx
+// layout.tsx
+import { DashboardLayout } from '@/shared/layouts/DashboardLayout'
+import { cookies } from 'next/headers'
+
+interface LayoutProps {
+    children: React.ReactNode
+}
+
+export default async function Layout({ children }: LayoutProps) {
+    const cookieStore = await cookies()
+    const defaultOpen = cookieStore.get('sidebar_state')?.value !== 'false'
+
+    return <DashboardLayout defaultOpen={defaultOpen}>{children}</DashboardLayout>
+}
+
+```
+
+### `Tanstack Router`
+```tsx
+// route.tsx
+import { DashboardLayout } from '@/shared/layouts/DashboardLayout'
+import { createFileRoute, Outlet } from '@tanstack/react-router'
+
+export const Route = createFileRoute('/dashboard')({
+    component: RouteComponent,
+})
+
+function RouteComponent() {
+    return (
+        <DashboardLayout>
+            <Outlet />
+        </DashboardLayout>
+    )
+}
+
+```

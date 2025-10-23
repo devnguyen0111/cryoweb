@@ -24,7 +24,6 @@ export const Route = createFileRoute('/register')({
 // Validation schema
 const registerSchema = z
     .object({
-        clinicName: z.string().min(2, 'Clinic name must be at least 2 characters'),
         fullName: z.string().min(2, 'Full name must be at least 2 characters'),
         email: z.string().email('Please enter a valid email address'),
         phone: z.string().min(10, 'Please enter a valid phone number'),
@@ -48,7 +47,6 @@ function RegisterPage() {
     const form = useForm<RegisterFormData>({
         resolver: zodResolver(registerSchema),
         defaultValues: {
-            clinicName: '',
             fullName: '',
             email: '',
             phone: '',
@@ -110,35 +108,19 @@ function RegisterPage() {
                     <CardContent>
                         <Form {...form}>
                             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                                <div className="grid md:grid-cols-2 gap-4">
-                                    <FormField
-                                        control={form.control}
-                                        name="clinicName"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Clinic Name</FormLabel>
-                                                <FormControl>
-                                                    <Input placeholder="Fertility Clinic Name" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-
-                                    <FormField
-                                        control={form.control}
-                                        name="fullName"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Full Name</FormLabel>
-                                                <FormControl>
-                                                    <Input placeholder="John Doe" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
+                                <FormField
+                                    control={form.control}
+                                    name="fullName"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Full Name</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="John Doe" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
 
                                 <div className="grid md:grid-cols-2 gap-4">
                                     <FormField

@@ -9,7 +9,6 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest {
-    clinicName: string
     fullName: string
     email: string
     phone: string
@@ -23,7 +22,7 @@ export interface AuthResponse {
         id: string
         email: string
         fullName: string
-        clinicName: string
+        phone: string
         role: string
     }
 }
@@ -32,7 +31,6 @@ export interface User {
     id: string
     email: string
     fullName: string
-    clinicName: string
     role: string
     phone: string
     createdAt: string
@@ -74,11 +72,10 @@ export class AuthApi {
     }
 
     /**
-     * Register a new user/clinic
+     * Register a new user
      * TODO: Implement actual API endpoint
      * @example
      * const response = await authApi.register({
-     *   clinicName: 'My Clinic',
      *   fullName: 'John Doe',
      *   email: 'john@example.com',
      *   phone: '+1234567890',

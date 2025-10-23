@@ -57,7 +57,7 @@ function HomePage() {
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                         <Button size="xl" asChild>
-                            <Link to="/register">Start Free Trial</Link>
+                            <Link to="/register">Get Started</Link>
                         </Button>
                         <Button size="xl" variant="outline" asChild>
                             <Link to="/login">Sign In</Link>
@@ -158,10 +158,10 @@ function HomePage() {
                             </p>
                             <div className="flex flex-col sm:flex-row gap-4 justify-center">
                                 <Button size="xl" asChild>
-                                    <Link to="/register">Create Free Account</Link>
+                                    <Link to="/register">Create Account</Link>
                                 </Button>
                                 <Button size="xl" variant="outline">
-                                    Schedule a Demo
+                                    Contact Us
                                 </Button>
                             </div>
                         </CardContent>

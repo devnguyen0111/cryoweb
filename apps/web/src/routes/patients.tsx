@@ -57,11 +57,9 @@ function PatientsPage() {
                         <h1 className="text-3xl font-bold mb-2">Patients</h1>
                         <p className="text-muted-foreground">Manage patient records and information</p>
                     </div>
-                    <Button asChild>
-                        <Link to="/patients/new">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add Patient
-                        </Link>
+                    <Button isDisabled>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Patient
                     </Button>
                 </div>
 
@@ -122,11 +120,9 @@ function PatientsPage() {
                             <p className="text-muted-foreground mb-4">
                                 Get started by adding your first patient record
                             </p>
-                            <Button asChild>
-                                <Link to="/patients/new">
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Add First Patient
-                                </Link>
+                            <Button isDisabled>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add First Patient
                             </Button>
                         </CardContent>
                     </Card>
@@ -134,11 +130,11 @@ function PatientsPage() {
 
                 {/* Pagination - TODO: Implement when API is connected */}
                 <div className="mt-8 flex items-center justify-center gap-2">
-                    <Button variant="outline" size="sm" disabled>
+                    <Button variant="outline" size="sm" isDisabled>
                         Previous
                     </Button>
                     <span className="text-sm text-muted-foreground">Page 1 of TODO</span>
-                    <Button variant="outline" size="sm" disabled>
+                    <Button variant="outline" size="sm" isDisabled>
                         Next
                     </Button>
                 </div>

@@ -63,11 +63,9 @@ function SamplesPage() {
                         <h1 className="text-3xl font-bold mb-2">Sample Storage</h1>
                         <p className="text-muted-foreground">Track and manage cryogenic samples</p>
                     </div>
-                    <Button asChild>
-                        <Link to="/samples/new">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Register Sample
-                        </Link>
+                    <Button isDisabled>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Register Sample
                     </Button>
                 </div>
 
@@ -168,11 +166,9 @@ function SamplesPage() {
                             <p className="text-muted-foreground mb-4">
                                 Connect API to view stored samples or register a new sample
                             </p>
-                            <Button asChild>
-                                <Link to="/samples/new">
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Register Sample
-                                </Link>
+                            <Button isDisabled>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Register Sample
                             </Button>
                         </CardContent>
                     </Card>
@@ -180,11 +176,11 @@ function SamplesPage() {
 
                 {/* Pagination */}
                 <div className="mt-8 flex items-center justify-center gap-2">
-                    <Button variant="outline" size="sm" disabled>
+                    <Button variant="outline" size="sm" isDisabled>
                         Previous
                     </Button>
                     <span className="text-sm text-muted-foreground">Page 1 of TODO</span>
-                    <Button variant="outline" size="sm" disabled>
+                    <Button variant="outline" size="sm" isDisabled>
                         Next
                     </Button>
                 </div>

@@ -60,11 +60,9 @@ function AppointmentsPage() {
                         <h1 className="text-3xl font-bold mb-2">Appointments</h1>
                         <p className="text-muted-foreground">Schedule and manage patient appointments</p>
                     </div>
-                    <Button asChild>
-                        <Link to="/appointments/new">
-                            <Plus className="mr-2 h-4 w-4" />
-                            New Appointment
-                        </Link>
+                    <Button isDisabled>
+                        <Plus className="mr-2 h-4 w-4" />
+                        New Appointment
                     </Button>
                 </div>
 
@@ -137,11 +135,9 @@ function AppointmentsPage() {
                                     <p className="text-muted-foreground mb-4">
                                         Connect API to view appointments or create a new one
                                     </p>
-                                    <Button asChild>
-                                        <Link to="/appointments/new">
-                                            <Plus className="mr-2 h-4 w-4" />
-                                            Schedule Appointment
-                                        </Link>
+                                    <Button isDisabled>
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Schedule Appointment
                                     </Button>
                                 </CardContent>
                             </Card>

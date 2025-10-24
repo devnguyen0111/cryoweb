@@ -42,35 +42,35 @@ graph TB
 ```mermaid
 graph TB
     subgraph "Web Application Structure"
-        Entry[main.tsx<br/>Application Entry Point]
+        Entry["main.tsx - Application Entry Point"]
 
         subgraph "Routing Layer"
-            Router[TanStack Router<br/>File-based Routing]
-            Root[__root.tsx<br/>Root Layout + Providers]
+            Router["TanStack Router - File-based Routing"]
+            Root["__root.tsx - Root Layout + Providers"]
 
             subgraph "Public Routes"
-                Home[/ - Home Page<br/>Landing Page]
-                Login[/login - Login Page<br/>Authentication]
-                Register[/register - Registration<br/>User Sign Up]
+                Home["index.tsx - Home Page"]
+                Login["login.tsx - Login Page"]
+                Register["register.tsx - Registration"]
             end
 
             subgraph "Protected Routes"
-                Dashboard[/dashboard<br/>Statistics & Overview]
-                Patients[/patients<br/>Patient Management]
-                Samples[/samples<br/>Sample Tracking]
-                Appointments[/appointments<br/>Scheduling]
-                Settings[/settings<br/>User Settings]
+                Dashboard["dashboard.tsx - Statistics"]
+                Patients["patients.tsx - Patient Management"]
+                Samples["samples.tsx - Sample Tracking"]
+                Appointments["appointments.tsx - Scheduling"]
+                Settings["settings.tsx - User Settings"]
             end
         end
 
         subgraph "State Management"
-            ReactQuery[TanStack Query<br/>Server State & Caching]
-            ReactHookForm[React Hook Form<br/>Form State]
+            ReactQuery["TanStack Query - Server State"]
+            ReactHookForm["React Hook Form - Form State"]
         end
 
         subgraph "Shared Layer"
-            Components[Shared Components<br/>AppLayout, Providers, ThemeSwitcher]
-            ApiClient[API Client<br/>Axios Instance + Interceptors]
+            Components["Shared Components"]
+            ApiClient["API Client - Axios"]
         end
 
         Entry --> Router
@@ -101,19 +101,19 @@ graph TB
 ## 📦 Packages Architecture
 
 ```mermaid
-graph LR
-    subgraph "@workspace/lib Package"
-        LibIndex[index.ts<br/>Main Export]
+graph TB
+    subgraph LibPackage["@workspace/lib Package"]
+        LibIndex["index.ts - Main Export"]
 
         subgraph "API SDK"
-            AuthAPI[auth.api.ts<br/>Authentication<br/>Login, Register, Token Refresh]
-            PatientsAPI[patients.api.ts<br/>Patient CRUD<br/>Search, Filter, Archive]
-            SamplesAPI[samples.api.ts<br/>Sample Management<br/>Storage, Transfer, Alerts]
-            AppointmentsAPI[appointments.api.ts<br/>Scheduling<br/>Booking, Reminders]
+            AuthAPI["auth.api.ts - Authentication"]
+            PatientsAPI["patients.api.ts - Patient CRUD"]
+            SamplesAPI["samples.api.ts - Sample Management"]
+            AppointmentsAPI["appointments.api.ts - Scheduling"]
         end
 
         subgraph "Validation"
-            ValidationSchemas[Zod Schemas<br/>Type-safe Validation]
+            ValidationSchemas["Zod Schemas - Validation"]
         end
 
         LibIndex --> AuthAPI
@@ -123,40 +123,40 @@ graph LR
         LibIndex --> ValidationSchemas
     end
 
-    subgraph "@workspace/ui Package"
-        UIIndex[Component Exports]
+    subgraph UIPackage["@workspace/ui Package"]
+        UIIndex["Component Exports"]
 
         subgraph "Form Components"
-            Button[Button<br/>10+ Variants]
-            Input[Textfield, Numberfield<br/>Datefield, Searchfield]
-            Select[Select, ListBox<br/>RadioGroup, Checkbox]
-            Form[Form, Field<br/>Form Wrappers]
+            Button["Button - 10+ Variants"]
+            Input["Input Fields"]
+            Select["Select Components"]
+            Form["Form Wrappers"]
         end
 
         subgraph "Data Display"
-            DataTable[DataTable<br/>Sortable, Filterable]
-            Card[Card Components]
-            Badge[Badge, Avatar]
-            Calendar[Calendar, DatePicker]
+            DataTable["DataTable - Sortable"]
+            Card["Card Components"]
+            Badge["Badge & Avatar"]
+            Calendar["Calendar & DatePicker"]
         end
 
         subgraph "Layout Components"
-            Dialog[Dialog, Sheet<br/>ConfirmDialog]
-            Sidebar[Sidebar Navigation]
-            Menu[Menu, Popover<br/>Tooltip]
-            Tabs[Tabs, Accordion<br/>Collapsible]
+            Dialog["Dialog & Sheet"]
+            Sidebar["Sidebar Navigation"]
+            Menu["Menu & Popover"]
+            Tabs["Tabs & Accordion"]
         end
 
         subgraph "Feedback Components"
-            Toast[Sonner Toasts]
-            Progress[Progress, Spinner<br/>LoadingOverlay, Skeleton]
-            NProgress[NProgress Bar]
+            Toast["Sonner Toasts"]
+            Progress["Progress & Spinner"]
+            NProgress["NProgress Bar"]
         end
 
         subgraph "Utilities"
-            Provider[React Aria Provider<br/>Theme Provider]
-            Hooks[Custom Hooks<br/>use-mobile]
-            Utils[Utility Functions<br/>cn(), file helpers]
+            Provider["React Aria Provider"]
+            Hooks["Custom Hooks"]
+            Utils["Utility Functions"]
         end
 
         UIIndex --> Button
@@ -185,27 +185,27 @@ graph LR
 ```mermaid
 sequenceDiagram
     participant User
-    participant UI as UI Components<br/>(@workspace/ui)
-    participant Page as Page Component<br/>(apps/web/routes)
-    participant Query as TanStack Query<br/>(State Management)
-    participant API as API SDK<br/>(@workspace/lib)
-    participant Axios as Axios Client<br/>(HTTP)
+    participant UI as UI Components
+    participant Page as Page Component
+    participant Query as TanStack Query
+    participant API as API SDK
+    participant Axios as Axios Client
     participant Backend as Backend API
 
-    User->>UI: Interact (Click, Submit)
+    User->>UI: Interact - Click, Submit
     UI->>Page: Event Handler
     Page->>Query: Trigger Query/Mutation
     Query->>API: Call SDK Method
     API->>Axios: HTTP Request
 
     alt Authentication Required
-        Axios->>Axios: Add JWT Token<br/>(Request Interceptor)
+        Axios->>Axios: Add JWT Token via Interceptor
     end
 
     Axios->>Backend: API Call
     Backend-->>Axios: Response
 
-    alt Token Expired (401)
+    alt Token Expired - 401
         Axios->>Backend: Refresh Token
         Backend-->>Axios: New Token
         Axios->>Backend: Retry Original Request
@@ -224,22 +224,22 @@ sequenceDiagram
 ```mermaid
 graph TB
     subgraph "Component Hierarchy"
-        AppRoot[App Root<br/>Providers + Theme]
+        AppRoot["App Root - Providers & Theme"]
 
         subgraph "Layout Components"
-            RootLayout[Root Layout<br/>Navigation + Sidebar]
-            AppLayout[App Layout<br/>Protected Routes]
+            RootLayout["Root Layout - Navigation"]
+            AppLayout["App Layout - Protected Routes"]
         end
 
         subgraph "Page Components"
-            PageComponent[Page Component<br/>Dashboard, Patients, etc.]
+            PageComponent["Page Component - Dashboard, Patients"]
 
             subgraph "Feature Components"
-                FeatureSection[Feature Section<br/>Logical Group]
+                FeatureSection["Feature Section - Logical Group"]
 
                 subgraph "UI Components"
-                    UIComp[@workspace/ui<br/>Button, Card, Form, etc.]
-                    CustomComp[Custom Components<br/>Domain-specific]
+                    UIComp["Workspace UI - Button, Card, Form"]
+                    CustomComp["Custom Components - Domain-specific"]
                 end
             end
         end
@@ -256,35 +256,35 @@ graph TB
 ## 🛠️ Technology Stack
 
 ```mermaid
-graph LR
+graph TB
     subgraph "Core Technologies"
-        React[React 19<br/>UI Library]
-        TS[TypeScript<br/>Type Safety]
-        Vite[Vite<br/>Build Tool]
+        React["React 19 - UI Library"]
+        TS["TypeScript - Type Safety"]
+        Vite["Vite - Build Tool"]
     end
 
     subgraph "Routing & State"
-        Router[TanStack Router<br/>File-based Routing]
-        Query[TanStack Query<br/>Server State]
-        RHF[React Hook Form<br/>Form State]
+        Router["TanStack Router - File-based"]
+        Query["TanStack Query - Server State"]
+        RHF["React Hook Form - Form State"]
     end
 
     subgraph "UI & Styling"
-        RAC[React Aria Components<br/>Accessible UI]
-        Tailwind[Tailwind CSS<br/>Utility-first Styling]
-        Lucide[Lucide React<br/>Icon Library]
+        RAC["React Aria Components"]
+        Tailwind["Tailwind CSS"]
+        Lucide["Lucide React - Icons"]
     end
 
     subgraph "Data & Validation"
-        Axios[Axios<br/>HTTP Client]
-        Zod[Zod<br/>Schema Validation]
+        Axios["Axios - HTTP Client"]
+        Zod["Zod - Schema Validation"]
     end
 
     subgraph "Dev Tools"
-        Turbo[Turborepo<br/>Monorepo Build]
-        ESLint[ESLint<br/>Linting]
-        Prettier[Prettier<br/>Code Formatting]
-        pnpm[pnpm<br/>Package Manager]
+        Turbo["Turborepo - Monorepo"]
+        ESLint["ESLint - Linting"]
+        Prettier["Prettier - Formatting"]
+        pnpm["pnpm - Package Manager"]
     end
 ```
 
@@ -379,26 +379,26 @@ packages/lib/
 ```mermaid
 graph TB
     subgraph "Security Layers"
-        User[User]
+        User["User"]
 
         subgraph "Frontend Security"
-            FormValidation[Form Validation<br/>Zod Schemas]
-            XSSPrevention[XSS Prevention<br/>React Auto-escaping]
-            CSRFToken[CSRF Token<br/>In Request Headers]
+            FormValidation["Form Validation - Zod Schemas"]
+            XSSPrevention["XSS Prevention - React"]
+            CSRFToken["CSRF Token - Headers"]
         end
 
         subgraph "Authentication Flow"
-            Login[Login Form]
-            JWT[JWT Token<br/>Access + Refresh]
-            Storage[LocalStorage<br/>Token Storage]
-            Interceptor[Axios Interceptor<br/>Auto-attach Token]
-            RefreshLogic[Token Refresh<br/>On 401 Error]
+            Login["Login Form"]
+            JWT["JWT Token - Access & Refresh"]
+            Storage["LocalStorage - Token Storage"]
+            Interceptor["Axios Interceptor"]
+            RefreshLogic["Token Refresh - On 401"]
         end
 
         subgraph "Backend API"
-            AuthGuard[Authentication Guard]
-            RBAC[Role-Based Access Control]
-            DataValidation[Server-side Validation]
+            AuthGuard["Authentication Guard"]
+            RBAC["Role-Based Access Control"]
+            DataValidation["Server-side Validation"]
         end
 
         User --> FormValidation
@@ -455,18 +455,18 @@ graph TB
 
 ```mermaid
 graph LR
-    Dev[Developer] -->|1. Code| Local[Local Development<br/>pnpm dev]
-    Local -->|2. Auto-reload| Browser[Browser<br/>localhost:5173]
+    Dev["Developer"] -->|1. Code| Local["Local Development - pnpm dev"]
+    Local -->|2. Auto-reload| Browser["Browser - localhost:5173"]
     Browser -->|3. Hot Reload| Local
 
-    Local -->|4. Lint| ESLint[ESLint Check<br/>Code Quality]
-    ESLint -->|5. Format| Prettier[Prettier<br/>Code Formatting]
+    Local -->|4. Lint| ESLint["ESLint Check"]
+    ESLint -->|5. Format| Prettier["Prettier Formatting"]
 
-    Prettier -->|6. Type Check| TSC[TypeScript<br/>Type Safety]
-    TSC -->|7. Build| Turbo[Turborepo<br/>Parallel Build]
+    Prettier -->|6. Type Check| TSC["TypeScript Check"]
+    TSC -->|7. Build| Turbo["Turborepo Build"]
 
-    Turbo -->|8. Test| Tests[Unit Tests<br/>Future]
-    Tests -->|9. Deploy| Production[Production<br/>Build]
+    Turbo -->|8. Test| Tests["Unit Tests - Future"]
+    Tests -->|9. Deploy| Production["Production Build"]
 ```
 
 ## 📊 Performance Optimization
@@ -476,18 +476,18 @@ graph LR
 ```mermaid
 graph TB
     subgraph "Bundle Strategy"
-        Entry[Entry Point<br/>main.tsx]
+        Entry["Entry Point - main.tsx"]
 
         subgraph "Route Chunks"
-            Home[Home<br/>index.tsx]
-            Auth[Auth Routes<br/>login.tsx, register.tsx]
-            App[App Routes<br/>dashboard, patients, etc.]
+            Home["Home - index.tsx"]
+            Auth["Auth Routes - login, register"]
+            App["App Routes - dashboard, patients"]
         end
 
         subgraph "Vendor Chunks"
-            React[React + ReactDOM]
-            Router[TanStack Router/Query]
-            UI[UI Components<br/>Lazy loaded]
+            React["React + ReactDOM"]
+            Router["TanStack Router & Query"]
+            UI["UI Components - Lazy loaded"]
         end
 
         Entry --> Home
@@ -513,16 +513,16 @@ graph TB
 ```mermaid
 graph TB
     subgraph "State Types"
-        Server[Server State<br/>TanStack Query<br/>API Data, Caching]
-        Form[Form State<br/>React Hook Form<br/>Input, Validation]
-        UI[UI State<br/>React State<br/>Modals, Toggles]
-        Global[Global State<br/>React Context<br/>Theme, Auth]
+        Server["Server State - TanStack Query"]
+        Form["Form State - React Hook Form"]
+        UI["UI State - React State"]
+        Global["Global State - React Context"]
     end
 
-    API[Backend API] --> Server
-    User[User Input] --> Form
-    Components[Components] --> UI
-    App[Application] --> Global
+    API["Backend API"] --> Server
+    User["User Input"] --> Form
+    Components["Components"] --> UI
+    App["Application"] --> Global
 ```
 
 ## 🎨 Design System
@@ -568,9 +568,9 @@ graph TB
 ```mermaid
 graph TB
     subgraph "Testing Pyramid"
-        E2E[E2E Tests<br/>Playwright/Cypress<br/>User Flows]
-        Integration[Integration Tests<br/>React Testing Library<br/>Component + API]
-        Unit[Unit Tests<br/>Vitest<br/>Functions + Hooks]
+        E2E["E2E Tests - Playwright/Cypress"]
+        Integration["Integration Tests - React Testing Library"]
+        Unit["Unit Tests - Vitest"]
     end
 
     Unit --> Integration
@@ -582,19 +582,19 @@ graph TB
 ```mermaid
 graph LR
     subgraph "Build Process"
-        Source[Source Code] -->|Turbo Build| Build[Production Build]
-        Build --> Optimize[Optimize Assets<br/>Minify, Compress]
+        Source["Source Code"] -->|Turbo Build| Build["Production Build"]
+        Build --> Optimize["Optimize Assets"]
     end
 
     subgraph "Deployment"
-        Optimize --> CDN[CDN<br/>Static Assets]
-        Optimize --> Host[Hosting<br/>Vercel/Netlify]
+        Optimize --> CDN["CDN - Static Assets"]
+        Optimize --> Host["Hosting - Vercel/Netlify"]
     end
 
     subgraph "Runtime"
-        User[Users] --> CDN
+        User["Users"] --> CDN
         CDN --> Host
-        Host --> API[Backend API]
+        Host --> API["Backend API"]
     end
 ```
 

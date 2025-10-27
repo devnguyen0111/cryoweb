@@ -16,25 +16,53 @@ export interface RegisterRequest {
 }
 
 export interface AuthResponse {
-    token: string
-    refreshToken: string
-    user: {
-        id: string
-        email: string
-        fullName: string
-        phone: string
-        role: string
+    isBanned: boolean
+    requiresVerification: boolean
+    bannedAccountId: number
+    code: number
+    systemCode: string | null
+    message: string
+    data: {
+        token: string | null
+        refreshToken: string | null
+        user: {
+            id: number
+            userName: string | null
+            age: number | null
+            email: string
+            phone: string | null
+            location: string | null
+            country: string | null
+            image: string | null
+            status: boolean
+            emailVerified: boolean
+            roleId: number
+            roleName: string
+            createdAt: string
+            updatedAt: string
+        }
+        emailVerified: boolean
     }
 }
 
 export interface User {
-    id: string
+    id: number
     email: string
-    fullName: string
-    role: string
-    phone: string
+    fullName?: string
+    phone?: string
+    role?: string
     createdAt: string
     updatedAt: string
+    isEmailVerified?: boolean
+    status?: boolean
+    // Additional fields from API
+    userName?: string | null
+    age?: number | null
+    location?: string | null
+    country?: string | null
+    image?: string | null
+    roleId?: number
+    roleName?: string
 }
 
 export interface ForgotPasswordRequest {
@@ -60,20 +88,15 @@ export class AuthApi {
 
     /**
      * Login with email and password
-     * TODO: Implement actual API endpoint
      * @example
      * const response = await authApi.login({ email: 'user@example.com', password: 'password123' })
      */
     async login(data: LoginRequest): Promise<AuthResponse> {
-        // TODO: Replace with actual API call
-        // return this.client.post<AuthResponse>('/auth/login', data).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.post<AuthResponse>('/auth/login', data).then(res => res.data)
     }
 
     /**
      * Register a new user
-     * TODO: Implement actual API endpoint
      * @example
      * const response = await authApi.register({
      *   fullName: 'John Doe',
@@ -83,108 +106,74 @@ export class AuthApi {
      * })
      */
     async register(data: RegisterRequest): Promise<AuthResponse> {
-        // TODO: Replace with actual API call
-        // return this.client.post<AuthResponse>('/auth/register', data).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.post<AuthResponse>('/auth/register', data).then(res => res.data)
     }
 
     /**
      * Logout current user
-     * TODO: Implement actual API endpoint
      */
     async logout(): Promise<void> {
-        // TODO: Replace with actual API call
-        // return this.client.post('/auth/logout').then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.post('/auth/logout').then(res => res.data)
     }
 
     /**
      * Refresh authentication token
-     * TODO: Implement actual API endpoint
      */
     async refreshToken(refreshToken: string): Promise<AuthResponse> {
-        // TODO: Replace with actual API call
-        // return this.client.post<AuthResponse>('/auth/refresh', { refreshToken }).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.post<AuthResponse>('/auth/refresh-token', { refreshToken }).then(res => res.data)
     }
 
     /**
      * Get current user profile
-     * TODO: Implement actual API endpoint
      */
     async getCurrentUser(): Promise<User> {
-        // TODO: Replace with actual API call
-        // return this.client.get<User>('/auth/me').then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.get<User>('/user/profile').then(res => res.data)
     }
 
     /**
      * Update current user profile
-     * TODO: Implement actual API endpoint
      */
     async updateProfile(data: Partial<User>): Promise<User> {
-        // TODO: Replace with actual API call
-        // return this.client.patch<User>('/auth/profile', data).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.put<User>('/user/profile', data).then(res => res.data)
     }
 
     /**
      * Request password reset
-     * TODO: Implement actual API endpoint
      */
     async forgotPassword(data: ForgotPasswordRequest): Promise<{ message: string }> {
-        // TODO: Replace with actual API call
-        // return this.client.post('/auth/forgot-password', data).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.post('/auth/forgot-password', data).then(res => res.data)
     }
 
     /**
      * Reset password with token
-     * TODO: Implement actual API endpoint
      */
     async resetPassword(data: ResetPasswordRequest): Promise<{ message: string }> {
-        // TODO: Replace with actual API call
-        // return this.client.post('/auth/reset-password', data).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.post('/auth/reset-password', data).then(res => res.data)
     }
 
     /**
      * Change password for authenticated user
-     * TODO: Implement actual API endpoint
      */
     async changePassword(data: ChangePasswordRequest): Promise<{ message: string }> {
-        // TODO: Replace with actual API call
-        // return this.client.post('/auth/change-password', data).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.post('/auth/change-password', data).then(res => res.data)
     }
 
     /**
-     * Verify email with token
-     * TODO: Implement actual API endpoint
+     * Verify email with code
      */
-    async verifyEmail(token: string): Promise<{ message: string }> {
-        // TODO: Replace with actual API call
-        // return this.client.post('/auth/verify-email', { token }).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+    async verifyEmail(email: string, verificationCode: string): Promise<{ message: string }> {
+        return this.client
+            .post('/auth/verify-email', {
+                email,
+                verificationCode,
+            })
+            .then(res => res.data)
     }
 
     /**
      * Resend email verification
-     * TODO: Implement actual API endpoint
      */
     async resendVerification(email: string): Promise<{ message: string }> {
-        // TODO: Replace with actual API call
-        // return this.client.post('/auth/resend-verification', { email }).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.post('/auth/send-verification-email', { email }).then(res => res.data)
     }
 }

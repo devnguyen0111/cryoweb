@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '@workspace/ui/components/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/Card'
 import { ThemeSwitcher } from '@/shared/components/ThemeSwitcher'
-import { HeartPulse, FlaskConical, Shield, Database, UserCheck, FileCheck, Clock, Lock } from 'lucide-react'
+import { HeartPulse, FlaskConical, Shield, Database, UserCheck, FileCheck, Clock, Lock, ArrowRight } from 'lucide-react'
 
 export const Route = createFileRoute('/')({
     component: HomePage,
@@ -78,34 +78,50 @@ function HomePage() {
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
                         <ServiceCard
                             icon={<HeartPulse className="h-8 w-8" />}
-                            title="Fertility Treatment Management"
-                            description="Track and manage all aspects of fertility treatments including IVF, IUI, and egg freezing procedures."
-                        />
-                        <ServiceCard
-                            icon={<Database className="h-8 w-8" />}
-                            title="Sample Storage & Tracking"
-                            description="Advanced cryogenic storage management with real-time tracking and temperature monitoring."
+                            title="IVF (In Vitro Fertilization)"
+                            description="Comprehensive IVF treatment management with advanced laboratory protocols and monitoring."
+                            linkTo="/services/ivf"
                         />
                         <ServiceCard
                             icon={<UserCheck className="h-8 w-8" />}
-                            title="Patient Records Management"
-                            description="Secure, HIPAA-compliant patient record management with easy access and retrieval."
+                            title="IUI (Intrauterine Insemination)"
+                            description="Efficient IUI procedure tracking and timing optimization for better success rates."
+                            linkTo="/services/iui"
                         />
                         <ServiceCard
-                            icon={<FileCheck className="h-8 w-8" />}
-                            title="Regulatory Compliance"
-                            description="Built-in compliance checks and reporting tools for FDA, CAP, and other regulatory standards."
+                            icon={<Database className="h-8 w-8" />}
+                            title="Egg Freezing"
+                            description="State-of-the-art egg freezing services with advanced vitrification technology."
+                            linkTo="/services/egg-freezing"
                         />
                         <ServiceCard
-                            icon={<Clock className="h-8 w-8" />}
-                            title="Appointment Scheduling"
-                            description="Integrated scheduling system for consultations, procedures, and follow-up appointments."
+                            icon={<FlaskConical className="h-8 w-8" />}
+                            title="Embryo Freezing"
+                            description="Secure embryo cryopreservation with comprehensive storage and monitoring."
+                            linkTo="/services/embryo-freezing"
                         />
                         <ServiceCard
                             icon={<Shield className="h-8 w-8" />}
-                            title="Quality Assurance"
-                            description="Comprehensive quality control and assurance protocols for all laboratory procedures."
+                            title="Fertility Preservation"
+                            description="Comprehensive fertility preservation options for medical and personal reasons."
+                            linkTo="/services/fertility-preservation"
                         />
+                        <ServiceCard
+                            icon={<UserCheck className="h-8 w-8" />}
+                            title="Male Fertility"
+                            description="Complete male fertility assessment and treatment solutions."
+                            linkTo="/services/male-fertility"
+                        />
+                    </div>
+
+                    {/* View All Services Link */}
+                    <div className="text-center mt-12">
+                        <Button variant="outline" size="lg" asChild>
+                            <Link to="/services/">
+                                View All Services
+                                <ArrowRight className="ml-2 h-4 w-4" />
+                            </Link>
+                        </Button>
                     </div>
                 </div>
             </section>
@@ -183,10 +199,54 @@ function HomePage() {
                             </p>
                         </div>
                         <div>
+                            <h3 className="font-semibold mb-4">Services</h3>
+                            <ul className="space-y-2 text-sm text-muted-foreground">
+                                <li>
+                                    <Link to="/services/ivf" className="hover:text-primary transition-colors">
+                                        IVF Treatment
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link to="/services/iui" className="hover:text-primary transition-colors">
+                                        IUI Treatment
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link to="/services/egg-freezing" className="hover:text-primary transition-colors">
+                                        Egg Freezing
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link
+                                        to="/services/embryo-freezing"
+                                        className="hover:text-primary transition-colors"
+                                    >
+                                        Embryo Freezing
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link
+                                        to="/services/fertility-preservation"
+                                        className="hover:text-primary transition-colors"
+                                    >
+                                        Fertility Preservation
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link
+                                        to="/services/male-fertility"
+                                        className="hover:text-primary transition-colors"
+                                    >
+                                        Male Fertility
+                                    </Link>
+                                </li>
+                            </ul>
+                        </div>
+                        <div>
                             <h3 className="font-semibold mb-4">Product</h3>
                             <ul className="space-y-2 text-sm text-muted-foreground">
                                 <li>
-                                    <a href="#" className="hover:text-primary transition-colors">
+                                    <a href="#features" className="hover:text-primary transition-colors">
                                         Features
                                     </a>
                                 </li>
@@ -252,9 +312,19 @@ function HomePage() {
     )
 }
 
-function ServiceCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
-    return (
-        <Card className="hover:border-primary/40 transition-colors">
+function ServiceCard({
+    icon,
+    title,
+    description,
+    linkTo,
+}: {
+    icon: React.ReactNode
+    title: string
+    description: string
+    linkTo?: string
+}) {
+    const content = (
+        <>
             <CardHeader>
                 <div className="h-12 w-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-4">
                     {icon}
@@ -262,8 +332,20 @@ function ServiceCard({ icon, title, description }: { icon: React.ReactNode; titl
                 <CardTitle>{title}</CardTitle>
                 <CardDescription>{description}</CardDescription>
             </CardHeader>
-        </Card>
+            {linkTo && (
+                <CardContent className="pt-0">
+                    <Button variant="ghost" size="sm" asChild className="group">
+                        <Link to={linkTo}>
+                            Learn More
+                            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                        </Link>
+                    </Button>
+                </CardContent>
+            )}
+        </>
     )
+
+    return <Card className="hover:border-primary/40 transition-colors hover:shadow-lg">{content}</Card>
 }
 
 function FeatureItem({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {

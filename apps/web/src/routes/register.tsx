@@ -14,8 +14,9 @@ import {
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { HeartPulse } from 'lucide-react'
+import { FlaskConical, CheckCircle2 } from 'lucide-react'
 import { toast } from '@workspace/ui/components/Sonner'
+import { useAuth } from '../shared/contexts/AuthContext'
 
 export const Route = createFileRoute('/register')({
     component: RegisterPage,
@@ -25,15 +26,18 @@ export const Route = createFileRoute('/register')({
 const registerSchema = z
     .object({
         fullName: z.string().min(2, 'Full name must be at least 2 characters'),
-        email: z.string().email('Please enter a valid email address'),
-        phone: z.string().min(10, 'Please enter a valid phone number'),
+        email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
+        phone: z
+            .string()
+            .min(10, 'Phone number must be at least 10 digits')
+            .regex(/^[0-9+\-\s()]+$/, 'Please enter a valid phone number'),
         password: z
             .string()
             .min(8, 'Password must be at least 8 characters')
             .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
             .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
             .regex(/[0-9]/, 'Password must contain at least one number'),
-        confirmPassword: z.string(),
+        confirmPassword: z.string().min(1, 'Please confirm your password'),
     })
     .refine(data => data.password === data.confirmPassword, {
         message: "Passwords don't match",
@@ -44,6 +48,7 @@ type RegisterFormData = z.infer<typeof registerSchema>
 
 function RegisterPage() {
     const navigate = useNavigate()
+    const { register } = useAuth()
     const form = useForm<RegisterFormData>({
         resolver: zodResolver(registerSchema),
         defaultValues: {
@@ -57,52 +62,71 @@ function RegisterPage() {
 
     const onSubmit = async (data: RegisterFormData) => {
         try {
-            // TODO: Replace with actual API call
-            // Example: await authApi.register(data)
-
-            console.log('Registration data:', data)
-
-            // Simulated API call
-            await new Promise(resolve => setTimeout(resolve, 1500))
-
-            // TODO: Store authentication token if auto-login after registration
-            // Example: localStorage.setItem('authToken', response.token)
+            await register({
+                fullName: data.fullName,
+                email: data.email,
+                phone: data.phone,
+                password: data.password,
+            })
 
             toast.success({
                 title: 'Registration successful',
-                description: 'Your account has been created. Please check your email for verification.',
+                description: 'Please check your email for verification code.',
             })
 
-            // TODO: Navigate to appropriate page after successful registration
-            // Option 1: Navigate to login
-            // navigate({ to: '/login' })
-            // Option 2: Navigate to email verification page
-            // navigate({ to: '/verify-email' })
-            // Option 3: Navigate to dashboard if auto-login
-            // navigate({ to: '/dashboard' })
-        } catch (error) {
+            // Navigate to email verification page
+            navigate({
+                to: '/verify-email',
+                search: { email: data.email },
+            })
+        } catch (error: any) {
+            // Handle email verification required case
+            if (error.message === 'EMAIL_VERIFICATION_REQUIRED') {
+                navigate({
+                    to: '/verify-email',
+                    search: { email: data.email },
+                })
+                return
+            }
+
+            // Handle email already exists case
+            if (error.message === 'EMAIL_EXISTS') {
+                toast.error({
+                    title: 'Registration failed',
+                    description: 'An account with this email already exists. Please login instead.',
+                })
+                return
+            }
+
+            const errorMessage =
+                error.response?.data?.message || 'An error occurred during registration. Please try again.'
+
             toast.error({
                 title: 'Registration failed',
-                description: 'An error occurred during registration. Please try again.',
+                description: errorMessage,
             })
             console.error('Registration error:', error)
         }
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-primary/5 via-background to-primary/5">
+        <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-indigo-50 via-background to-purple-50 dark:from-indigo-950/20 dark:via-background dark:to-purple-950/20">
             <div className="w-full max-w-2xl">
                 {/* Logo */}
                 <div className="flex items-center justify-center gap-2 mb-8">
-                    <HeartPulse className="h-10 w-10 text-primary" />
-                    <span className="font-bold text-2xl">CryoBank</span>
+                    <div className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg">
+                        <FlaskConical className="h-8 w-8 text-white" />
+                    </div>
+                    <span className="font-bold text-2xl bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-purple-400">
+                        CryoBank
+                    </span>
                 </div>
 
-                <Card>
+                <Card className="shadow-xl border-0 dark:border dark:border-border">
                     <CardHeader className="space-y-1">
                         <CardTitle className="text-2xl font-bold text-center">Create Your Account</CardTitle>
                         <CardDescription className="text-center">
-                            Join leading fertility clinics using our management system
+                            Join our platform and start managing your fertility services
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -115,7 +139,7 @@ function RegisterPage() {
                                         <FormItem>
                                             <FormLabel>Full Name</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="John Doe" {...field} />
+                                                <Input placeholder="John Doe" autoComplete="name" {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -130,7 +154,12 @@ function RegisterPage() {
                                             <FormItem>
                                                 <FormLabel>Email</FormLabel>
                                                 <FormControl>
-                                                    <Input placeholder="name@example.com" type="email" {...field} />
+                                                    <Input
+                                                        placeholder="name@example.com"
+                                                        type="email"
+                                                        autoComplete="email"
+                                                        {...field}
+                                                    />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -144,7 +173,12 @@ function RegisterPage() {
                                             <FormItem>
                                                 <FormLabel>Phone Number</FormLabel>
                                                 <FormControl>
-                                                    <Input placeholder="+1 (555) 000-0000" type="tel" {...field} />
+                                                    <Input
+                                                        placeholder="+1 (555) 000-0000"
+                                                        type="tel"
+                                                        autoComplete="tel"
+                                                        {...field}
+                                                    />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -159,10 +193,25 @@ function RegisterPage() {
                                         <FormItem>
                                             <FormLabel>Password</FormLabel>
                                             <FormControl>
-                                                <PasswordInput placeholder="Create a strong password" {...field} />
+                                                <PasswordInput
+                                                    placeholder="Create a strong password"
+                                                    autoComplete="new-password"
+                                                    {...field}
+                                                />
                                             </FormControl>
-                                            <FormDescription>
-                                                Must be at least 8 characters with uppercase, lowercase, and numbers
+                                            <FormDescription className="text-xs space-y-1">
+                                                <div className="flex items-center gap-1.5">
+                                                    <CheckCircle2 className="h-3 w-3 text-muted-foreground" />
+                                                    <span>At least 8 characters</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <CheckCircle2 className="h-3 w-3 text-muted-foreground" />
+                                                    <span>One uppercase & lowercase letter</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <CheckCircle2 className="h-3 w-3 text-muted-foreground" />
+                                                    <span>One number</span>
+                                                </div>
                                             </FormDescription>
                                             <FormMessage />
                                         </FormItem>
@@ -176,27 +225,31 @@ function RegisterPage() {
                                         <FormItem>
                                             <FormLabel>Confirm Password</FormLabel>
                                             <FormControl>
-                                                <PasswordInput placeholder="Confirm your password" {...field} />
+                                                <PasswordInput
+                                                    placeholder="Confirm your password"
+                                                    autoComplete="new-password"
+                                                    {...field}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
                                     )}
                                 />
 
-                                <div className="text-xs text-muted-foreground">
+                                <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
                                     By creating an account, you agree to our{' '}
-                                    <a href="#" className="text-primary hover:underline">
+                                    <a href="#" className="text-primary hover:underline font-medium">
                                         Terms of Service
                                     </a>{' '}
                                     and{' '}
-                                    <a href="#" className="text-primary hover:underline">
+                                    <a href="#" className="text-primary hover:underline font-medium">
                                         Privacy Policy
                                     </a>
                                 </div>
 
                                 <Button
                                     type="submit"
-                                    className="w-full"
+                                    className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
                                     size="lg"
                                     isDisabled={form.formState.isSubmitting}
                                 >

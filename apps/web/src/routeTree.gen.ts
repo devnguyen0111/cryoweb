@@ -9,18 +9,79 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VerifyEmailManualRouteImport } from './routes/verify-email-manual'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
+import { Route as VerificationSuccessRouteImport } from './routes/verification-success'
+import { Route as UnauthorizedRouteImport } from './routes/unauthorized'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ServicesRouteImport } from './routes/services'
 import { Route as SamplesRouteImport } from './routes/samples'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ReceptionistRouteImport } from './routes/receptionist'
 import { Route as PatientsRouteImport } from './routes/patients'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LabTechnicianRouteImport } from './routes/lab-technician'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as EmailVerificationRouteImport } from './routes/email-verification'
+import { Route as EmailNotVerifiedRouteImport } from './routes/email-not-verified'
+import { Route as DoctorRouteImport } from './routes/doctor'
+import { Route as DebugAuthRouteImport } from './routes/debug-auth'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AppointmentsRouteImport } from './routes/appointments'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ServicesIndexRouteImport } from './routes/services/index'
+import { Route as ServicesMaleFertilityRouteImport } from './routes/services/male-fertility'
+import { Route as ServicesIvfRouteImport } from './routes/services/ivf'
+import { Route as ServicesIuiRouteImport } from './routes/services/iui'
+import { Route as ServicesFertilityPreservationRouteImport } from './routes/services/fertility-preservation'
+import { Route as ServicesEmbryoFreezingRouteImport } from './routes/services/embryo-freezing'
+import { Route as ServicesEggFreezingRouteImport } from './routes/services/egg-freezing'
+import { Route as ReceptionistTransactionsRouteImport } from './routes/receptionist/transactions'
+import { Route as ReceptionistPatientsRouteImport } from './routes/receptionist/patients'
+import { Route as ReceptionistDashboardRouteImport } from './routes/receptionist/dashboard'
+import { Route as ReceptionistAppointmentsRouteImport } from './routes/receptionist/appointments'
+import { Route as LabDashboardRouteImport } from './routes/lab/dashboard'
+import { Route as LabTechnicianTestsRouteImport } from './routes/lab-technician/tests'
+import { Route as LabTechnicianSamplesRouteImport } from './routes/lab-technician/samples'
+import { Route as DoctorPrescriptionsRouteImport } from './routes/doctor/prescriptions'
+import { Route as DoctorPatientsRouteImport } from './routes/doctor/patients'
+import { Route as DoctorDashboardRouteImport } from './routes/doctor/dashboard'
+import { Route as DoctorAppointmentsRouteImport } from './routes/doctor/appointments'
+import { Route as AdminUsersRouteImport } from './routes/admin/users'
+import { Route as AdminReportsRouteImport } from './routes/admin/reports'
+import { Route as AdminDashboardRouteImport } from './routes/admin/dashboard'
+import { Route as AdminContentRouteImport } from './routes/admin/content'
+import { Route as AdminCategoriesRouteImport } from './routes/admin/categories'
 
+const VerifyEmailManualRoute = VerifyEmailManualRouteImport.update({
+  id: '/verify-email-manual',
+  path: '/verify-email-manual',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerificationSuccessRoute = VerificationSuccessRouteImport.update({
+  id: '/verification-success',
+  path: '/verification-success',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UnauthorizedRoute = UnauthorizedRouteImport.update({
+  id: '/unauthorized',
+  path: '/unauthorized',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServicesRoute = ServicesRouteImport.update({
+  id: '/services',
+  path: '/services',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SamplesRoute = SamplesRouteImport.update({
@@ -33,6 +94,11 @@ const RegisterRoute = RegisterRouteImport.update({
   path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReceptionistRoute = ReceptionistRouteImport.update({
+  id: '/receptionist',
+  path: '/receptionist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PatientsRoute = PatientsRouteImport.update({
   id: '/patients',
   path: '/patients',
@@ -41,6 +107,36 @@ const PatientsRoute = PatientsRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LabTechnicianRoute = LabTechnicianRouteImport.update({
+  id: '/lab-technician',
+  path: '/lab-technician',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmailVerificationRoute = EmailVerificationRouteImport.update({
+  id: '/email-verification',
+  path: '/email-verification',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmailNotVerifiedRoute = EmailNotVerifiedRouteImport.update({
+  id: '/email-not-verified',
+  path: '/email-not-verified',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DoctorRoute = DoctorRouteImport.update({
+  id: '/doctor',
+  path: '/doctor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DebugAuthRoute = DebugAuthRouteImport.update({
+  id: '/debug-auth',
+  path: '/debug-auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -53,94 +149,480 @@ const AppointmentsRoute = AppointmentsRouteImport.update({
   path: '/appointments',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ServicesIndexRoute = ServicesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ServicesRoute,
+} as any)
+const ServicesMaleFertilityRoute = ServicesMaleFertilityRouteImport.update({
+  id: '/male-fertility',
+  path: '/male-fertility',
+  getParentRoute: () => ServicesRoute,
+} as any)
+const ServicesIvfRoute = ServicesIvfRouteImport.update({
+  id: '/ivf',
+  path: '/ivf',
+  getParentRoute: () => ServicesRoute,
+} as any)
+const ServicesIuiRoute = ServicesIuiRouteImport.update({
+  id: '/iui',
+  path: '/iui',
+  getParentRoute: () => ServicesRoute,
+} as any)
+const ServicesFertilityPreservationRoute =
+  ServicesFertilityPreservationRouteImport.update({
+    id: '/fertility-preservation',
+    path: '/fertility-preservation',
+    getParentRoute: () => ServicesRoute,
+  } as any)
+const ServicesEmbryoFreezingRoute = ServicesEmbryoFreezingRouteImport.update({
+  id: '/embryo-freezing',
+  path: '/embryo-freezing',
+  getParentRoute: () => ServicesRoute,
+} as any)
+const ServicesEggFreezingRoute = ServicesEggFreezingRouteImport.update({
+  id: '/egg-freezing',
+  path: '/egg-freezing',
+  getParentRoute: () => ServicesRoute,
+} as any)
+const ReceptionistTransactionsRoute =
+  ReceptionistTransactionsRouteImport.update({
+    id: '/transactions',
+    path: '/transactions',
+    getParentRoute: () => ReceptionistRoute,
+  } as any)
+const ReceptionistPatientsRoute = ReceptionistPatientsRouteImport.update({
+  id: '/patients',
+  path: '/patients',
+  getParentRoute: () => ReceptionistRoute,
+} as any)
+const ReceptionistDashboardRoute = ReceptionistDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => ReceptionistRoute,
+} as any)
+const ReceptionistAppointmentsRoute =
+  ReceptionistAppointmentsRouteImport.update({
+    id: '/appointments',
+    path: '/appointments',
+    getParentRoute: () => ReceptionistRoute,
+  } as any)
+const LabDashboardRoute = LabDashboardRouteImport.update({
+  id: '/lab/dashboard',
+  path: '/lab/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LabTechnicianTestsRoute = LabTechnicianTestsRouteImport.update({
+  id: '/tests',
+  path: '/tests',
+  getParentRoute: () => LabTechnicianRoute,
+} as any)
+const LabTechnicianSamplesRoute = LabTechnicianSamplesRouteImport.update({
+  id: '/samples',
+  path: '/samples',
+  getParentRoute: () => LabTechnicianRoute,
+} as any)
+const DoctorPrescriptionsRoute = DoctorPrescriptionsRouteImport.update({
+  id: '/prescriptions',
+  path: '/prescriptions',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const DoctorPatientsRoute = DoctorPatientsRouteImport.update({
+  id: '/patients',
+  path: '/patients',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const DoctorDashboardRoute = DoctorDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const DoctorAppointmentsRoute = DoctorAppointmentsRouteImport.update({
+  id: '/appointments',
+  path: '/appointments',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminReportsRoute = AdminReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminDashboardRoute = AdminDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminContentRoute = AdminContentRouteImport.update({
+  id: '/content',
+  path: '/content',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminCategoriesRoute = AdminCategoriesRouteImport.update({
+  id: '/categories',
+  path: '/categories',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/appointments': typeof AppointmentsRoute
   '/dashboard': typeof DashboardRoute
+  '/debug-auth': typeof DebugAuthRoute
+  '/doctor': typeof DoctorRouteWithChildren
+  '/email-not-verified': typeof EmailNotVerifiedRoute
+  '/email-verification': typeof EmailVerificationRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/lab-technician': typeof LabTechnicianRouteWithChildren
   '/login': typeof LoginRoute
   '/patients': typeof PatientsRoute
+  '/receptionist': typeof ReceptionistRouteWithChildren
   '/register': typeof RegisterRoute
   '/samples': typeof SamplesRoute
+  '/services': typeof ServicesRouteWithChildren
   '/settings': typeof SettingsRoute
+  '/unauthorized': typeof UnauthorizedRoute
+  '/verification-success': typeof VerificationSuccessRoute
+  '/verify-email': typeof VerifyEmailRoute
+  '/verify-email-manual': typeof VerifyEmailManualRoute
+  '/admin/categories': typeof AdminCategoriesRoute
+  '/admin/content': typeof AdminContentRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/doctor/appointments': typeof DoctorAppointmentsRoute
+  '/doctor/dashboard': typeof DoctorDashboardRoute
+  '/doctor/patients': typeof DoctorPatientsRoute
+  '/doctor/prescriptions': typeof DoctorPrescriptionsRoute
+  '/lab-technician/samples': typeof LabTechnicianSamplesRoute
+  '/lab-technician/tests': typeof LabTechnicianTestsRoute
+  '/lab/dashboard': typeof LabDashboardRoute
+  '/receptionist/appointments': typeof ReceptionistAppointmentsRoute
+  '/receptionist/dashboard': typeof ReceptionistDashboardRoute
+  '/receptionist/patients': typeof ReceptionistPatientsRoute
+  '/receptionist/transactions': typeof ReceptionistTransactionsRoute
+  '/services/egg-freezing': typeof ServicesEggFreezingRoute
+  '/services/embryo-freezing': typeof ServicesEmbryoFreezingRoute
+  '/services/fertility-preservation': typeof ServicesFertilityPreservationRoute
+  '/services/iui': typeof ServicesIuiRoute
+  '/services/ivf': typeof ServicesIvfRoute
+  '/services/male-fertility': typeof ServicesMaleFertilityRoute
+  '/services/': typeof ServicesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/appointments': typeof AppointmentsRoute
   '/dashboard': typeof DashboardRoute
+  '/debug-auth': typeof DebugAuthRoute
+  '/doctor': typeof DoctorRouteWithChildren
+  '/email-not-verified': typeof EmailNotVerifiedRoute
+  '/email-verification': typeof EmailVerificationRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/lab-technician': typeof LabTechnicianRouteWithChildren
   '/login': typeof LoginRoute
   '/patients': typeof PatientsRoute
+  '/receptionist': typeof ReceptionistRouteWithChildren
   '/register': typeof RegisterRoute
   '/samples': typeof SamplesRoute
   '/settings': typeof SettingsRoute
+  '/unauthorized': typeof UnauthorizedRoute
+  '/verification-success': typeof VerificationSuccessRoute
+  '/verify-email': typeof VerifyEmailRoute
+  '/verify-email-manual': typeof VerifyEmailManualRoute
+  '/admin/categories': typeof AdminCategoriesRoute
+  '/admin/content': typeof AdminContentRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/doctor/appointments': typeof DoctorAppointmentsRoute
+  '/doctor/dashboard': typeof DoctorDashboardRoute
+  '/doctor/patients': typeof DoctorPatientsRoute
+  '/doctor/prescriptions': typeof DoctorPrescriptionsRoute
+  '/lab-technician/samples': typeof LabTechnicianSamplesRoute
+  '/lab-technician/tests': typeof LabTechnicianTestsRoute
+  '/lab/dashboard': typeof LabDashboardRoute
+  '/receptionist/appointments': typeof ReceptionistAppointmentsRoute
+  '/receptionist/dashboard': typeof ReceptionistDashboardRoute
+  '/receptionist/patients': typeof ReceptionistPatientsRoute
+  '/receptionist/transactions': typeof ReceptionistTransactionsRoute
+  '/services/egg-freezing': typeof ServicesEggFreezingRoute
+  '/services/embryo-freezing': typeof ServicesEmbryoFreezingRoute
+  '/services/fertility-preservation': typeof ServicesFertilityPreservationRoute
+  '/services/iui': typeof ServicesIuiRoute
+  '/services/ivf': typeof ServicesIvfRoute
+  '/services/male-fertility': typeof ServicesMaleFertilityRoute
+  '/services': typeof ServicesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/appointments': typeof AppointmentsRoute
   '/dashboard': typeof DashboardRoute
+  '/debug-auth': typeof DebugAuthRoute
+  '/doctor': typeof DoctorRouteWithChildren
+  '/email-not-verified': typeof EmailNotVerifiedRoute
+  '/email-verification': typeof EmailVerificationRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/lab-technician': typeof LabTechnicianRouteWithChildren
   '/login': typeof LoginRoute
   '/patients': typeof PatientsRoute
+  '/receptionist': typeof ReceptionistRouteWithChildren
   '/register': typeof RegisterRoute
   '/samples': typeof SamplesRoute
+  '/services': typeof ServicesRouteWithChildren
   '/settings': typeof SettingsRoute
+  '/unauthorized': typeof UnauthorizedRoute
+  '/verification-success': typeof VerificationSuccessRoute
+  '/verify-email': typeof VerifyEmailRoute
+  '/verify-email-manual': typeof VerifyEmailManualRoute
+  '/admin/categories': typeof AdminCategoriesRoute
+  '/admin/content': typeof AdminContentRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/doctor/appointments': typeof DoctorAppointmentsRoute
+  '/doctor/dashboard': typeof DoctorDashboardRoute
+  '/doctor/patients': typeof DoctorPatientsRoute
+  '/doctor/prescriptions': typeof DoctorPrescriptionsRoute
+  '/lab-technician/samples': typeof LabTechnicianSamplesRoute
+  '/lab-technician/tests': typeof LabTechnicianTestsRoute
+  '/lab/dashboard': typeof LabDashboardRoute
+  '/receptionist/appointments': typeof ReceptionistAppointmentsRoute
+  '/receptionist/dashboard': typeof ReceptionistDashboardRoute
+  '/receptionist/patients': typeof ReceptionistPatientsRoute
+  '/receptionist/transactions': typeof ReceptionistTransactionsRoute
+  '/services/egg-freezing': typeof ServicesEggFreezingRoute
+  '/services/embryo-freezing': typeof ServicesEmbryoFreezingRoute
+  '/services/fertility-preservation': typeof ServicesFertilityPreservationRoute
+  '/services/iui': typeof ServicesIuiRoute
+  '/services/ivf': typeof ServicesIvfRoute
+  '/services/male-fertility': typeof ServicesMaleFertilityRoute
+  '/services/': typeof ServicesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/appointments'
     | '/dashboard'
+    | '/debug-auth'
+    | '/doctor'
+    | '/email-not-verified'
+    | '/email-verification'
+    | '/forgot-password'
+    | '/lab-technician'
     | '/login'
     | '/patients'
+    | '/receptionist'
     | '/register'
     | '/samples'
+    | '/services'
     | '/settings'
+    | '/unauthorized'
+    | '/verification-success'
+    | '/verify-email'
+    | '/verify-email-manual'
+    | '/admin/categories'
+    | '/admin/content'
+    | '/admin/dashboard'
+    | '/admin/reports'
+    | '/admin/users'
+    | '/doctor/appointments'
+    | '/doctor/dashboard'
+    | '/doctor/patients'
+    | '/doctor/prescriptions'
+    | '/lab-technician/samples'
+    | '/lab-technician/tests'
+    | '/lab/dashboard'
+    | '/receptionist/appointments'
+    | '/receptionist/dashboard'
+    | '/receptionist/patients'
+    | '/receptionist/transactions'
+    | '/services/egg-freezing'
+    | '/services/embryo-freezing'
+    | '/services/fertility-preservation'
+    | '/services/iui'
+    | '/services/ivf'
+    | '/services/male-fertility'
+    | '/services/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
     | '/appointments'
     | '/dashboard'
+    | '/debug-auth'
+    | '/doctor'
+    | '/email-not-verified'
+    | '/email-verification'
+    | '/forgot-password'
+    | '/lab-technician'
     | '/login'
     | '/patients'
+    | '/receptionist'
     | '/register'
     | '/samples'
     | '/settings'
+    | '/unauthorized'
+    | '/verification-success'
+    | '/verify-email'
+    | '/verify-email-manual'
+    | '/admin/categories'
+    | '/admin/content'
+    | '/admin/dashboard'
+    | '/admin/reports'
+    | '/admin/users'
+    | '/doctor/appointments'
+    | '/doctor/dashboard'
+    | '/doctor/patients'
+    | '/doctor/prescriptions'
+    | '/lab-technician/samples'
+    | '/lab-technician/tests'
+    | '/lab/dashboard'
+    | '/receptionist/appointments'
+    | '/receptionist/dashboard'
+    | '/receptionist/patients'
+    | '/receptionist/transactions'
+    | '/services/egg-freezing'
+    | '/services/embryo-freezing'
+    | '/services/fertility-preservation'
+    | '/services/iui'
+    | '/services/ivf'
+    | '/services/male-fertility'
+    | '/services'
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/appointments'
     | '/dashboard'
+    | '/debug-auth'
+    | '/doctor'
+    | '/email-not-verified'
+    | '/email-verification'
+    | '/forgot-password'
+    | '/lab-technician'
     | '/login'
     | '/patients'
+    | '/receptionist'
     | '/register'
     | '/samples'
+    | '/services'
     | '/settings'
+    | '/unauthorized'
+    | '/verification-success'
+    | '/verify-email'
+    | '/verify-email-manual'
+    | '/admin/categories'
+    | '/admin/content'
+    | '/admin/dashboard'
+    | '/admin/reports'
+    | '/admin/users'
+    | '/doctor/appointments'
+    | '/doctor/dashboard'
+    | '/doctor/patients'
+    | '/doctor/prescriptions'
+    | '/lab-technician/samples'
+    | '/lab-technician/tests'
+    | '/lab/dashboard'
+    | '/receptionist/appointments'
+    | '/receptionist/dashboard'
+    | '/receptionist/patients'
+    | '/receptionist/transactions'
+    | '/services/egg-freezing'
+    | '/services/embryo-freezing'
+    | '/services/fertility-preservation'
+    | '/services/iui'
+    | '/services/ivf'
+    | '/services/male-fertility'
+    | '/services/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AppointmentsRoute: typeof AppointmentsRoute
   DashboardRoute: typeof DashboardRoute
+  DebugAuthRoute: typeof DebugAuthRoute
+  DoctorRoute: typeof DoctorRouteWithChildren
+  EmailNotVerifiedRoute: typeof EmailNotVerifiedRoute
+  EmailVerificationRoute: typeof EmailVerificationRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
+  LabTechnicianRoute: typeof LabTechnicianRouteWithChildren
   LoginRoute: typeof LoginRoute
   PatientsRoute: typeof PatientsRoute
+  ReceptionistRoute: typeof ReceptionistRouteWithChildren
   RegisterRoute: typeof RegisterRoute
   SamplesRoute: typeof SamplesRoute
+  ServicesRoute: typeof ServicesRouteWithChildren
   SettingsRoute: typeof SettingsRoute
+  UnauthorizedRoute: typeof UnauthorizedRoute
+  VerificationSuccessRoute: typeof VerificationSuccessRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
+  VerifyEmailManualRoute: typeof VerifyEmailManualRoute
+  LabDashboardRoute: typeof LabDashboardRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/verify-email-manual': {
+      id: '/verify-email-manual'
+      path: '/verify-email-manual'
+      fullPath: '/verify-email-manual'
+      preLoaderRoute: typeof VerifyEmailManualRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verification-success': {
+      id: '/verification-success'
+      path: '/verification-success'
+      fullPath: '/verification-success'
+      preLoaderRoute: typeof VerificationSuccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/unauthorized': {
+      id: '/unauthorized'
+      path: '/unauthorized'
+      fullPath: '/unauthorized'
+      preLoaderRoute: typeof UnauthorizedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/services': {
+      id: '/services'
+      path: '/services'
+      fullPath: '/services'
+      preLoaderRoute: typeof ServicesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/samples': {
@@ -157,6 +639,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/receptionist': {
+      id: '/receptionist'
+      path: '/receptionist'
+      fullPath: '/receptionist'
+      preLoaderRoute: typeof ReceptionistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/patients': {
       id: '/patients'
       path: '/patients'
@@ -169,6 +658,48 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lab-technician': {
+      id: '/lab-technician'
+      path: '/lab-technician'
+      fullPath: '/lab-technician'
+      preLoaderRoute: typeof LabTechnicianRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/email-verification': {
+      id: '/email-verification'
+      path: '/email-verification'
+      fullPath: '/email-verification'
+      preLoaderRoute: typeof EmailVerificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/email-not-verified': {
+      id: '/email-not-verified'
+      path: '/email-not-verified'
+      fullPath: '/email-not-verified'
+      preLoaderRoute: typeof EmailNotVerifiedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/doctor': {
+      id: '/doctor'
+      path: '/doctor'
+      fullPath: '/doctor'
+      preLoaderRoute: typeof DoctorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/debug-auth': {
+      id: '/debug-auth'
+      path: '/debug-auth'
+      fullPath: '/debug-auth'
+      preLoaderRoute: typeof DebugAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -185,6 +716,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppointmentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -192,18 +730,284 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/services/': {
+      id: '/services/'
+      path: '/'
+      fullPath: '/services/'
+      preLoaderRoute: typeof ServicesIndexRouteImport
+      parentRoute: typeof ServicesRoute
+    }
+    '/services/male-fertility': {
+      id: '/services/male-fertility'
+      path: '/male-fertility'
+      fullPath: '/services/male-fertility'
+      preLoaderRoute: typeof ServicesMaleFertilityRouteImport
+      parentRoute: typeof ServicesRoute
+    }
+    '/services/ivf': {
+      id: '/services/ivf'
+      path: '/ivf'
+      fullPath: '/services/ivf'
+      preLoaderRoute: typeof ServicesIvfRouteImport
+      parentRoute: typeof ServicesRoute
+    }
+    '/services/iui': {
+      id: '/services/iui'
+      path: '/iui'
+      fullPath: '/services/iui'
+      preLoaderRoute: typeof ServicesIuiRouteImport
+      parentRoute: typeof ServicesRoute
+    }
+    '/services/fertility-preservation': {
+      id: '/services/fertility-preservation'
+      path: '/fertility-preservation'
+      fullPath: '/services/fertility-preservation'
+      preLoaderRoute: typeof ServicesFertilityPreservationRouteImport
+      parentRoute: typeof ServicesRoute
+    }
+    '/services/embryo-freezing': {
+      id: '/services/embryo-freezing'
+      path: '/embryo-freezing'
+      fullPath: '/services/embryo-freezing'
+      preLoaderRoute: typeof ServicesEmbryoFreezingRouteImport
+      parentRoute: typeof ServicesRoute
+    }
+    '/services/egg-freezing': {
+      id: '/services/egg-freezing'
+      path: '/egg-freezing'
+      fullPath: '/services/egg-freezing'
+      preLoaderRoute: typeof ServicesEggFreezingRouteImport
+      parentRoute: typeof ServicesRoute
+    }
+    '/receptionist/transactions': {
+      id: '/receptionist/transactions'
+      path: '/transactions'
+      fullPath: '/receptionist/transactions'
+      preLoaderRoute: typeof ReceptionistTransactionsRouteImport
+      parentRoute: typeof ReceptionistRoute
+    }
+    '/receptionist/patients': {
+      id: '/receptionist/patients'
+      path: '/patients'
+      fullPath: '/receptionist/patients'
+      preLoaderRoute: typeof ReceptionistPatientsRouteImport
+      parentRoute: typeof ReceptionistRoute
+    }
+    '/receptionist/dashboard': {
+      id: '/receptionist/dashboard'
+      path: '/dashboard'
+      fullPath: '/receptionist/dashboard'
+      preLoaderRoute: typeof ReceptionistDashboardRouteImport
+      parentRoute: typeof ReceptionistRoute
+    }
+    '/receptionist/appointments': {
+      id: '/receptionist/appointments'
+      path: '/appointments'
+      fullPath: '/receptionist/appointments'
+      preLoaderRoute: typeof ReceptionistAppointmentsRouteImport
+      parentRoute: typeof ReceptionistRoute
+    }
+    '/lab/dashboard': {
+      id: '/lab/dashboard'
+      path: '/lab/dashboard'
+      fullPath: '/lab/dashboard'
+      preLoaderRoute: typeof LabDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lab-technician/tests': {
+      id: '/lab-technician/tests'
+      path: '/tests'
+      fullPath: '/lab-technician/tests'
+      preLoaderRoute: typeof LabTechnicianTestsRouteImport
+      parentRoute: typeof LabTechnicianRoute
+    }
+    '/lab-technician/samples': {
+      id: '/lab-technician/samples'
+      path: '/samples'
+      fullPath: '/lab-technician/samples'
+      preLoaderRoute: typeof LabTechnicianSamplesRouteImport
+      parentRoute: typeof LabTechnicianRoute
+    }
+    '/doctor/prescriptions': {
+      id: '/doctor/prescriptions'
+      path: '/prescriptions'
+      fullPath: '/doctor/prescriptions'
+      preLoaderRoute: typeof DoctorPrescriptionsRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/doctor/patients': {
+      id: '/doctor/patients'
+      path: '/patients'
+      fullPath: '/doctor/patients'
+      preLoaderRoute: typeof DoctorPatientsRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/doctor/dashboard': {
+      id: '/doctor/dashboard'
+      path: '/dashboard'
+      fullPath: '/doctor/dashboard'
+      preLoaderRoute: typeof DoctorDashboardRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/doctor/appointments': {
+      id: '/doctor/appointments'
+      path: '/appointments'
+      fullPath: '/doctor/appointments'
+      preLoaderRoute: typeof DoctorAppointmentsRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/reports': {
+      id: '/admin/reports'
+      path: '/reports'
+      fullPath: '/admin/reports'
+      preLoaderRoute: typeof AdminReportsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/dashboard': {
+      id: '/admin/dashboard'
+      path: '/dashboard'
+      fullPath: '/admin/dashboard'
+      preLoaderRoute: typeof AdminDashboardRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/content': {
+      id: '/admin/content'
+      path: '/content'
+      fullPath: '/admin/content'
+      preLoaderRoute: typeof AdminContentRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/categories': {
+      id: '/admin/categories'
+      path: '/categories'
+      fullPath: '/admin/categories'
+      preLoaderRoute: typeof AdminCategoriesRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
+interface AdminRouteChildren {
+  AdminCategoriesRoute: typeof AdminCategoriesRoute
+  AdminContentRoute: typeof AdminContentRoute
+  AdminDashboardRoute: typeof AdminDashboardRoute
+  AdminReportsRoute: typeof AdminReportsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminCategoriesRoute: AdminCategoriesRoute,
+  AdminContentRoute: AdminContentRoute,
+  AdminDashboardRoute: AdminDashboardRoute,
+  AdminReportsRoute: AdminReportsRoute,
+  AdminUsersRoute: AdminUsersRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface DoctorRouteChildren {
+  DoctorAppointmentsRoute: typeof DoctorAppointmentsRoute
+  DoctorDashboardRoute: typeof DoctorDashboardRoute
+  DoctorPatientsRoute: typeof DoctorPatientsRoute
+  DoctorPrescriptionsRoute: typeof DoctorPrescriptionsRoute
+}
+
+const DoctorRouteChildren: DoctorRouteChildren = {
+  DoctorAppointmentsRoute: DoctorAppointmentsRoute,
+  DoctorDashboardRoute: DoctorDashboardRoute,
+  DoctorPatientsRoute: DoctorPatientsRoute,
+  DoctorPrescriptionsRoute: DoctorPrescriptionsRoute,
+}
+
+const DoctorRouteWithChildren =
+  DoctorRoute._addFileChildren(DoctorRouteChildren)
+
+interface LabTechnicianRouteChildren {
+  LabTechnicianSamplesRoute: typeof LabTechnicianSamplesRoute
+  LabTechnicianTestsRoute: typeof LabTechnicianTestsRoute
+}
+
+const LabTechnicianRouteChildren: LabTechnicianRouteChildren = {
+  LabTechnicianSamplesRoute: LabTechnicianSamplesRoute,
+  LabTechnicianTestsRoute: LabTechnicianTestsRoute,
+}
+
+const LabTechnicianRouteWithChildren = LabTechnicianRoute._addFileChildren(
+  LabTechnicianRouteChildren,
+)
+
+interface ReceptionistRouteChildren {
+  ReceptionistAppointmentsRoute: typeof ReceptionistAppointmentsRoute
+  ReceptionistDashboardRoute: typeof ReceptionistDashboardRoute
+  ReceptionistPatientsRoute: typeof ReceptionistPatientsRoute
+  ReceptionistTransactionsRoute: typeof ReceptionistTransactionsRoute
+}
+
+const ReceptionistRouteChildren: ReceptionistRouteChildren = {
+  ReceptionistAppointmentsRoute: ReceptionistAppointmentsRoute,
+  ReceptionistDashboardRoute: ReceptionistDashboardRoute,
+  ReceptionistPatientsRoute: ReceptionistPatientsRoute,
+  ReceptionistTransactionsRoute: ReceptionistTransactionsRoute,
+}
+
+const ReceptionistRouteWithChildren = ReceptionistRoute._addFileChildren(
+  ReceptionistRouteChildren,
+)
+
+interface ServicesRouteChildren {
+  ServicesEggFreezingRoute: typeof ServicesEggFreezingRoute
+  ServicesEmbryoFreezingRoute: typeof ServicesEmbryoFreezingRoute
+  ServicesFertilityPreservationRoute: typeof ServicesFertilityPreservationRoute
+  ServicesIuiRoute: typeof ServicesIuiRoute
+  ServicesIvfRoute: typeof ServicesIvfRoute
+  ServicesMaleFertilityRoute: typeof ServicesMaleFertilityRoute
+  ServicesIndexRoute: typeof ServicesIndexRoute
+}
+
+const ServicesRouteChildren: ServicesRouteChildren = {
+  ServicesEggFreezingRoute: ServicesEggFreezingRoute,
+  ServicesEmbryoFreezingRoute: ServicesEmbryoFreezingRoute,
+  ServicesFertilityPreservationRoute: ServicesFertilityPreservationRoute,
+  ServicesIuiRoute: ServicesIuiRoute,
+  ServicesIvfRoute: ServicesIvfRoute,
+  ServicesMaleFertilityRoute: ServicesMaleFertilityRoute,
+  ServicesIndexRoute: ServicesIndexRoute,
+}
+
+const ServicesRouteWithChildren = ServicesRoute._addFileChildren(
+  ServicesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
   AppointmentsRoute: AppointmentsRoute,
   DashboardRoute: DashboardRoute,
+  DebugAuthRoute: DebugAuthRoute,
+  DoctorRoute: DoctorRouteWithChildren,
+  EmailNotVerifiedRoute: EmailNotVerifiedRoute,
+  EmailVerificationRoute: EmailVerificationRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
+  LabTechnicianRoute: LabTechnicianRouteWithChildren,
   LoginRoute: LoginRoute,
   PatientsRoute: PatientsRoute,
+  ReceptionistRoute: ReceptionistRouteWithChildren,
   RegisterRoute: RegisterRoute,
   SamplesRoute: SamplesRoute,
+  ServicesRoute: ServicesRouteWithChildren,
   SettingsRoute: SettingsRoute,
+  UnauthorizedRoute: UnauthorizedRoute,
+  VerificationSuccessRoute: VerificationSuccessRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
+  VerifyEmailManualRoute: VerifyEmailManualRoute,
+  LabDashboardRoute: LabDashboardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

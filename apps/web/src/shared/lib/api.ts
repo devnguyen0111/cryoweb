@@ -3,10 +3,9 @@ import { Api } from '@workspace/lib/api'
 
 /**
  * API Base URL
- * TODO: Replace with your actual API URL
- * You can use environment variables for different environments
+ * Connected to the actual backend API
  */
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://cryofert.runasp.net/api'
 
 /**
  * Axios instance with interceptors for authentication and error handling
@@ -53,16 +52,15 @@ axiosInstance.interceptors.response.use(
             originalRequest._retry = true
 
             try {
-                // TODO: Implement token refresh logic
+                // Implement token refresh logic
                 const refreshToken = localStorage.getItem('refreshToken')
 
                 if (refreshToken) {
-                    // Uncomment when API is ready
-                    // const response = await api.auth.refreshToken(refreshToken)
-                    // localStorage.setItem('authToken', response.token)
-                    // localStorage.setItem('refreshToken', response.refreshToken)
-                    // originalRequest.headers.Authorization = `Bearer ${response.token}`
-                    // return axiosInstance(originalRequest)
+                    const response = await api.auth.refreshToken(refreshToken)
+                    localStorage.setItem('authToken', response.token)
+                    localStorage.setItem('refreshToken', response.refreshToken)
+                    originalRequest.headers.Authorization = `Bearer ${response.token}`
+                    return axiosInstance(originalRequest)
                 }
             } catch (refreshError) {
                 // TODO: Redirect to login or show session expired message

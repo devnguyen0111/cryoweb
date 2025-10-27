@@ -1,6 +1,7 @@
 import { AxiosInstance } from 'axios'
 import { ExampleApi } from './sdk/example.api'
 import { AuthApi } from './sdk/auth.api'
+import { UserApi } from './sdk/user.api'
 import { PatientsApi } from './sdk/patients.api'
 import { SamplesApi } from './sdk/samples.api'
 import { AppointmentsApi } from './sdk/appointments.api'
@@ -26,6 +27,7 @@ import { AppointmentsApi } from './sdk/appointments.api'
 export class Api {
     example: ExampleApi
     auth: AuthApi
+    user: UserApi
     patients: PatientsApi
     samples: SamplesApi
     appointments: AppointmentsApi
@@ -33,6 +35,7 @@ export class Api {
     constructor(private readonly client: AxiosInstance) {
         this.example = new ExampleApi(this.client)
         this.auth = new AuthApi(this.client)
+        this.user = new UserApi(this.client)
         this.patients = new PatientsApi(this.client)
         this.samples = new SamplesApi(this.client)
         this.appointments = new AppointmentsApi(this.client)
@@ -41,6 +44,7 @@ export class Api {
 
 // Export all types
 export * from './sdk/auth.api'
+export * from './sdk/user.api'
 export * from './sdk/patients.api'
 export * from './sdk/samples.api'
 export * from './sdk/appointments.api'

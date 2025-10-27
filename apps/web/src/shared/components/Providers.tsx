@@ -2,6 +2,7 @@ import { matchQuery, MutationCache, QueryClient, QueryClientProvider } from '@ta
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { BsProvider } from '@workspace/ui/components/Provider'
 import { ThemeProvider } from '@/shared/components/ThemeProvider'
+import { AuthProvider } from '../contexts/AuthContext'
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -29,8 +30,10 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
         <BsProvider>
             <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
                 <QueryClientProvider client={queryClient}>
-                    {children}
-                    <ReactQueryDevtools initialIsOpen={false} />
+                    <AuthProvider>
+                        {children}
+                        <ReactQueryDevtools initialIsOpen={false} />
+                    </AuthProvider>
                 </QueryClientProvider>
             </ThemeProvider>
         </BsProvider>

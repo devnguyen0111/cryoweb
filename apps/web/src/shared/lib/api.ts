@@ -57,9 +57,9 @@ axiosInstance.interceptors.response.use(
 
                 if (refreshToken) {
                     const response = await api.auth.refreshToken(refreshToken)
-                    localStorage.setItem('authToken', response.token)
-                    localStorage.setItem('refreshToken', response.refreshToken)
-                    originalRequest.headers.Authorization = `Bearer ${response.token}`
+                    localStorage.setItem('authToken', response.data.token || '')
+                    localStorage.setItem('refreshToken', response.data.refreshToken || '')
+                    originalRequest.headers.Authorization = `Bearer ${response.data.token}`
                     return axiosInstance(originalRequest)
                 }
             } catch (refreshError) {

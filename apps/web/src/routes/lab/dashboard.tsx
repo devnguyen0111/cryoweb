@@ -87,23 +87,17 @@ function LabDashboardPage() {
                                     <CardDescription>Process and analyze laboratory samples</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/lab/samples">
-                                            <FlaskConical className="h-4 w-4 mr-2" />
-                                            View All Samples
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <FlaskConical className="h-4 w-4 mr-2" />
+                                        View All Samples
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/lab/samples/pending">
-                                            <Clock className="h-4 w-4 mr-2" />
-                                            Pending Tests
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <Clock className="h-4 w-4 mr-2" />
+                                        Pending Tests
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/lab/samples/new">
-                                            <FlaskConical className="h-4 w-4 mr-2" />
-                                            Add New Sample
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <FlaskConical className="h-4 w-4 mr-2" />
+                                        Add New Sample
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -118,23 +112,17 @@ function LabDashboardPage() {
                                     <CardDescription>Manage test results and reports</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/lab/results">
-                                            <FileText className="h-4 w-4 mr-2" />
-                                            View Results
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        View Results
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/lab/results/pending">
-                                            <Clock className="h-4 w-4 mr-2" />
-                                            Pending Results
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <Clock className="h-4 w-4 mr-2" />
+                                        Pending Results
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/lab/reports">
-                                            <BarChart3 className="h-4 w-4 mr-2" />
-                                            Generate Reports
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <BarChart3 className="h-4 w-4 mr-2" />
+                                        Reports
                                     </Button>
                                 </CardContent>
                             </Card>

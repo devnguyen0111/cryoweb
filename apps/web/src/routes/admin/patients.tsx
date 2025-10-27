@@ -150,7 +150,7 @@ function AdminPatientsPage() {
                     <div className="flex items-center justify-between mt-6 pt-6 border-t">
                         <p className="text-sm text-muted-foreground">Showing 1-5 of 1,234 patients</p>
                         <div className="flex gap-2">
-                            <Button variant="outline" size="sm" disabled>
+                            <Button variant="outline" size="sm" isDisabled>
                                 Previous
                             </Button>
                             <Button variant="outline" size="sm">

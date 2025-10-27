@@ -15,7 +15,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
-                    <Spinner size="lg" />
+                    <Spinner className="w-8 h-8" />
                     <p className="text-muted-foreground">Loading...</p>
                 </div>
             </div>

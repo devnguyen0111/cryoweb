@@ -93,17 +93,13 @@ function ReceptionistDashboardPage() {
                                             View All Patients
                                         </Link>
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/receptionist/patients/new">
-                                            <Users className="h-4 w-4 mr-2" />
-                                            Register New Patient
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <Users className="h-4 w-4 mr-2" />
+                                        Register New Patient
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/receptionist/patients/search">
-                                            <Users className="h-4 w-4 mr-2" />
-                                            Search Patients
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <Users className="h-4 w-4 mr-2" />
+                                        Search Patients
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -124,17 +120,13 @@ function ReceptionistDashboardPage() {
                                             View All Appointments
                                         </Link>
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/receptionist/appointments/new">
-                                            <Calendar className="h-4 w-4 mr-2" />
-                                            Schedule Appointment
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <Calendar className="h-4 w-4 mr-2" />
+                                        Schedule Appointment
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/receptionist/appointments/today">
-                                            <Clock className="h-4 w-4 mr-2" />
-                                            Today's Schedule
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <Clock className="h-4 w-4 mr-2" />
+                                        Today's Schedule
                                     </Button>
                                 </CardContent>
                             </Card>

@@ -48,7 +48,7 @@ export const EmailVerificationBanner = () => {
                             variant="outline"
                             size="sm"
                             onClick={handleResendVerification}
-                            disabled={isResending}
+                            isDisabled={isResending}
                             className="text-yellow-800 border-yellow-300 hover:bg-yellow-100 dark:text-yellow-200 dark:border-yellow-600 dark:hover:bg-yellow-800/30"
                         >
                             {isResending ? (

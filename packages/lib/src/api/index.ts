@@ -44,7 +44,7 @@ export class Api {
 
 // Export all types
 export * from './sdk/auth.api'
-export * from './sdk/user.api'
+export type { User as UserDto } from './sdk/user.api'
 export * from './sdk/patients.api'
 export * from './sdk/samples.api'
 export * from './sdk/appointments.api'

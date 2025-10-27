@@ -92,17 +92,13 @@ function DoctorDashboardPage() {
                                             View All Patients
                                         </Link>
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/doctor/patients/new">
-                                            <Users className="h-4 w-4 mr-2" />
-                                            Add New Patient
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <Users className="h-4 w-4 mr-2" />
+                                        Add New Patient
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/doctor/patients/search">
-                                            <Users className="h-4 w-4 mr-2" />
-                                            Search Patients
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <Users className="h-4 w-4 mr-2" />
+                                        Search Patients
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -117,23 +113,17 @@ function DoctorDashboardPage() {
                                     <CardDescription>Manage medical samples and test results</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/doctor/samples">
-                                            <FlaskConical className="h-4 w-4 mr-2" />
-                                            View All Samples
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <FlaskConical className="h-4 w-4 mr-2" />
+                                        View All Samples
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/doctor/samples/new">
-                                            <FlaskConical className="h-4 w-4 mr-2" />
-                                            Create New Sample
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <FlaskConical className="h-4 w-4 mr-2" />
+                                        Create New Sample
                                     </Button>
-                                    <Button asChild className="w-full justify-start" variant="outline">
-                                        <Link to="/doctor/samples/pending">
-                                            <Clock className="h-4 w-4 mr-2" />
-                                            Pending Results
-                                        </Link>
+                                    <Button className="w-full justify-start" variant="outline" isDisabled>
+                                        <Clock className="h-4 w-4 mr-2" />
+                                        Pending Results
                                     </Button>
                                 </CardContent>
                             </Card>

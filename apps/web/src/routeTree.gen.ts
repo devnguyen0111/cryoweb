@@ -15,20 +15,26 @@ import { Route as VerificationSuccessRouteImport } from './routes/verification-s
 import { Route as UnauthorizedRouteImport } from './routes/unauthorized'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ServicesRouteImport } from './routes/services'
+import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SamplesRouteImport } from './routes/samples'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ReceptionistRouteImport } from './routes/receptionist'
+import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as PatientsRouteImport } from './routes/patients'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LabTechnicianRouteImport } from './routes/lab-technician'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as FeaturesRouteImport } from './routes/features'
 import { Route as EmailVerificationRouteImport } from './routes/email-verification'
 import { Route as EmailNotVerifiedRouteImport } from './routes/email-not-verified'
 import { Route as DoctorRouteImport } from './routes/doctor'
 import { Route as DebugAuthRouteImport } from './routes/debug-auth'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as CareersRouteImport } from './routes/careers'
 import { Route as AppointmentsRouteImport } from './routes/appointments'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ServicesIndexRouteImport } from './routes/services/index'
 import { Route as ServicesMaleFertilityRouteImport } from './routes/services/male-fertility'
@@ -84,6 +90,11 @@ const ServicesRoute = ServicesRouteImport.update({
   path: '/services',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SecurityRoute = SecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SamplesRoute = SamplesRouteImport.update({
   id: '/samples',
   path: '/samples',
@@ -97,6 +108,11 @@ const RegisterRoute = RegisterRouteImport.update({
 const ReceptionistRoute = ReceptionistRouteImport.update({
   id: '/receptionist',
   path: '/receptionist',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PatientsRoute = PatientsRouteImport.update({
@@ -117,6 +133,11 @@ const LabTechnicianRoute = LabTechnicianRouteImport.update({
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeaturesRoute = FeaturesRouteImport.update({
+  id: '/features',
+  path: '/features',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EmailVerificationRoute = EmailVerificationRouteImport.update({
@@ -144,6 +165,16 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CareersRoute = CareersRouteImport.update({
+  id: '/careers',
+  path: '/careers',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppointmentsRoute = AppointmentsRouteImport.update({
   id: '/appointments',
   path: '/appointments',
@@ -152,6 +183,11 @@ const AppointmentsRoute = AppointmentsRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -280,20 +316,26 @@ const AdminCategoriesRoute = AdminCategoriesRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/admin': typeof AdminRouteWithChildren
   '/appointments': typeof AppointmentsRoute
+  '/careers': typeof CareersRoute
+  '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRoute
   '/debug-auth': typeof DebugAuthRoute
   '/doctor': typeof DoctorRouteWithChildren
   '/email-not-verified': typeof EmailNotVerifiedRoute
   '/email-verification': typeof EmailVerificationRoute
+  '/features': typeof FeaturesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/lab-technician': typeof LabTechnicianRouteWithChildren
   '/login': typeof LoginRoute
   '/patients': typeof PatientsRoute
+  '/pricing': typeof PricingRoute
   '/receptionist': typeof ReceptionistRouteWithChildren
   '/register': typeof RegisterRoute
   '/samples': typeof SamplesRoute
+  '/security': typeof SecurityRoute
   '/services': typeof ServicesRouteWithChildren
   '/settings': typeof SettingsRoute
   '/unauthorized': typeof UnauthorizedRoute
@@ -326,20 +368,26 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/admin': typeof AdminRouteWithChildren
   '/appointments': typeof AppointmentsRoute
+  '/careers': typeof CareersRoute
+  '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRoute
   '/debug-auth': typeof DebugAuthRoute
   '/doctor': typeof DoctorRouteWithChildren
   '/email-not-verified': typeof EmailNotVerifiedRoute
   '/email-verification': typeof EmailVerificationRoute
+  '/features': typeof FeaturesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/lab-technician': typeof LabTechnicianRouteWithChildren
   '/login': typeof LoginRoute
   '/patients': typeof PatientsRoute
+  '/pricing': typeof PricingRoute
   '/receptionist': typeof ReceptionistRouteWithChildren
   '/register': typeof RegisterRoute
   '/samples': typeof SamplesRoute
+  '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
   '/unauthorized': typeof UnauthorizedRoute
   '/verification-success': typeof VerificationSuccessRoute
@@ -372,20 +420,26 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/admin': typeof AdminRouteWithChildren
   '/appointments': typeof AppointmentsRoute
+  '/careers': typeof CareersRoute
+  '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRoute
   '/debug-auth': typeof DebugAuthRoute
   '/doctor': typeof DoctorRouteWithChildren
   '/email-not-verified': typeof EmailNotVerifiedRoute
   '/email-verification': typeof EmailVerificationRoute
+  '/features': typeof FeaturesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/lab-technician': typeof LabTechnicianRouteWithChildren
   '/login': typeof LoginRoute
   '/patients': typeof PatientsRoute
+  '/pricing': typeof PricingRoute
   '/receptionist': typeof ReceptionistRouteWithChildren
   '/register': typeof RegisterRoute
   '/samples': typeof SamplesRoute
+  '/security': typeof SecurityRoute
   '/services': typeof ServicesRouteWithChildren
   '/settings': typeof SettingsRoute
   '/unauthorized': typeof UnauthorizedRoute
@@ -420,20 +474,26 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/about'
     | '/admin'
     | '/appointments'
+    | '/careers'
+    | '/contact'
     | '/dashboard'
     | '/debug-auth'
     | '/doctor'
     | '/email-not-verified'
     | '/email-verification'
+    | '/features'
     | '/forgot-password'
     | '/lab-technician'
     | '/login'
     | '/patients'
+    | '/pricing'
     | '/receptionist'
     | '/register'
     | '/samples'
+    | '/security'
     | '/services'
     | '/settings'
     | '/unauthorized'
@@ -466,20 +526,26 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
     | '/admin'
     | '/appointments'
+    | '/careers'
+    | '/contact'
     | '/dashboard'
     | '/debug-auth'
     | '/doctor'
     | '/email-not-verified'
     | '/email-verification'
+    | '/features'
     | '/forgot-password'
     | '/lab-technician'
     | '/login'
     | '/patients'
+    | '/pricing'
     | '/receptionist'
     | '/register'
     | '/samples'
+    | '/security'
     | '/settings'
     | '/unauthorized'
     | '/verification-success'
@@ -511,20 +577,26 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/about'
     | '/admin'
     | '/appointments'
+    | '/careers'
+    | '/contact'
     | '/dashboard'
     | '/debug-auth'
     | '/doctor'
     | '/email-not-verified'
     | '/email-verification'
+    | '/features'
     | '/forgot-password'
     | '/lab-technician'
     | '/login'
     | '/patients'
+    | '/pricing'
     | '/receptionist'
     | '/register'
     | '/samples'
+    | '/security'
     | '/services'
     | '/settings'
     | '/unauthorized'
@@ -558,20 +630,26 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
   AdminRoute: typeof AdminRouteWithChildren
   AppointmentsRoute: typeof AppointmentsRoute
+  CareersRoute: typeof CareersRoute
+  ContactRoute: typeof ContactRoute
   DashboardRoute: typeof DashboardRoute
   DebugAuthRoute: typeof DebugAuthRoute
   DoctorRoute: typeof DoctorRouteWithChildren
   EmailNotVerifiedRoute: typeof EmailNotVerifiedRoute
   EmailVerificationRoute: typeof EmailVerificationRoute
+  FeaturesRoute: typeof FeaturesRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LabTechnicianRoute: typeof LabTechnicianRouteWithChildren
   LoginRoute: typeof LoginRoute
   PatientsRoute: typeof PatientsRoute
+  PricingRoute: typeof PricingRoute
   ReceptionistRoute: typeof ReceptionistRouteWithChildren
   RegisterRoute: typeof RegisterRoute
   SamplesRoute: typeof SamplesRoute
+  SecurityRoute: typeof SecurityRoute
   ServicesRoute: typeof ServicesRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   UnauthorizedRoute: typeof UnauthorizedRoute
@@ -625,6 +703,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServicesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/security': {
+      id: '/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof SecurityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/samples': {
       id: '/samples'
       path: '/samples'
@@ -644,6 +729,13 @@ declare module '@tanstack/react-router' {
       path: '/receptionist'
       fullPath: '/receptionist'
       preLoaderRoute: typeof ReceptionistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/patients': {
@@ -672,6 +764,13 @@ declare module '@tanstack/react-router' {
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/features': {
+      id: '/features'
+      path: '/features'
+      fullPath: '/features'
+      preLoaderRoute: typeof FeaturesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/email-verification': {
@@ -709,6 +808,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/careers': {
+      id: '/careers'
+      path: '/careers'
+      fullPath: '/careers'
+      preLoaderRoute: typeof CareersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/appointments': {
       id: '/appointments'
       path: '/appointments'
@@ -721,6 +834,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -987,20 +1107,26 @@ const ServicesRouteWithChildren = ServicesRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
   AdminRoute: AdminRouteWithChildren,
   AppointmentsRoute: AppointmentsRoute,
+  CareersRoute: CareersRoute,
+  ContactRoute: ContactRoute,
   DashboardRoute: DashboardRoute,
   DebugAuthRoute: DebugAuthRoute,
   DoctorRoute: DoctorRouteWithChildren,
   EmailNotVerifiedRoute: EmailNotVerifiedRoute,
   EmailVerificationRoute: EmailVerificationRoute,
+  FeaturesRoute: FeaturesRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LabTechnicianRoute: LabTechnicianRouteWithChildren,
   LoginRoute: LoginRoute,
   PatientsRoute: PatientsRoute,
+  PricingRoute: PricingRoute,
   ReceptionistRoute: ReceptionistRouteWithChildren,
   RegisterRoute: RegisterRoute,
   SamplesRoute: SamplesRoute,
+  SecurityRoute: SecurityRoute,
   ServicesRoute: ServicesRouteWithChildren,
   SettingsRoute: SettingsRoute,
   UnauthorizedRoute: UnauthorizedRoute,

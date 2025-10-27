@@ -55,10 +55,14 @@ import { Route as DoctorPatientsRouteImport } from './routes/doctor/patients'
 import { Route as DoctorDashboardRouteImport } from './routes/doctor/dashboard'
 import { Route as DoctorAppointmentsRouteImport } from './routes/doctor/appointments'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
+import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
+import { Route as AdminSamplesRouteImport } from './routes/admin/samples'
 import { Route as AdminReportsRouteImport } from './routes/admin/reports'
+import { Route as AdminPatientsRouteImport } from './routes/admin/patients'
 import { Route as AdminDashboardRouteImport } from './routes/admin/dashboard'
 import { Route as AdminContentRouteImport } from './routes/admin/content'
 import { Route as AdminCategoriesRouteImport } from './routes/admin/categories'
+import { Route as AdminAppointmentsRouteImport } from './routes/admin/appointments'
 
 const VerifyEmailManualRoute = VerifyEmailManualRouteImport.update({
   id: '/verify-email-manual',
@@ -293,9 +297,24 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSamplesRoute = AdminSamplesRouteImport.update({
+  id: '/samples',
+  path: '/samples',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminReportsRoute = AdminReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPatientsRoute = AdminPatientsRouteImport.update({
+  id: '/patients',
+  path: '/patients',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminDashboardRoute = AdminDashboardRouteImport.update({
@@ -311,6 +330,11 @@ const AdminContentRoute = AdminContentRouteImport.update({
 const AdminCategoriesRoute = AdminCategoriesRouteImport.update({
   id: '/categories',
   path: '/categories',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAppointmentsRoute = AdminAppointmentsRouteImport.update({
+  id: '/appointments',
+  path: '/appointments',
   getParentRoute: () => AdminRoute,
 } as any)
 
@@ -342,10 +366,14 @@ export interface FileRoutesByFullPath {
   '/verification-success': typeof VerificationSuccessRoute
   '/verify-email': typeof VerifyEmailRoute
   '/verify-email-manual': typeof VerifyEmailManualRoute
+  '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/patients': typeof AdminPatientsRoute
   '/admin/reports': typeof AdminReportsRoute
+  '/admin/samples': typeof AdminSamplesRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/doctor/appointments': typeof DoctorAppointmentsRoute
   '/doctor/dashboard': typeof DoctorDashboardRoute
@@ -393,10 +421,14 @@ export interface FileRoutesByTo {
   '/verification-success': typeof VerificationSuccessRoute
   '/verify-email': typeof VerifyEmailRoute
   '/verify-email-manual': typeof VerifyEmailManualRoute
+  '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/patients': typeof AdminPatientsRoute
   '/admin/reports': typeof AdminReportsRoute
+  '/admin/samples': typeof AdminSamplesRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/doctor/appointments': typeof DoctorAppointmentsRoute
   '/doctor/dashboard': typeof DoctorDashboardRoute
@@ -446,10 +478,14 @@ export interface FileRoutesById {
   '/verification-success': typeof VerificationSuccessRoute
   '/verify-email': typeof VerifyEmailRoute
   '/verify-email-manual': typeof VerifyEmailManualRoute
+  '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/content': typeof AdminContentRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/patients': typeof AdminPatientsRoute
   '/admin/reports': typeof AdminReportsRoute
+  '/admin/samples': typeof AdminSamplesRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/doctor/appointments': typeof DoctorAppointmentsRoute
   '/doctor/dashboard': typeof DoctorDashboardRoute
@@ -500,10 +536,14 @@ export interface FileRouteTypes {
     | '/verification-success'
     | '/verify-email'
     | '/verify-email-manual'
+    | '/admin/appointments'
     | '/admin/categories'
     | '/admin/content'
     | '/admin/dashboard'
+    | '/admin/patients'
     | '/admin/reports'
+    | '/admin/samples'
+    | '/admin/settings'
     | '/admin/users'
     | '/doctor/appointments'
     | '/doctor/dashboard'
@@ -551,10 +591,14 @@ export interface FileRouteTypes {
     | '/verification-success'
     | '/verify-email'
     | '/verify-email-manual'
+    | '/admin/appointments'
     | '/admin/categories'
     | '/admin/content'
     | '/admin/dashboard'
+    | '/admin/patients'
     | '/admin/reports'
+    | '/admin/samples'
+    | '/admin/settings'
     | '/admin/users'
     | '/doctor/appointments'
     | '/doctor/dashboard'
@@ -603,10 +647,14 @@ export interface FileRouteTypes {
     | '/verification-success'
     | '/verify-email'
     | '/verify-email-manual'
+    | '/admin/appointments'
     | '/admin/categories'
     | '/admin/content'
     | '/admin/dashboard'
+    | '/admin/patients'
     | '/admin/reports'
+    | '/admin/samples'
+    | '/admin/settings'
     | '/admin/users'
     | '/doctor/appointments'
     | '/doctor/dashboard'
@@ -983,11 +1031,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/samples': {
+      id: '/admin/samples'
+      path: '/samples'
+      fullPath: '/admin/samples'
+      preLoaderRoute: typeof AdminSamplesRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/reports': {
       id: '/admin/reports'
       path: '/reports'
       fullPath: '/admin/reports'
       preLoaderRoute: typeof AdminReportsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/patients': {
+      id: '/admin/patients'
+      path: '/patients'
+      fullPath: '/admin/patients'
+      preLoaderRoute: typeof AdminPatientsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/dashboard': {
@@ -1011,22 +1080,37 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCategoriesRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/appointments': {
+      id: '/admin/appointments'
+      path: '/appointments'
+      fullPath: '/admin/appointments'
+      preLoaderRoute: typeof AdminAppointmentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
 interface AdminRouteChildren {
+  AdminAppointmentsRoute: typeof AdminAppointmentsRoute
   AdminCategoriesRoute: typeof AdminCategoriesRoute
   AdminContentRoute: typeof AdminContentRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
+  AdminPatientsRoute: typeof AdminPatientsRoute
   AdminReportsRoute: typeof AdminReportsRoute
+  AdminSamplesRoute: typeof AdminSamplesRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAppointmentsRoute: AdminAppointmentsRoute,
   AdminCategoriesRoute: AdminCategoriesRoute,
   AdminContentRoute: AdminContentRoute,
   AdminDashboardRoute: AdminDashboardRoute,
+  AdminPatientsRoute: AdminPatientsRoute,
   AdminReportsRoute: AdminReportsRoute,
+  AdminSamplesRoute: AdminSamplesRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
   AdminUsersRoute: AdminUsersRoute,
 }
 

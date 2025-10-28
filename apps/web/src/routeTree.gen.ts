@@ -9,15 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as VerifyEmailManualRouteImport } from './routes/verify-email-manual'
-import { Route as VerifyEmailRouteImport } from './routes/verify-email'
-import { Route as VerificationSuccessRouteImport } from './routes/verification-success'
 import { Route as UnauthorizedRouteImport } from './routes/unauthorized'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ServicesRouteImport } from './routes/services'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SamplesRouteImport } from './routes/samples'
-import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ReceptionistRouteImport } from './routes/receptionist'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as PatientsRouteImport } from './routes/patients'
@@ -25,8 +21,6 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as LabTechnicianRouteImport } from './routes/lab-technician'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as FeaturesRouteImport } from './routes/features'
-import { Route as EmailVerificationRouteImport } from './routes/email-verification'
-import { Route as EmailNotVerifiedRouteImport } from './routes/email-not-verified'
 import { Route as DoctorRouteImport } from './routes/doctor'
 import { Route as DebugAuthRouteImport } from './routes/debug-auth'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -64,21 +58,6 @@ import { Route as AdminContentRouteImport } from './routes/admin/content'
 import { Route as AdminCategoriesRouteImport } from './routes/admin/categories'
 import { Route as AdminAppointmentsRouteImport } from './routes/admin/appointments'
 
-const VerifyEmailManualRoute = VerifyEmailManualRouteImport.update({
-  id: '/verify-email-manual',
-  path: '/verify-email-manual',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const VerifyEmailRoute = VerifyEmailRouteImport.update({
-  id: '/verify-email',
-  path: '/verify-email',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const VerificationSuccessRoute = VerificationSuccessRouteImport.update({
-  id: '/verification-success',
-  path: '/verification-success',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const UnauthorizedRoute = UnauthorizedRouteImport.update({
   id: '/unauthorized',
   path: '/unauthorized',
@@ -102,11 +81,6 @@ const SecurityRoute = SecurityRouteImport.update({
 const SamplesRoute = SamplesRouteImport.update({
   id: '/samples',
   path: '/samples',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RegisterRoute = RegisterRouteImport.update({
-  id: '/register',
-  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReceptionistRoute = ReceptionistRouteImport.update({
@@ -142,16 +116,6 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const FeaturesRoute = FeaturesRouteImport.update({
   id: '/features',
   path: '/features',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EmailVerificationRoute = EmailVerificationRouteImport.update({
-  id: '/email-verification',
-  path: '/email-verification',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EmailNotVerifiedRoute = EmailNotVerifiedRouteImport.update({
-  id: '/email-not-verified',
-  path: '/email-not-verified',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DoctorRoute = DoctorRouteImport.update({
@@ -348,8 +312,6 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/debug-auth': typeof DebugAuthRoute
   '/doctor': typeof DoctorRouteWithChildren
-  '/email-not-verified': typeof EmailNotVerifiedRoute
-  '/email-verification': typeof EmailVerificationRoute
   '/features': typeof FeaturesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/lab-technician': typeof LabTechnicianRouteWithChildren
@@ -357,15 +319,11 @@ export interface FileRoutesByFullPath {
   '/patients': typeof PatientsRoute
   '/pricing': typeof PricingRoute
   '/receptionist': typeof ReceptionistRouteWithChildren
-  '/register': typeof RegisterRoute
   '/samples': typeof SamplesRoute
   '/security': typeof SecurityRoute
   '/services': typeof ServicesRouteWithChildren
   '/settings': typeof SettingsRoute
   '/unauthorized': typeof UnauthorizedRoute
-  '/verification-success': typeof VerificationSuccessRoute
-  '/verify-email': typeof VerifyEmailRoute
-  '/verify-email-manual': typeof VerifyEmailManualRoute
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/content': typeof AdminContentRoute
@@ -404,8 +362,6 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/debug-auth': typeof DebugAuthRoute
   '/doctor': typeof DoctorRouteWithChildren
-  '/email-not-verified': typeof EmailNotVerifiedRoute
-  '/email-verification': typeof EmailVerificationRoute
   '/features': typeof FeaturesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/lab-technician': typeof LabTechnicianRouteWithChildren
@@ -413,14 +369,10 @@ export interface FileRoutesByTo {
   '/patients': typeof PatientsRoute
   '/pricing': typeof PricingRoute
   '/receptionist': typeof ReceptionistRouteWithChildren
-  '/register': typeof RegisterRoute
   '/samples': typeof SamplesRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
   '/unauthorized': typeof UnauthorizedRoute
-  '/verification-success': typeof VerificationSuccessRoute
-  '/verify-email': typeof VerifyEmailRoute
-  '/verify-email-manual': typeof VerifyEmailManualRoute
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/content': typeof AdminContentRoute
@@ -460,8 +412,6 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/debug-auth': typeof DebugAuthRoute
   '/doctor': typeof DoctorRouteWithChildren
-  '/email-not-verified': typeof EmailNotVerifiedRoute
-  '/email-verification': typeof EmailVerificationRoute
   '/features': typeof FeaturesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/lab-technician': typeof LabTechnicianRouteWithChildren
@@ -469,15 +419,11 @@ export interface FileRoutesById {
   '/patients': typeof PatientsRoute
   '/pricing': typeof PricingRoute
   '/receptionist': typeof ReceptionistRouteWithChildren
-  '/register': typeof RegisterRoute
   '/samples': typeof SamplesRoute
   '/security': typeof SecurityRoute
   '/services': typeof ServicesRouteWithChildren
   '/settings': typeof SettingsRoute
   '/unauthorized': typeof UnauthorizedRoute
-  '/verification-success': typeof VerificationSuccessRoute
-  '/verify-email': typeof VerifyEmailRoute
-  '/verify-email-manual': typeof VerifyEmailManualRoute
   '/admin/appointments': typeof AdminAppointmentsRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/content': typeof AdminContentRoute
@@ -518,8 +464,6 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/debug-auth'
     | '/doctor'
-    | '/email-not-verified'
-    | '/email-verification'
     | '/features'
     | '/forgot-password'
     | '/lab-technician'
@@ -527,15 +471,11 @@ export interface FileRouteTypes {
     | '/patients'
     | '/pricing'
     | '/receptionist'
-    | '/register'
     | '/samples'
     | '/security'
     | '/services'
     | '/settings'
     | '/unauthorized'
-    | '/verification-success'
-    | '/verify-email'
-    | '/verify-email-manual'
     | '/admin/appointments'
     | '/admin/categories'
     | '/admin/content'
@@ -574,8 +514,6 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/debug-auth'
     | '/doctor'
-    | '/email-not-verified'
-    | '/email-verification'
     | '/features'
     | '/forgot-password'
     | '/lab-technician'
@@ -583,14 +521,10 @@ export interface FileRouteTypes {
     | '/patients'
     | '/pricing'
     | '/receptionist'
-    | '/register'
     | '/samples'
     | '/security'
     | '/settings'
     | '/unauthorized'
-    | '/verification-success'
-    | '/verify-email'
-    | '/verify-email-manual'
     | '/admin/appointments'
     | '/admin/categories'
     | '/admin/content'
@@ -629,8 +563,6 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/debug-auth'
     | '/doctor'
-    | '/email-not-verified'
-    | '/email-verification'
     | '/features'
     | '/forgot-password'
     | '/lab-technician'
@@ -638,15 +570,11 @@ export interface FileRouteTypes {
     | '/patients'
     | '/pricing'
     | '/receptionist'
-    | '/register'
     | '/samples'
     | '/security'
     | '/services'
     | '/settings'
     | '/unauthorized'
-    | '/verification-success'
-    | '/verify-email'
-    | '/verify-email-manual'
     | '/admin/appointments'
     | '/admin/categories'
     | '/admin/content'
@@ -686,8 +614,6 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   DebugAuthRoute: typeof DebugAuthRoute
   DoctorRoute: typeof DoctorRouteWithChildren
-  EmailNotVerifiedRoute: typeof EmailNotVerifiedRoute
-  EmailVerificationRoute: typeof EmailVerificationRoute
   FeaturesRoute: typeof FeaturesRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LabTechnicianRoute: typeof LabTechnicianRouteWithChildren
@@ -695,41 +621,16 @@ export interface RootRouteChildren {
   PatientsRoute: typeof PatientsRoute
   PricingRoute: typeof PricingRoute
   ReceptionistRoute: typeof ReceptionistRouteWithChildren
-  RegisterRoute: typeof RegisterRoute
   SamplesRoute: typeof SamplesRoute
   SecurityRoute: typeof SecurityRoute
   ServicesRoute: typeof ServicesRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   UnauthorizedRoute: typeof UnauthorizedRoute
-  VerificationSuccessRoute: typeof VerificationSuccessRoute
-  VerifyEmailRoute: typeof VerifyEmailRoute
-  VerifyEmailManualRoute: typeof VerifyEmailManualRoute
   LabDashboardRoute: typeof LabDashboardRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/verify-email-manual': {
-      id: '/verify-email-manual'
-      path: '/verify-email-manual'
-      fullPath: '/verify-email-manual'
-      preLoaderRoute: typeof VerifyEmailManualRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/verify-email': {
-      id: '/verify-email'
-      path: '/verify-email'
-      fullPath: '/verify-email'
-      preLoaderRoute: typeof VerifyEmailRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/verification-success': {
-      id: '/verification-success'
-      path: '/verification-success'
-      fullPath: '/verification-success'
-      preLoaderRoute: typeof VerificationSuccessRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/unauthorized': {
       id: '/unauthorized'
       path: '/unauthorized'
@@ -763,13 +664,6 @@ declare module '@tanstack/react-router' {
       path: '/samples'
       fullPath: '/samples'
       preLoaderRoute: typeof SamplesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/register': {
-      id: '/register'
-      path: '/register'
-      fullPath: '/register'
-      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/receptionist': {
@@ -819,20 +713,6 @@ declare module '@tanstack/react-router' {
       path: '/features'
       fullPath: '/features'
       preLoaderRoute: typeof FeaturesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/email-verification': {
-      id: '/email-verification'
-      path: '/email-verification'
-      fullPath: '/email-verification'
-      preLoaderRoute: typeof EmailVerificationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/email-not-verified': {
-      id: '/email-not-verified'
-      path: '/email-not-verified'
-      fullPath: '/email-not-verified'
-      preLoaderRoute: typeof EmailNotVerifiedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/doctor': {
@@ -1199,8 +1079,6 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   DebugAuthRoute: DebugAuthRoute,
   DoctorRoute: DoctorRouteWithChildren,
-  EmailNotVerifiedRoute: EmailNotVerifiedRoute,
-  EmailVerificationRoute: EmailVerificationRoute,
   FeaturesRoute: FeaturesRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LabTechnicianRoute: LabTechnicianRouteWithChildren,
@@ -1208,15 +1086,11 @@ const rootRouteChildren: RootRouteChildren = {
   PatientsRoute: PatientsRoute,
   PricingRoute: PricingRoute,
   ReceptionistRoute: ReceptionistRouteWithChildren,
-  RegisterRoute: RegisterRoute,
   SamplesRoute: SamplesRoute,
   SecurityRoute: SecurityRoute,
   ServicesRoute: ServicesRouteWithChildren,
   SettingsRoute: SettingsRoute,
   UnauthorizedRoute: UnauthorizedRoute,
-  VerificationSuccessRoute: VerificationSuccessRoute,
-  VerifyEmailRoute: VerifyEmailRoute,
-  VerifyEmailManualRoute: VerifyEmailManualRoute,
   LabDashboardRoute: LabDashboardRoute,
 }
 export const routeTree = rootRouteImport

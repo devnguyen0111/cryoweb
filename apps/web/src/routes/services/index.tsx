@@ -132,7 +132,7 @@ function ServicesPage() {
                             <Link to="/">Home</Link>
                         </Button>
                         <Button size="sm" asChild>
-                            <Link to="/register">Schedule Consultation</Link>
+                            <Link to="/login">Sign In to Book</Link>
                         </Button>
                     </div>
                 </div>
@@ -247,8 +247,8 @@ function ServicesPage() {
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4 justify-center">
                             <Button size="lg" asChild>
-                                <Link to="/register">
-                                    Schedule Consultation
+                                <Link to="/login">
+                                    Sign In to Book Consultation
                                     <ArrowRight className="ml-2 h-4 w-4" />
                                 </Link>
                             </Button>

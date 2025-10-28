@@ -23,7 +23,7 @@ function PricingPage() {
                             <Link to="/">Home</Link>
                         </Button>
                         <Button size="sm" asChild>
-                            <Link to="/register">Get Started</Link>
+                            <Link to="/login">Sign In</Link>
                         </Button>
                     </div>
                 </div>
@@ -308,8 +308,8 @@ function PricingPage() {
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                         <Button size="lg" asChild>
-                            <Link to="/register">
-                                Start Free Trial
+                            <Link to="/login">
+                                Sign In to Get Started
                                 <ArrowRight className="ml-2 h-4 w-4" />
                             </Link>
                         </Button>
@@ -369,7 +369,7 @@ function PricingCard({
             </CardHeader>
             <CardContent className="space-y-4">
                 <Button className="w-full" variant={buttonVariant} size="lg" asChild>
-                    <Link to="/register">{buttonText}</Link>
+                    <Link to="/login">{buttonText}</Link>
                 </Button>
                 <ul className="space-y-3">
                     {features.map((feature, idx) => (

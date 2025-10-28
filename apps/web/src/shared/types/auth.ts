@@ -219,6 +219,4 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
 }
 
 // Additional navigation items that can be added to any role
-export const ADDITIONAL_NAVIGATION: NavigationItem[] = [
-    { label: 'Email Verification', href: '/verify-email-manual', icon: 'Mail' },
-]
+export const ADDITIONAL_NAVIGATION: NavigationItem[] = []

@@ -77,15 +77,6 @@ function LoginPage() {
                 navigate({ to: '/' })
             }
         } catch (error: any) {
-            // Handle email not verified case
-            if (error.message === 'EMAIL_NOT_VERIFIED') {
-                navigate({
-                    to: '/email-not-verified',
-                    search: { email: data.email },
-                })
-                return
-            }
-
             // Handle account banned case
             if (error.message === 'ACCOUNT_BANNED') {
                 toast.error({
@@ -207,24 +198,6 @@ function LoginPage() {
                                 </Button>
                             </form>
                         </Form>
-
-                        <div className="mt-6">
-                            <div className="relative">
-                                <div className="absolute inset-0 flex items-center">
-                                    <span className="w-full border-t" />
-                                </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="bg-card px-2 text-muted-foreground">Or</span>
-                                </div>
-                            </div>
-
-                            <div className="mt-6 text-center text-sm">
-                                <span className="text-muted-foreground">Don't have an account? </span>
-                                <Link to="/register" className="text-primary font-medium hover:underline">
-                                    Sign up
-                                </Link>
-                            </div>
-                        </div>
                     </CardContent>
                 </Card>
 

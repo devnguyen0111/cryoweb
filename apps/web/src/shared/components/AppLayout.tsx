@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { toast } from '@workspace/ui/components/Sonner'
 import { useNavigate } from '@tanstack/react-router'
 import { ROLE_NAVIGATION, UserRole, ADDITIONAL_NAVIGATION } from '../types/auth'
-import { EmailVerificationBanner } from './EmailVerificationBanner'
 
 interface AppLayoutProps {
     children: React.ReactNode
@@ -34,9 +33,6 @@ export function AppLayout({ children, currentPage }: AppLayoutProps) {
 
     return (
         <div className="min-h-screen bg-background">
-            {/* Email Verification Banner */}
-            <EmailVerificationBanner />
-
             {/* Header */}
             <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
                 <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -66,16 +62,6 @@ export function AppLayout({ children, currentPage }: AppLayoutProps) {
                                     </Link>
                                 )
                             })}
-
-                        {/* Show Email Verification link if email is not verified */}
-                        {user && !user.isEmailVerified && (
-                            <Link
-                                to="/verify-email-manual"
-                                className="text-sm font-medium transition-colors text-yellow-600 hover:text-yellow-700 dark:text-yellow-400 dark:hover:text-yellow-300"
-                            >
-                                📧 Xác nhận Email
-                            </Link>
-                        )}
                     </nav>
                     <div className="flex items-center gap-3">
                         {/* User Info */}

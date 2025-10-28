@@ -10,12 +10,9 @@ interface AuthContextType {
     userRole: UserRole | null
     userPermissions: RolePermissions | null
     login: (email: string, password: string) => Promise<void>
-    register: (data: { fullName: string; email: string; phone: string; password: string }) => Promise<void>
     logout: () => Promise<void>
     updateProfile: (data: Partial<User>) => Promise<void>
     refreshUser: () => Promise<void>
-    verifyEmail: (email: string, code: string) => Promise<void>
-    resendVerification: (email: string) => Promise<void>
     hasPermission: (permission: keyof RolePermissions) => boolean
     hasRole: (role: UserRole) => boolean
 }
@@ -188,80 +185,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
     }
 
-    const register = async (data: { fullName: string; email: string; phone: string; password: string }) => {
-        try {
-            const response = await api.auth.register(data)
-
-            // Debug logging
-            console.log('Register response:', response)
-            console.log('User data:', response.data?.user)
-
-            // Check if account is banned
-            if (response.isBanned) {
-                throw new Error('ACCOUNT_BANNED')
-            }
-
-            // Check if we have valid tokens (registration might not return tokens if email verification is required)
-            if (!response.data?.token || !response.data?.refreshToken) {
-                // If no tokens, user needs to verify email first
-                if (response.data?.user) {
-                    // Transform API user data to our User interface
-                    const userData: User = {
-                        id: response.data.user.id,
-                        email: response.data.user.email,
-                        fullName: response.data.user.userName || data.fullName,
-                        role: response.data.user.roleName,
-                        phone: response.data.user.phone || data.phone,
-                        createdAt: response.data.user.createdAt,
-                        updatedAt: response.data.user.updatedAt,
-                        isEmailVerified: response.data.user.emailVerified,
-                        status: response.data.user.status,
-                        userName: response.data.user.userName,
-                        age: response.data.user.age,
-                        location: response.data.user.location,
-                        country: response.data.user.country,
-                        image: response.data.user.image,
-                        roleId: response.data.user.roleId,
-                        roleName: response.data.user.roleName,
-                    }
-                    setUser(userData)
-                    updateUserRoleAndPermissions(userData)
-                }
-                throw new Error('EMAIL_VERIFICATION_REQUIRED')
-            }
-
-            // Transform API user data to our User interface
-            const userData: User = {
-                id: response.data.user.id,
-                email: response.data.user.email,
-                fullName: response.data.user.userName || data.fullName,
-                role: response.data.user.roleName,
-                phone: response.data.user.phone || data.phone,
-                createdAt: response.data.user.createdAt,
-                updatedAt: response.data.user.updatedAt,
-                isEmailVerified: response.data.user.emailVerified,
-                status: response.data.user.status,
-                userName: response.data.user.userName,
-                age: response.data.user.age,
-                location: response.data.user.location,
-                country: response.data.user.country,
-                image: response.data.user.image,
-                roleId: response.data.user.roleId,
-                roleName: response.data.user.roleName,
-            }
-
-            // Store tokens and user data
-            localStorage.setItem('authToken', response.data.token)
-            localStorage.setItem('refreshToken', response.data.refreshToken)
-            localStorage.setItem('user', JSON.stringify(userData))
-
-            setUser(userData)
-            updateUserRoleAndPermissions(userData)
-        } catch (error) {
-            throw error
-        }
-    }
-
     const logout = async () => {
         try {
             await api.auth.logout()
@@ -337,22 +260,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
     }
 
-    const verifyEmail = async (email: string, code: string) => {
-        try {
-            await api.auth.verifyEmail(email, code)
-        } catch (error) {
-            throw error
-        }
-    }
-
-    const resendVerification = async (email: string) => {
-        try {
-            await api.auth.resendVerification(email)
-        } catch (error) {
-            throw error
-        }
-    }
-
     // Helper functions for role-based access control
     const hasPermission = (permission: keyof RolePermissions): boolean => {
         return userPermissions ? userPermissions[permission] : false
@@ -369,12 +276,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         userRole,
         userPermissions,
         login,
-        register,
         logout,
         updateProfile,
         refreshUser,
-        verifyEmail,
-        resendVerification,
         hasPermission,
         hasRole,
     }

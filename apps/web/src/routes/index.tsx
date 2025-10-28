@@ -51,11 +51,8 @@ function HomePage() {
                     </nav>
                     <div className="flex items-center gap-3">
                         <ThemeSwitcher />
-                        <Button variant="ghost" size="sm" asChild>
-                            <Link to="/login">Login</Link>
-                        </Button>
                         <Button size="sm" asChild>
-                            <Link to="/register">Get Started</Link>
+                            <Link to="/login">Sign In</Link>
                         </Button>
                     </div>
                 </div>
@@ -78,7 +75,7 @@ function HomePage() {
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                         <Button size="xl" asChild>
-                            <Link to="/register">
+                            <Link to="/login">
                                 Start Your Journey
                                 <ArrowRight className="ml-2 h-5 w-5" />
                             </Link>
@@ -405,7 +402,7 @@ function HomePage() {
                             </p>
                             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
                                 <Button size="xl" asChild>
-                                    <Link to="/register">
+                                    <Link to="/login">
                                         Schedule Free Consultation
                                         <ArrowRight className="ml-2 h-5 w-5" />
                                     </Link>

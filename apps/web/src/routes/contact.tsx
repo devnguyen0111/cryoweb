@@ -24,7 +24,7 @@ function ContactPage() {
                             <Link to="/">Home</Link>
                         </Button>
                         <Button size="sm" asChild>
-                            <Link to="/register">Get Started</Link>
+                            <Link to="/login">Sign In</Link>
                         </Button>
                     </div>
                 </div>

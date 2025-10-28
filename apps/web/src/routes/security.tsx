@@ -36,7 +36,7 @@ function SecurityPage() {
                             <Link to="/">Home</Link>
                         </Button>
                         <Button size="sm" asChild>
-                            <Link to="/register">Get Started</Link>
+                            <Link to="/login">Sign In</Link>
                         </Button>
                     </div>
                 </div>
@@ -271,7 +271,7 @@ function SecurityPage() {
                             </Link>
                         </Button>
                         <Button size="lg" variant="outline" asChild>
-                            <Link to="/register">Start Free Trial</Link>
+                            <Link to="/login">Sign In</Link>
                         </Button>
                     </div>
                 </div>

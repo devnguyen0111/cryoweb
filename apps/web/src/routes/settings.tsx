@@ -40,8 +40,7 @@ const profileSchema = z.object({
 type ProfileFormData = z.infer<typeof profileSchema>
 
 function SettingsPage() {
-    const { user, updateProfile, resendVerification } = useAuth()
-    const [isResendingVerification, setIsResendingVerification] = useState(false)
+    const { user, updateProfile } = useAuth()
 
     const form = useForm<ProfileFormData>({
         resolver: zodResolver(profileSchema),
@@ -51,32 +50,6 @@ function SettingsPage() {
             phone: user?.phone || '',
         },
     })
-
-    const handleResendVerification = async () => {
-        if (!user?.email) {
-            toast.error({
-                title: 'Lỗi',
-                description: 'Không tìm thấy email của bạn.',
-            })
-            return
-        }
-
-        setIsResendingVerification(true)
-        try {
-            await resendVerification(user.email)
-            toast.success({
-                title: 'Đã gửi lại email xác nhận!',
-                description: 'Vui lòng kiểm tra email của bạn.',
-            })
-        } catch (error: any) {
-            toast.error({
-                title: 'Gửi lại email thất bại',
-                description: error.message || 'Không thể gửi lại email xác nhận.',
-            })
-        } finally {
-            setIsResendingVerification(false)
-        }
-    }
 
     const onSubmit = async (data: ProfileFormData) => {
         try {
@@ -182,83 +155,6 @@ function SettingsPage() {
                                         </div>
                                     </form>
                                 </Form>
-                            </CardContent>
-                        </Card>
-
-                        {/* Email Verification Status */}
-                        <Card>
-                            <CardHeader>
-                                <div className="flex items-center gap-2">
-                                    <Mail className="h-5 w-5" />
-                                    <CardTitle>Email Verification</CardTitle>
-                                </div>
-                                <CardDescription>Manage your email verification status</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="flex items-center justify-between p-4 border rounded-lg">
-                                    <div className="flex items-center gap-3">
-                                        {user?.isEmailVerified ? (
-                                            <CheckCircle className="h-5 w-5 text-green-600" />
-                                        ) : (
-                                            <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                                        )}
-                                        <div>
-                                            <p className="font-medium">
-                                                {user?.isEmailVerified
-                                                    ? 'Email đã được xác nhận'
-                                                    : 'Email chưa được xác nhận'}
-                                            </p>
-                                            <p className="text-sm text-muted-foreground">{user?.email}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {!user?.isEmailVerified && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={handleResendVerification}
-                                                isDisabled={isResendingVerification}
-                                            >
-                                                {isResendingVerification ? (
-                                                    <>
-                                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                                        Đang gửi...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Mail className="h-4 w-4 mr-2" />
-                                                        Gửi lại mã
-                                                    </>
-                                                )}
-                                            </Button>
-                                        )}
-                                        <Button asChild variant="outline" size="sm">
-                                            <Link
-                                                to="/email-verification"
-                                                search={{ from: 'settings', email: user?.email }}
-                                            >
-                                                {user?.isEmailVerified ? 'Xác nhận lại' : 'Xác nhận Email'}
-                                            </Link>
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                {!user?.isEmailVerified && (
-                                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                                        <div className="flex items-start gap-3">
-                                            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-                                            <div>
-                                                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                                                    Email chưa được xác nhận
-                                                </p>
-                                                <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                                                    Vui lòng xác nhận email để sử dụng đầy đủ các tính năng và bảo mật
-                                                    tài khoản.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                             </CardContent>
                         </Card>
 

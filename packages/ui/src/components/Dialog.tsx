@@ -104,6 +104,15 @@ const DialogDescription = ({ className, ...props }: React.HTMLAttributes<HTMLPar
     />
 )
 
+// Attach subcomponents to Dialog for convenience - allows usage like <Dialog.Content>, <Dialog.Header>, etc.
+;(Dialog as any).Content = DialogContent
+;(Dialog as any).Header = DialogHeader
+;(Dialog as any).Footer = DialogFooter
+;(Dialog as any).Title = DialogTitle
+;(Dialog as any).Description = DialogDescription
+;(Dialog as any).Trigger = DialogTrigger
+;(Dialog as any).Overlay = DialogOverlay
+
 export {
     Dialog,
     DialogContent,

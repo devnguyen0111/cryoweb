@@ -3,6 +3,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { BsProvider } from '@workspace/ui/components/Provider'
 import { ThemeProvider } from '@/shared/components/ThemeProvider'
 import { AuthProvider } from '../contexts/AuthContext'
+import { Toaster } from 'sonner'
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -32,6 +33,7 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
                 <QueryClientProvider client={queryClient}>
                     <AuthProvider>
                         {children}
+                        <Toaster position="top-right" richColors closeButton />
                         <ReactQueryDevtools initialIsOpen={false} />
                     </AuthProvider>
                 </QueryClientProvider>

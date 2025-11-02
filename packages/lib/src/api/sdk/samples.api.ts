@@ -100,16 +100,19 @@ export class SamplesApi {
 
     /**
      * Get list of samples with pagination and filtering
-     * TODO: Implement actual API endpoint
      * @example
      * const response = await samplesApi.getSamples({ page: 1, limit: 10, status: 'stored' })
      */
     async getSamples(query?: SampleListQuery): Promise<SampleListResponse> {
-        // TODO: Replace with actual API call
-        // const params = new URLSearchParams(query as any)
-        // return this.client.get<SampleListResponse>(`/samples?${params}`).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        const params = new URLSearchParams()
+        if (query) {
+            Object.entries(query).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    params.append(key, String(value))
+                }
+            })
+        }
+        return this.client.get<SampleListResponse>(`/samples?${params}`).then(res => res.data)
     }
 
     /**
@@ -222,7 +225,6 @@ export class SamplesApi {
 
     /**
      * Get storage statistics
-     * TODO: Implement actual API endpoint
      */
     async getStorageStats(): Promise<{
         totalSamples: number
@@ -231,9 +233,6 @@ export class SamplesApi {
         capacityUsed: number
         capacityTotal: number
     }> {
-        // TODO: Replace with actual API call
-        // return this.client.get('/samples/stats').then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        return this.client.get('/samples/stats').then(res => res.data)
     }
 }

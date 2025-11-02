@@ -76,7 +76,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     setUser(parsedUser)
                     updateUserRoleAndPermissions(parsedUser)
 
-                    // Optionally verify token with backend
+                    // Silently try to refresh user data in background, don't fail if it errors
                     try {
                         const currentUser = await api.auth.getCurrentUser()
                         // Convert ApiUser to User if needed
@@ -100,19 +100,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
                         }
                         setUser(userData)
                         updateUserRoleAndPermissions(userData)
+                        // Update localStorage with fresh data
+                        localStorage.setItem('user', JSON.stringify(userData))
                     } catch (error) {
-                        // Token might be expired, clear auth state
-                        localStorage.removeItem('authToken')
-                        localStorage.removeItem('refreshToken')
-                        localStorage.removeItem('user')
-                        setUser(null)
-                        setUserRole(null)
-                        setUserPermissions(null)
+                        // Silently fail - user is already restored from localStorage
+                        console.log('Could not refresh user data, using cached data:', error)
                     }
                 }
             } catch (error) {
                 console.error('Auth initialization error:', error)
-                // Clear invalid auth data
+                // Only clear if data is corrupted (can't parse)
                 localStorage.removeItem('authToken')
                 localStorage.removeItem('refreshToken')
                 localStorage.removeItem('user')
@@ -203,7 +200,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const updateProfile = async (data: Partial<User | ApiUser>) => {
         try {
-            const updatedUser = await api.auth.updateProfile(data)
+            const updatedUser = await api.auth.updateProfile(data as any)
             // Convert ApiUser to User if needed
             const userData: User = {
                 id: updatedUser.id,

@@ -2,8 +2,13 @@ import { AxiosInstance } from 'axios'
 import { ExampleApi } from './sdk/example.api'
 import { AuthApi } from './sdk/auth.api'
 import { UserApi } from './sdk/user.api'
-import { PatientsApi } from './sdk/patients.api'
-import { SamplesApi } from './sdk/samples.api'
+import { PatientApi } from './sdk/patient.api'
+import { DoctorApi } from './sdk/doctor.api'
+import { RelationshipApi } from './sdk/relationship.api'
+import { ServiceApi } from './sdk/service.api'
+import { ServiceCategoryApi } from './sdk/servicecategory.api'
+import { ServiceRequestApi } from './sdk/servicerequest.api'
+import { ServiceRequestDetailsApi } from './sdk/servicerequestdetails.api'
 import { AppointmentsApi } from './sdk/appointments.api'
 
 /**
@@ -20,31 +25,53 @@ import { AppointmentsApi } from './sdk/appointments.api'
  * 
  * // Usage examples:
  * api.auth.login({ email: 'user@example.com', password: 'password' })
- * api.patients.getPatients({ page: 1, limit: 10 })
- * api.samples.getSamples({ status: 'stored' })
- * api.appointments.getUpcomingAppointments()
+ * api.patient.getPatients({ page: 1, limit: 10 })
+ * api.doctor.getDoctorStatistics()
+ * api.doctor.getSchedulesByDoctor('doctor-id-123')
  */
 export class Api {
     example: ExampleApi
     auth: AuthApi
     user: UserApi
-    patients: PatientsApi
-    samples: SamplesApi
+    patient: PatientApi
+    doctor: DoctorApi
+    relationship: RelationshipApi
+    service: ServiceApi
+    serviceCategory: ServiceCategoryApi
+    serviceRequest: ServiceRequestApi
+    serviceRequestDetails: ServiceRequestDetailsApi
     appointments: AppointmentsApi
 
     constructor(private readonly client: AxiosInstance) {
         this.example = new ExampleApi(this.client)
         this.auth = new AuthApi(this.client)
         this.user = new UserApi(this.client)
-        this.patients = new PatientsApi(this.client)
-        this.samples = new SamplesApi(this.client)
+        this.patient = new PatientApi(this.client)
+        this.doctor = new DoctorApi(this.client)
+        this.relationship = new RelationshipApi(this.client)
+        this.service = new ServiceApi(this.client)
+        this.serviceCategory = new ServiceCategoryApi(this.client)
+        this.serviceRequest = new ServiceRequestApi(this.client)
+        this.serviceRequestDetails = new ServiceRequestDetailsApi(this.client)
         this.appointments = new AppointmentsApi(this.client)
     }
 }
 
 // Export all types
 export * from './sdk/auth.api'
-export type { User as UserDto } from './sdk/user.api'
-export * from './sdk/patients.api'
-export * from './sdk/samples.api'
-export * from './sdk/appointments.api'
+export * from './sdk/user.api'
+export * from './sdk/patient.api'
+export * from './sdk/doctor.api'
+export * from './sdk/relationship.api'
+export * from './sdk/service.api'
+export * from './sdk/servicecategory.api'
+export * from './sdk/servicerequest.api'
+export * from './sdk/servicerequestdetails.api'
+export type {
+    Appointment,
+    CreateAppointmentRequest,
+    UpdateAppointmentRequest,
+    AppointmentListQuery,
+    AppointmentListResponse,
+} from './sdk/appointments.api'
+export type { TimeSlot as AppointmentTimeSlot } from './sdk/appointments.api'

@@ -45,7 +45,7 @@ export interface AuthResponse {
     }
 }
 
-export interface User {
+export interface AuthUser {
     id: number
     email: string
     fullName?: string
@@ -126,15 +126,15 @@ export class AuthApi {
     /**
      * Get current user profile
      */
-    async getCurrentUser(): Promise<User> {
-        return this.client.get<User>('/user/profile').then(res => res.data)
+    async getCurrentUser(): Promise<AuthUser> {
+        return this.client.get<AuthUser>('/user/profile').then(res => res.data)
     }
 
     /**
      * Update current user profile
      */
-    async updateProfile(data: Partial<User>): Promise<User> {
-        return this.client.put<User>('/user/profile', data).then(res => res.data)
+    async updateProfile(data: Partial<AuthUser>): Promise<AuthUser> {
+        return this.client.put<AuthUser>('/user/profile', data).then(res => res.data)
     }
 
     /**
@@ -176,4 +176,35 @@ export class AuthApi {
     async resendVerification(email: string): Promise<{ message: string }> {
         return this.client.post('/auth/send-verification-email', { email }).then(res => res.data)
     }
+
+    // ==================== Admin Auth Endpoints ====================
+
+    /**
+     * Create account (Admin only)
+     */
+    async createAccount(data: CreateAccountRequest): Promise<{ message: string }> {
+        return this.client.post('/auth/admin/create-account', data).then(res => res.data)
+    }
+
+    /**
+     * Send account to user (Admin only)
+     */
+    async sendAccountToUser(userId: number): Promise<{ message: string }> {
+        return this.client.post(`/auth/admin/send-account/${userId}`).then(res => res.data)
+    }
+
+    /**
+     * Set email verified (Admin only)
+     */
+    async setEmailVerified(userId: number, verified: boolean): Promise<{ message: string }> {
+        return this.client.post('/auth/admin/set-email-verified', { userId, verified }).then(res => res.data)
+    }
+}
+
+export interface CreateAccountRequest {
+    fullName: string
+    email: string
+    phone: string
+    role: string
+    sendEmail?: boolean
 }

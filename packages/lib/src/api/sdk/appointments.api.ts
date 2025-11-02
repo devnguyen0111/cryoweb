@@ -79,16 +79,19 @@ export class AppointmentsApi {
 
     /**
      * Get list of appointments with pagination and filtering
-     * TODO: Implement actual API endpoint
      * @example
      * const response = await appointmentsApi.getAppointments({ page: 1, limit: 10, status: 'scheduled' })
      */
     async getAppointments(query?: AppointmentListQuery): Promise<AppointmentListResponse> {
-        // TODO: Replace with actual API call
-        // const params = new URLSearchParams(query as any)
-        // return this.client.get<AppointmentListResponse>(`/appointments?${params}`).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        const params = new URLSearchParams()
+        if (query) {
+            Object.entries(query).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    params.append(key, String(value))
+                }
+            })
+        }
+        return this.client.get<AppointmentListResponse>(`/appointments?${params}`).then(res => res.data)
     }
 
     /**

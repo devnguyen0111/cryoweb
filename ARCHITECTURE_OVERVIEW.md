@@ -9,7 +9,6 @@ graph TB
 
         subgraph "Applications Layer"
             WebApp[🏥 Web App<br/>Fertility Management System<br/>Vite + React 19]
-            DocsApp[📚 Docs App<br/>Documentation Site<br/>Next.js + Contentlayer]
         end
 
         subgraph "Shared Packages"
@@ -20,7 +19,6 @@ graph TB
         end
 
         Root --> WebApp
-        Root --> DocsApp
         Root --> UI
         Root --> Lib
         Root --> TSConfig
@@ -30,10 +28,6 @@ graph TB
         WebApp --> Lib
         WebApp --> TSConfig
         WebApp --> ESLintConfig
-
-        DocsApp --> UI
-        DocsApp --> TSConfig
-        DocsApp --> ESLintConfig
     end
 ```
 
@@ -60,6 +54,46 @@ graph TB
                 Samples["samples.tsx - Sample Tracking"]
                 Appointments["appointments.tsx - Scheduling"]
                 Settings["settings.tsx - User Settings"]
+                
+                subgraph "Admin Routes"
+                    AdminDash["admin/dashboard.tsx"]
+                    AdminUsers["admin/users.tsx"]
+                    AdminPatients["admin/patients.tsx"]
+                    AdminSamples["admin/samples.tsx"]
+                    AdminAppointments["admin/appointments.tsx"]
+                    AdminReports["admin/reports.tsx"]
+                    AdminCategories["admin/categories.tsx"]
+                    AdminContent["admin/content.tsx"]
+                    AdminSettings["admin/settings.tsx"]
+                end
+                
+                subgraph "Doctor Routes"
+                    DoctorDash["doctor/index.tsx"]
+                    DoctorPatients["doctor/patients.tsx"]
+                    DoctorAppointments["doctor/appointments.tsx"]
+                    DoctorSchedule["doctor/schedule.tsx"]
+                    DoctorEncounters["doctor/encounter.tsx"]
+                    DoctorPrescriptions["doctor/prescriptions.tsx"]
+                    DoctorReports["doctor/reports.tsx"]
+                    DoctorLabSamples["doctor/lab-samples.tsx"]
+                    DoctorTreatments["doctor/treatments.tsx"]
+                    DoctorServiceRequests["doctor/service-requests.tsx"]
+                end
+                
+                subgraph "Receptionist Routes"
+                    ReceptionistDash["receptionist/index.tsx"]
+                    ReceptionistPatients["receptionist/patients.tsx"]
+                    ReceptionistAppointments["receptionist/appointments.tsx"]
+                    ReceptionistServices["receptionist/services.tsx"]
+                    ReceptionistReports["receptionist/reports.tsx"]
+                    ReceptionistTransactions["receptionist/transactions.tsx"]
+                end
+                
+                subgraph "Lab Technician Routes"
+                    LabDash["lab/dashboard.tsx"]
+                    LabSamples["lab-technician/samples.tsx"]
+                    LabTests["lab-technician/tests.tsx"]
+                end
             end
         end
 
@@ -71,6 +105,10 @@ graph TB
         subgraph "Shared Layer"
             Components["Shared Components"]
             ApiClient["API Client - Axios"]
+            AuthContext["AuthContext - Authentication State"]
+            RoleGuard["RoleGuard & RoleBasedRoute - RBAC"]
+            ThemeProvider["ThemeProvider - Dark/Light Mode"]
+            ExportUtils["Export Utils - PDF/Excel"]
         end
 
         Entry --> Router
@@ -105,11 +143,20 @@ graph TB
     subgraph LibPackage["@workspace/lib Package"]
         LibIndex["index.ts - Main Export"]
 
-        subgraph "API SDK"
+        subgraph "API SDK (13 Modules)"
             AuthAPI["auth.api.ts - Authentication"]
-            PatientsAPI["patients.api.ts - Patient CRUD"]
-            SamplesAPI["samples.api.ts - Sample Management"]
+            UserAPI["user.api.ts - User Management"]
+            PatientAPI["patient.api.ts - Patient CRUD"]
+            PatientsAPI["patients.api.ts - Patients List"]
+            DoctorAPI["doctor.api.ts - Doctor Operations"]
+            RelationshipAPI["relationship.api.ts - Relationships"]
+            ServiceAPI["service.api.ts - Services"]
+            ServiceCategoryAPI["servicecategory.api.ts - Categories"]
+            ServiceRequestAPI["servicerequest.api.ts - Service Requests"]
+            ServiceRequestDetailsAPI["servicerequestdetails.api.ts - Request Details"]
             AppointmentsAPI["appointments.api.ts - Scheduling"]
+            SamplesAPI["samples.api.ts - Sample Management"]
+            ExampleAPI["example.api.ts - Examples"]
         end
 
         subgraph "Validation"
@@ -117,9 +164,18 @@ graph TB
         end
 
         LibIndex --> AuthAPI
+        LibIndex --> UserAPI
+        LibIndex --> PatientAPI
         LibIndex --> PatientsAPI
-        LibIndex --> SamplesAPI
+        LibIndex --> DoctorAPI
+        LibIndex --> RelationshipAPI
+        LibIndex --> ServiceAPI
+        LibIndex --> ServiceCategoryAPI
+        LibIndex --> ServiceRequestAPI
+        LibIndex --> ServiceRequestDetailsAPI
         LibIndex --> AppointmentsAPI
+        LibIndex --> SamplesAPI
+        LibIndex --> ExampleAPI
         LibIndex --> ValidationSchemas
     end
 
@@ -298,26 +354,103 @@ apps/web/
 │   ├── main.tsx                    # Entry point
 │   ├── routeTree.gen.ts           # Generated route tree
 │   │
-│   ├── routes/                     # File-based routing
+│   ├── routes/                     # File-based routing (40+ routes)
 │   │   ├── __root.tsx             # Root layout + providers
 │   │   ├── index.tsx              # Home page (/)
 │   │   ├── login.tsx              # Login page (/login)
-│   │   ├── register.tsx           # Register page (/register)
-│   │   ├── dashboard.tsx          # Dashboard (/dashboard)
-│   │   ├── patients.tsx           # Patients (/patients)
-│   │   ├── samples.tsx            # Samples (/samples)
-│   │   ├── appointments.tsx       # Appointments (/appointments)
-│   │   └── settings.tsx           # Settings (/settings)
+│   │   ├── forgot-password.tsx    # Password recovery
+│   │   ├── dashboard.tsx          # General dashboard
+│   │   ├── patients.tsx           # Patient listing
+│   │   ├── samples.tsx            # Sample listing
+│   │   ├── appointments.tsx       # Appointment listing
+│   │   ├── settings.tsx           # User settings
+│   │   ├── about.tsx             # About page
+│   │   ├── contact.tsx           # Contact page
+│   │   ├── features.tsx          # Features page
+│   │   ├── pricing.tsx           # Pricing page
+│   │   ├── careers.tsx           # Careers page
+│   │   ├── security.tsx          # Security page
+│   │   ├── services.tsx          # Services listing
+│   │   ├── services/             # Service detail pages
+│   │   │   ├── index.tsx
+│   │   │   ├── ivf.tsx
+│   │   │   ├── iui.tsx
+│   │   │   ├── egg-freezing.tsx
+│   │   │   ├── embryo-freezing.tsx
+│   │   │   ├── fertility-preservation.tsx
+│   │   │   └── male-fertility.tsx
+│   │   ├── admin/                # Admin routes
+│   │   │   ├── dashboard.tsx
+│   │   │   ├── users.tsx
+│   │   │   ├── patients.tsx
+│   │   │   ├── samples.tsx
+│   │   │   ├── appointments.tsx
+│   │   │   ├── reports.tsx
+│   │   │   ├── categories.tsx
+│   │   │   ├── content.tsx
+│   │   │   └── settings.tsx
+│   │   ├── doctor/               # Doctor routes
+│   │   │   ├── index.tsx
+│   │   │   ├── patients.tsx
+│   │   │   ├── appointments.tsx
+│   │   │   ├── schedule.tsx
+│   │   │   ├── encounter.tsx
+│   │   │   ├── prescriptions.tsx
+│   │   │   ├── reports.tsx
+│   │   │   ├── lab-samples.tsx
+│   │   │   ├── treatments.tsx
+│   │   │   └── service-requests.tsx
+│   │   ├── receptionist/         # Receptionist routes
+│   │   │   ├── index.tsx
+│   │   │   ├── patients.tsx
+│   │   │   ├── appointments.tsx
+│   │   │   ├── services.tsx
+│   │   │   ├── reports.tsx
+│   │   │   └── transactions.tsx
+│   │   ├── lab-technician/       # Lab Technician routes
+│   │   │   ├── samples.tsx
+│   │   │   └── tests.tsx
+│   │   ├── lab/                  # Lab routes
+│   │   │   └── dashboard.tsx
+│   │   ├── admin.tsx             # Admin layout
+│   │   ├── doctor.tsx            # Doctor layout
+│   │   ├── receptionist.tsx      # Receptionist layout
+│   │   ├── lab-technician.tsx    # Lab Technician layout
+│   │   └── unauthorized.tsx     # Unauthorized page
 │   │
 │   └── shared/
 │       ├── components/            # Shared components
 │       │   ├── AppLayout.tsx     # App layout wrapper
-│       │   ├── Providers.tsx     # Context providers
+│       │   ├── Providers.tsx     # Context providers (Query, Router)
+│       │   ├── ProtectedRoute.tsx # Route protection
+│       │   ├── RoleBasedRoute.tsx # Role-based routing
+│       │   ├── RoleGuard.tsx     # Permission guards
+│       │   ├── ThemeProvider.tsx # Theme context
 │       │   ├── ThemeSwitcher.tsx # Theme toggle
-│       │   └── Header.tsx        # Navigation header
-│       │
-│       └── lib/
-│           └── api.ts            # Axios instance + interceptors
+│       │   ├── dashboard/        # Dashboard components
+│       │   │   ├── DashboardLayout.tsx
+│       │   │   ├── DashboardCard.tsx
+│       │   │   ├── StatCard.tsx
+│       │   │   └── Sidebar.tsx
+│       │   └── forms/            # Form modals
+│       │       ├── AppointmentFormModal.tsx
+│       │       ├── PrescriptionFormModal.tsx
+│       │       ├── ScheduleFormModal.tsx
+│       │       └── TreatmentFormModal.tsx
+│       ├── contexts/
+│       │   └── AuthContext.tsx   # Authentication context
+│       ├── layouts/
+│       │   └── DashboardLayout.tsx # Reusable dashboard layout
+│       ├── lib/
+│       │   ├── api.ts            # Axios instance + interceptors
+│       │   ├── export.ts         # PDF/Excel export utilities
+│       │   └── toast.ts          # Toast notifications
+│       ├── types/
+│       │   └── auth.ts           # Auth types & role permissions
+│       └── utils/
+│           ├── roleUtils.ts      # Role utility functions
+│           ├── api-test.ts       # API testing utilities
+│           └── debug-auth.ts    # Auth debugging
 │
 ├── package.json
 ├── vite.config.js
@@ -361,11 +494,20 @@ packages/lib/
 ├── src/
 │   ├── api/
 │   │   ├── index.ts              # Main API class
-│   │   └── sdk/                  # API endpoints
+│   │   └── sdk/                  # API endpoints (13 modules)
 │   │       ├── auth.api.ts       # Authentication API
-│   │       ├── patients.api.ts   # Patients API
-│   │       ├── samples.api.ts    # Samples API
-│   │       └── appointments.api.ts # Appointments API
+│   │       ├── user.api.ts       # User Management API
+│   │       ├── patient.api.ts   # Patient CRUD API
+│   │       ├── patients.api.ts  # Patients List API
+│   │       ├── doctor.api.ts    # Doctor Operations API
+│   │       ├── relationship.api.ts # Relationship API
+│   │       ├── service.api.ts   # Service API
+│   │       ├── servicecategory.api.ts # Service Category API
+│   │       ├── servicerequest.api.ts # Service Request API
+│   │       ├── servicerequestdetails.api.ts # Request Details API
+│   │       ├── appointments.api.ts # Appointments API
+│   │       ├── samples.api.ts   # Samples API
+│   │       └── example.api.ts   # Example API
 │   │
 │   └── validation/
 │       └── index.ts              # Zod validation schemas
@@ -385,14 +527,24 @@ graph TB
             FormValidation["Form Validation - Zod Schemas"]
             XSSPrevention["XSS Prevention - React"]
             CSRFToken["CSRF Token - Headers"]
+            RouteGuard["Route Protection - RoleBasedRoute"]
+            PermissionGuard["Permission Guard - RoleGuard"]
         end
 
         subgraph "Authentication Flow"
             Login["Login Form"]
+            AuthContext["AuthContext - State Management"]
             JWT["JWT Token - Access & Refresh"]
             Storage["LocalStorage - Token Storage"]
             Interceptor["Axios Interceptor"]
             RefreshLogic["Token Refresh - On 401"]
+        end
+
+        subgraph "Authorization"
+            RoleCheck["Role-Based Access Control"]
+            PermissionCheck["Permission-Based Access"]
+            RoleUtils["Role Utilities - roleUtils.ts"]
+            DefaultRoutes["Default Routes by Role"]
         end
 
         subgraph "Backend API"
@@ -403,11 +555,18 @@ graph TB
 
         User --> FormValidation
         FormValidation --> Login
-        Login --> JWT
+        Login --> AuthContext
+        AuthContext --> JWT
         JWT --> Storage
         Storage --> Interceptor
-        Interceptor --> AuthGuard
-
+        Interceptor --> RouteGuard
+        RouteGuard --> RoleCheck
+        RoleCheck --> PermissionGuard
+        PermissionGuard --> PermissionCheck
+        PermissionCheck --> RoleUtils
+        RoleUtils --> DefaultRoutes
+        
+        RouteGuard --> AuthGuard
         AuthGuard -->|401| RefreshLogic
         RefreshLogic --> JWT
 
@@ -416,19 +575,40 @@ graph TB
     end
 ```
 
+### Role-Based Access Control (RBAC)
+
+The system implements comprehensive role-based access control with 4 distinct user roles:
+
+| Role             | Dashboard Route            | Key Permissions                                    |
+| ---------------- | -------------------------- | -------------------------------------------------- |
+| **Admin**        | `/admin/dashboard`         | Full system access, user management, reports      |
+| **Doctor**       | `/doctor/dashboard`        | Patient management, appointments, prescriptions   |
+| **Lab Technician** | `/lab/dashboard`         | Sample management, test results                     |
+| **Receptionist** | `/receptionist/dashboard` | Patient registration, appointment scheduling       |
+
+**Features:**
+- ✅ `RoleBasedRoute` component for route-level protection
+- ✅ `RoleGuard` component for permission-based access
+- ✅ Automatic redirect to role-appropriate dashboard
+- ✅ Permission-based navigation menu filtering
+- ✅ Route permission checking via `hasRoutePermission()`
+
 ## 🎯 Key Features by Layer
 
 ### Application Layer (apps/web)
 
 | Feature                | Technology            | Status             |
 | ---------------------- | --------------------- | ------------------ |
-| **8 Complete Pages**   | React 19 + TypeScript | ✅ Implemented     |
+| **40+ Routes**         | React 19 + TypeScript | ✅ Implemented     |
 | **File-based Routing** | TanStack Router       | ✅ Configured      |
-| **Server State**       | TanStack Query        | ✅ Ready for API   |
+| **Server State**       | TanStack Query        | ✅ Implemented     |
 | **Form Management**    | React Hook Form + Zod | ✅ Implemented     |
-| **Authentication**     | JWT + Token Refresh   | ✅ Structure Ready |
+| **Authentication**     | JWT + Token Refresh   | ✅ Implemented     |
+| **Role-Based Access**  | RBAC with Guards      | ✅ Implemented     |
 | **Theme System**       | Dark/Light Mode       | ✅ Implemented     |
 | **Responsive Design**  | Mobile-first          | ✅ Implemented     |
+| **Export Features**    | PDF/Excel (jsPDF, xlsx) | ✅ Implemented    |
+| **4 User Roles**       | Admin, Doctor, Lab, Receptionist | ✅ Implemented |
 
 ### UI Package (packages/ui)
 
@@ -443,13 +623,21 @@ graph TB
 
 ### API SDK Package (packages/lib)
 
-| API Module          | Endpoints    | Status              |
-| ------------------- | ------------ | ------------------- |
-| **Authentication**  | 11 endpoints | ✅ Structure Ready  |
-| **Patients**        | 7 endpoints  | ✅ Structure Ready  |
-| **Samples**         | 10 endpoints | ✅ Structure Ready  |
-| **Appointments**    | 9 endpoints  | ✅ Structure Ready  |
-| **Total Endpoints** | **37**       | ✅ Awaiting Backend |
+| API Module                | Description                      | Status              |
+| ------------------------- | -------------------------------- | ------------------- |
+| **Authentication**        | Login, Register, Token Refresh  | ✅ Implemented       |
+| **User Management**       | User CRUD Operations             | ✅ Implemented       |
+| **Patient Management**    | Patient CRUD & List Operations   | ✅ Implemented       |
+| **Doctor Operations**     | Doctor-specific APIs & Statistics| ✅ Implemented       |
+| **Relationships**         | Patient Relationships            | ✅ Implemented       |
+| **Services**              | Service Management               | ✅ Implemented       |
+| **Service Categories**    | Category Management              | ✅ Implemented       |
+| **Service Requests**      | Service Request Management       | ✅ Implemented       |
+| **Service Request Details**| Request Detail Management        | ✅ Implemented       |
+| **Appointments**          | Appointment Scheduling           | ✅ Implemented       |
+| **Samples**               | Sample Management                | ✅ Implemented       |
+| **Example**               | Example/Template API              | ✅ Implemented       |
+| **Total API Modules**     | **13 modules**                   | ✅ Connected to API  |
 
 ## 🚀 Development Workflow
 
@@ -602,17 +790,22 @@ graph LR
 
 ### Phase 1: Backend Integration ✅
 
-- [ ] Connect API endpoints
-- [ ] Implement authentication flow
-- [ ] Test all CRUD operations
-- [ ] Handle error cases
+- [x] Connect API endpoints (13 modules implemented)
+- [x] Implement authentication flow (JWT + Refresh)
+- [x] Implement role-based access control
+- [x] Test CRUD operations
+- [x] Handle error cases (401, token refresh)
+- [x] Export utilities (PDF/Excel)
 
-### Phase 2: Enhanced Features
+### Phase 2: Enhanced Features ✅
 
-- [ ] Add calendar component (appointments)
-- [ ] Implement charts (dashboard)
-- [ ] Add file upload (patient documents)
-- [ ] Real-time updates (WebSocket)
+- [x] Calendar component (appointments - DatePicker/Calendar)
+- [x] Export features (PDF/Excel via jsPDF, xlsx)
+- [x] File upload components (Dropzone, Uploader)
+- [x] Multi-role dashboard layouts
+- [x] Form modals for quick actions
+- [ ] Charts library integration (dashboard analytics)
+- [ ] Real-time notifications
 
 ### Phase 3: Testing & QA
 
@@ -669,7 +862,19 @@ graph LR
 
 ---
 
-**Version**: 1.0  
-**Last Updated**: October 2025  
+### 📊 Current Statistics
+
+- **Total Routes**: 40+ (Public + Role-based)
+- **API Modules**: 13 (Fully implemented & connected)
+- **UI Components**: 50+ (Shared component library)
+- **User Roles**: 4 (Admin, Doctor, Lab Technician, Receptionist)
+- **Protected Routes**: 30+ (Role-based access control)
+- **Export Formats**: PDF, Excel (jsPDF, xlsx)
+
+---
+
+**Version**: 2.0  
+**Last Updated**: January 2025  
 **Project**: Fertility Service & Cryobank Management System  
-**Stack**: React 19 + TypeScript + Vite + TanStack + React Aria
+**Stack**: React 19 + TypeScript + Vite + TanStack Router + TanStack Query + React Aria Components  
+**Backend API**: Connected to `https://cryofert.runasp.net/api`

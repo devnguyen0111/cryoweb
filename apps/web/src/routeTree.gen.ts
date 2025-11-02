@@ -31,6 +31,8 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ServicesIndexRouteImport } from './routes/services/index'
+import { Route as ReceptionistIndexRouteImport } from './routes/receptionist/index'
+import { Route as DoctorIndexRouteImport } from './routes/doctor/index'
 import { Route as ServicesMaleFertilityRouteImport } from './routes/services/male-fertility'
 import { Route as ServicesIvfRouteImport } from './routes/services/ivf'
 import { Route as ServicesIuiRouteImport } from './routes/services/iui'
@@ -38,15 +40,21 @@ import { Route as ServicesFertilityPreservationRouteImport } from './routes/serv
 import { Route as ServicesEmbryoFreezingRouteImport } from './routes/services/embryo-freezing'
 import { Route as ServicesEggFreezingRouteImport } from './routes/services/egg-freezing'
 import { Route as ReceptionistTransactionsRouteImport } from './routes/receptionist/transactions'
+import { Route as ReceptionistServicesRouteImport } from './routes/receptionist/services'
+import { Route as ReceptionistReportsRouteImport } from './routes/receptionist/reports'
 import { Route as ReceptionistPatientsRouteImport } from './routes/receptionist/patients'
-import { Route as ReceptionistDashboardRouteImport } from './routes/receptionist/dashboard'
 import { Route as ReceptionistAppointmentsRouteImport } from './routes/receptionist/appointments'
 import { Route as LabDashboardRouteImport } from './routes/lab/dashboard'
 import { Route as LabTechnicianTestsRouteImport } from './routes/lab-technician/tests'
 import { Route as LabTechnicianSamplesRouteImport } from './routes/lab-technician/samples'
+import { Route as DoctorTreatmentsRouteImport } from './routes/doctor/treatments'
+import { Route as DoctorServiceRequestsRouteImport } from './routes/doctor/service-requests'
+import { Route as DoctorScheduleRouteImport } from './routes/doctor/schedule'
+import { Route as DoctorReportsRouteImport } from './routes/doctor/reports'
 import { Route as DoctorPrescriptionsRouteImport } from './routes/doctor/prescriptions'
 import { Route as DoctorPatientsRouteImport } from './routes/doctor/patients'
-import { Route as DoctorDashboardRouteImport } from './routes/doctor/dashboard'
+import { Route as DoctorLabSamplesRouteImport } from './routes/doctor/lab-samples'
+import { Route as DoctorEncounterRouteImport } from './routes/doctor/encounter'
 import { Route as DoctorAppointmentsRouteImport } from './routes/doctor/appointments'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
@@ -168,6 +176,16 @@ const ServicesIndexRoute = ServicesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ServicesRoute,
 } as any)
+const ReceptionistIndexRoute = ReceptionistIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ReceptionistRoute,
+} as any)
+const DoctorIndexRoute = DoctorIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DoctorRoute,
+} as any)
 const ServicesMaleFertilityRoute = ServicesMaleFertilityRouteImport.update({
   id: '/male-fertility',
   path: '/male-fertility',
@@ -205,14 +223,19 @@ const ReceptionistTransactionsRoute =
     path: '/transactions',
     getParentRoute: () => ReceptionistRoute,
   } as any)
+const ReceptionistServicesRoute = ReceptionistServicesRouteImport.update({
+  id: '/services',
+  path: '/services',
+  getParentRoute: () => ReceptionistRoute,
+} as any)
+const ReceptionistReportsRoute = ReceptionistReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => ReceptionistRoute,
+} as any)
 const ReceptionistPatientsRoute = ReceptionistPatientsRouteImport.update({
   id: '/patients',
   path: '/patients',
-  getParentRoute: () => ReceptionistRoute,
-} as any)
-const ReceptionistDashboardRoute = ReceptionistDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
   getParentRoute: () => ReceptionistRoute,
 } as any)
 const ReceptionistAppointmentsRoute =
@@ -236,6 +259,26 @@ const LabTechnicianSamplesRoute = LabTechnicianSamplesRouteImport.update({
   path: '/samples',
   getParentRoute: () => LabTechnicianRoute,
 } as any)
+const DoctorTreatmentsRoute = DoctorTreatmentsRouteImport.update({
+  id: '/treatments',
+  path: '/treatments',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const DoctorServiceRequestsRoute = DoctorServiceRequestsRouteImport.update({
+  id: '/service-requests',
+  path: '/service-requests',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const DoctorScheduleRoute = DoctorScheduleRouteImport.update({
+  id: '/schedule',
+  path: '/schedule',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const DoctorReportsRoute = DoctorReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => DoctorRoute,
+} as any)
 const DoctorPrescriptionsRoute = DoctorPrescriptionsRouteImport.update({
   id: '/prescriptions',
   path: '/prescriptions',
@@ -246,9 +289,14 @@ const DoctorPatientsRoute = DoctorPatientsRouteImport.update({
   path: '/patients',
   getParentRoute: () => DoctorRoute,
 } as any)
-const DoctorDashboardRoute = DoctorDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const DoctorLabSamplesRoute = DoctorLabSamplesRouteImport.update({
+  id: '/lab-samples',
+  path: '/lab-samples',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const DoctorEncounterRoute = DoctorEncounterRouteImport.update({
+  id: '/encounter',
+  path: '/encounter',
   getParentRoute: () => DoctorRoute,
 } as any)
 const DoctorAppointmentsRoute = DoctorAppointmentsRouteImport.update({
@@ -334,15 +382,21 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/doctor/appointments': typeof DoctorAppointmentsRoute
-  '/doctor/dashboard': typeof DoctorDashboardRoute
+  '/doctor/encounter': typeof DoctorEncounterRoute
+  '/doctor/lab-samples': typeof DoctorLabSamplesRoute
   '/doctor/patients': typeof DoctorPatientsRoute
   '/doctor/prescriptions': typeof DoctorPrescriptionsRoute
+  '/doctor/reports': typeof DoctorReportsRoute
+  '/doctor/schedule': typeof DoctorScheduleRoute
+  '/doctor/service-requests': typeof DoctorServiceRequestsRoute
+  '/doctor/treatments': typeof DoctorTreatmentsRoute
   '/lab-technician/samples': typeof LabTechnicianSamplesRoute
   '/lab-technician/tests': typeof LabTechnicianTestsRoute
   '/lab/dashboard': typeof LabDashboardRoute
   '/receptionist/appointments': typeof ReceptionistAppointmentsRoute
-  '/receptionist/dashboard': typeof ReceptionistDashboardRoute
   '/receptionist/patients': typeof ReceptionistPatientsRoute
+  '/receptionist/reports': typeof ReceptionistReportsRoute
+  '/receptionist/services': typeof ReceptionistServicesRoute
   '/receptionist/transactions': typeof ReceptionistTransactionsRoute
   '/services/egg-freezing': typeof ServicesEggFreezingRoute
   '/services/embryo-freezing': typeof ServicesEmbryoFreezingRoute
@@ -350,6 +404,8 @@ export interface FileRoutesByFullPath {
   '/services/iui': typeof ServicesIuiRoute
   '/services/ivf': typeof ServicesIvfRoute
   '/services/male-fertility': typeof ServicesMaleFertilityRoute
+  '/doctor/': typeof DoctorIndexRoute
+  '/receptionist/': typeof ReceptionistIndexRoute
   '/services/': typeof ServicesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -361,14 +417,12 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRoute
   '/debug-auth': typeof DebugAuthRoute
-  '/doctor': typeof DoctorRouteWithChildren
   '/features': typeof FeaturesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/lab-technician': typeof LabTechnicianRouteWithChildren
   '/login': typeof LoginRoute
   '/patients': typeof PatientsRoute
   '/pricing': typeof PricingRoute
-  '/receptionist': typeof ReceptionistRouteWithChildren
   '/samples': typeof SamplesRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
@@ -383,15 +437,21 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/doctor/appointments': typeof DoctorAppointmentsRoute
-  '/doctor/dashboard': typeof DoctorDashboardRoute
+  '/doctor/encounter': typeof DoctorEncounterRoute
+  '/doctor/lab-samples': typeof DoctorLabSamplesRoute
   '/doctor/patients': typeof DoctorPatientsRoute
   '/doctor/prescriptions': typeof DoctorPrescriptionsRoute
+  '/doctor/reports': typeof DoctorReportsRoute
+  '/doctor/schedule': typeof DoctorScheduleRoute
+  '/doctor/service-requests': typeof DoctorServiceRequestsRoute
+  '/doctor/treatments': typeof DoctorTreatmentsRoute
   '/lab-technician/samples': typeof LabTechnicianSamplesRoute
   '/lab-technician/tests': typeof LabTechnicianTestsRoute
   '/lab/dashboard': typeof LabDashboardRoute
   '/receptionist/appointments': typeof ReceptionistAppointmentsRoute
-  '/receptionist/dashboard': typeof ReceptionistDashboardRoute
   '/receptionist/patients': typeof ReceptionistPatientsRoute
+  '/receptionist/reports': typeof ReceptionistReportsRoute
+  '/receptionist/services': typeof ReceptionistServicesRoute
   '/receptionist/transactions': typeof ReceptionistTransactionsRoute
   '/services/egg-freezing': typeof ServicesEggFreezingRoute
   '/services/embryo-freezing': typeof ServicesEmbryoFreezingRoute
@@ -399,6 +459,8 @@ export interface FileRoutesByTo {
   '/services/iui': typeof ServicesIuiRoute
   '/services/ivf': typeof ServicesIvfRoute
   '/services/male-fertility': typeof ServicesMaleFertilityRoute
+  '/doctor': typeof DoctorIndexRoute
+  '/receptionist': typeof ReceptionistIndexRoute
   '/services': typeof ServicesIndexRoute
 }
 export interface FileRoutesById {
@@ -434,15 +496,21 @@ export interface FileRoutesById {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/doctor/appointments': typeof DoctorAppointmentsRoute
-  '/doctor/dashboard': typeof DoctorDashboardRoute
+  '/doctor/encounter': typeof DoctorEncounterRoute
+  '/doctor/lab-samples': typeof DoctorLabSamplesRoute
   '/doctor/patients': typeof DoctorPatientsRoute
   '/doctor/prescriptions': typeof DoctorPrescriptionsRoute
+  '/doctor/reports': typeof DoctorReportsRoute
+  '/doctor/schedule': typeof DoctorScheduleRoute
+  '/doctor/service-requests': typeof DoctorServiceRequestsRoute
+  '/doctor/treatments': typeof DoctorTreatmentsRoute
   '/lab-technician/samples': typeof LabTechnicianSamplesRoute
   '/lab-technician/tests': typeof LabTechnicianTestsRoute
   '/lab/dashboard': typeof LabDashboardRoute
   '/receptionist/appointments': typeof ReceptionistAppointmentsRoute
-  '/receptionist/dashboard': typeof ReceptionistDashboardRoute
   '/receptionist/patients': typeof ReceptionistPatientsRoute
+  '/receptionist/reports': typeof ReceptionistReportsRoute
+  '/receptionist/services': typeof ReceptionistServicesRoute
   '/receptionist/transactions': typeof ReceptionistTransactionsRoute
   '/services/egg-freezing': typeof ServicesEggFreezingRoute
   '/services/embryo-freezing': typeof ServicesEmbryoFreezingRoute
@@ -450,6 +518,8 @@ export interface FileRoutesById {
   '/services/iui': typeof ServicesIuiRoute
   '/services/ivf': typeof ServicesIvfRoute
   '/services/male-fertility': typeof ServicesMaleFertilityRoute
+  '/doctor/': typeof DoctorIndexRoute
+  '/receptionist/': typeof ReceptionistIndexRoute
   '/services/': typeof ServicesIndexRoute
 }
 export interface FileRouteTypes {
@@ -486,15 +556,21 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/users'
     | '/doctor/appointments'
-    | '/doctor/dashboard'
+    | '/doctor/encounter'
+    | '/doctor/lab-samples'
     | '/doctor/patients'
     | '/doctor/prescriptions'
+    | '/doctor/reports'
+    | '/doctor/schedule'
+    | '/doctor/service-requests'
+    | '/doctor/treatments'
     | '/lab-technician/samples'
     | '/lab-technician/tests'
     | '/lab/dashboard'
     | '/receptionist/appointments'
-    | '/receptionist/dashboard'
     | '/receptionist/patients'
+    | '/receptionist/reports'
+    | '/receptionist/services'
     | '/receptionist/transactions'
     | '/services/egg-freezing'
     | '/services/embryo-freezing'
@@ -502,6 +578,8 @@ export interface FileRouteTypes {
     | '/services/iui'
     | '/services/ivf'
     | '/services/male-fertility'
+    | '/doctor/'
+    | '/receptionist/'
     | '/services/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -513,14 +591,12 @@ export interface FileRouteTypes {
     | '/contact'
     | '/dashboard'
     | '/debug-auth'
-    | '/doctor'
     | '/features'
     | '/forgot-password'
     | '/lab-technician'
     | '/login'
     | '/patients'
     | '/pricing'
-    | '/receptionist'
     | '/samples'
     | '/security'
     | '/settings'
@@ -535,15 +611,21 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/users'
     | '/doctor/appointments'
-    | '/doctor/dashboard'
+    | '/doctor/encounter'
+    | '/doctor/lab-samples'
     | '/doctor/patients'
     | '/doctor/prescriptions'
+    | '/doctor/reports'
+    | '/doctor/schedule'
+    | '/doctor/service-requests'
+    | '/doctor/treatments'
     | '/lab-technician/samples'
     | '/lab-technician/tests'
     | '/lab/dashboard'
     | '/receptionist/appointments'
-    | '/receptionist/dashboard'
     | '/receptionist/patients'
+    | '/receptionist/reports'
+    | '/receptionist/services'
     | '/receptionist/transactions'
     | '/services/egg-freezing'
     | '/services/embryo-freezing'
@@ -551,6 +633,8 @@ export interface FileRouteTypes {
     | '/services/iui'
     | '/services/ivf'
     | '/services/male-fertility'
+    | '/doctor'
+    | '/receptionist'
     | '/services'
   id:
     | '__root__'
@@ -585,15 +669,21 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/users'
     | '/doctor/appointments'
-    | '/doctor/dashboard'
+    | '/doctor/encounter'
+    | '/doctor/lab-samples'
     | '/doctor/patients'
     | '/doctor/prescriptions'
+    | '/doctor/reports'
+    | '/doctor/schedule'
+    | '/doctor/service-requests'
+    | '/doctor/treatments'
     | '/lab-technician/samples'
     | '/lab-technician/tests'
     | '/lab/dashboard'
     | '/receptionist/appointments'
-    | '/receptionist/dashboard'
     | '/receptionist/patients'
+    | '/receptionist/reports'
+    | '/receptionist/services'
     | '/receptionist/transactions'
     | '/services/egg-freezing'
     | '/services/embryo-freezing'
@@ -601,6 +691,8 @@ export interface FileRouteTypes {
     | '/services/iui'
     | '/services/ivf'
     | '/services/male-fertility'
+    | '/doctor/'
+    | '/receptionist/'
     | '/services/'
   fileRoutesById: FileRoutesById
 }
@@ -785,6 +877,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServicesIndexRouteImport
       parentRoute: typeof ServicesRoute
     }
+    '/receptionist/': {
+      id: '/receptionist/'
+      path: '/'
+      fullPath: '/receptionist/'
+      preLoaderRoute: typeof ReceptionistIndexRouteImport
+      parentRoute: typeof ReceptionistRoute
+    }
+    '/doctor/': {
+      id: '/doctor/'
+      path: '/'
+      fullPath: '/doctor/'
+      preLoaderRoute: typeof DoctorIndexRouteImport
+      parentRoute: typeof DoctorRoute
+    }
     '/services/male-fertility': {
       id: '/services/male-fertility'
       path: '/male-fertility'
@@ -834,18 +940,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReceptionistTransactionsRouteImport
       parentRoute: typeof ReceptionistRoute
     }
+    '/receptionist/services': {
+      id: '/receptionist/services'
+      path: '/services'
+      fullPath: '/receptionist/services'
+      preLoaderRoute: typeof ReceptionistServicesRouteImport
+      parentRoute: typeof ReceptionistRoute
+    }
+    '/receptionist/reports': {
+      id: '/receptionist/reports'
+      path: '/reports'
+      fullPath: '/receptionist/reports'
+      preLoaderRoute: typeof ReceptionistReportsRouteImport
+      parentRoute: typeof ReceptionistRoute
+    }
     '/receptionist/patients': {
       id: '/receptionist/patients'
       path: '/patients'
       fullPath: '/receptionist/patients'
       preLoaderRoute: typeof ReceptionistPatientsRouteImport
-      parentRoute: typeof ReceptionistRoute
-    }
-    '/receptionist/dashboard': {
-      id: '/receptionist/dashboard'
-      path: '/dashboard'
-      fullPath: '/receptionist/dashboard'
-      preLoaderRoute: typeof ReceptionistDashboardRouteImport
       parentRoute: typeof ReceptionistRoute
     }
     '/receptionist/appointments': {
@@ -876,6 +989,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LabTechnicianSamplesRouteImport
       parentRoute: typeof LabTechnicianRoute
     }
+    '/doctor/treatments': {
+      id: '/doctor/treatments'
+      path: '/treatments'
+      fullPath: '/doctor/treatments'
+      preLoaderRoute: typeof DoctorTreatmentsRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/doctor/service-requests': {
+      id: '/doctor/service-requests'
+      path: '/service-requests'
+      fullPath: '/doctor/service-requests'
+      preLoaderRoute: typeof DoctorServiceRequestsRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/doctor/schedule': {
+      id: '/doctor/schedule'
+      path: '/schedule'
+      fullPath: '/doctor/schedule'
+      preLoaderRoute: typeof DoctorScheduleRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/doctor/reports': {
+      id: '/doctor/reports'
+      path: '/reports'
+      fullPath: '/doctor/reports'
+      preLoaderRoute: typeof DoctorReportsRouteImport
+      parentRoute: typeof DoctorRoute
+    }
     '/doctor/prescriptions': {
       id: '/doctor/prescriptions'
       path: '/prescriptions'
@@ -890,11 +1031,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DoctorPatientsRouteImport
       parentRoute: typeof DoctorRoute
     }
-    '/doctor/dashboard': {
-      id: '/doctor/dashboard'
-      path: '/dashboard'
-      fullPath: '/doctor/dashboard'
-      preLoaderRoute: typeof DoctorDashboardRouteImport
+    '/doctor/lab-samples': {
+      id: '/doctor/lab-samples'
+      path: '/lab-samples'
+      fullPath: '/doctor/lab-samples'
+      preLoaderRoute: typeof DoctorLabSamplesRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/doctor/encounter': {
+      id: '/doctor/encounter'
+      path: '/encounter'
+      fullPath: '/doctor/encounter'
+      preLoaderRoute: typeof DoctorEncounterRouteImport
       parentRoute: typeof DoctorRoute
     }
     '/doctor/appointments': {
@@ -998,16 +1146,28 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface DoctorRouteChildren {
   DoctorAppointmentsRoute: typeof DoctorAppointmentsRoute
-  DoctorDashboardRoute: typeof DoctorDashboardRoute
+  DoctorEncounterRoute: typeof DoctorEncounterRoute
+  DoctorLabSamplesRoute: typeof DoctorLabSamplesRoute
   DoctorPatientsRoute: typeof DoctorPatientsRoute
   DoctorPrescriptionsRoute: typeof DoctorPrescriptionsRoute
+  DoctorReportsRoute: typeof DoctorReportsRoute
+  DoctorScheduleRoute: typeof DoctorScheduleRoute
+  DoctorServiceRequestsRoute: typeof DoctorServiceRequestsRoute
+  DoctorTreatmentsRoute: typeof DoctorTreatmentsRoute
+  DoctorIndexRoute: typeof DoctorIndexRoute
 }
 
 const DoctorRouteChildren: DoctorRouteChildren = {
   DoctorAppointmentsRoute: DoctorAppointmentsRoute,
-  DoctorDashboardRoute: DoctorDashboardRoute,
+  DoctorEncounterRoute: DoctorEncounterRoute,
+  DoctorLabSamplesRoute: DoctorLabSamplesRoute,
   DoctorPatientsRoute: DoctorPatientsRoute,
   DoctorPrescriptionsRoute: DoctorPrescriptionsRoute,
+  DoctorReportsRoute: DoctorReportsRoute,
+  DoctorScheduleRoute: DoctorScheduleRoute,
+  DoctorServiceRequestsRoute: DoctorServiceRequestsRoute,
+  DoctorTreatmentsRoute: DoctorTreatmentsRoute,
+  DoctorIndexRoute: DoctorIndexRoute,
 }
 
 const DoctorRouteWithChildren =
@@ -1029,16 +1189,20 @@ const LabTechnicianRouteWithChildren = LabTechnicianRoute._addFileChildren(
 
 interface ReceptionistRouteChildren {
   ReceptionistAppointmentsRoute: typeof ReceptionistAppointmentsRoute
-  ReceptionistDashboardRoute: typeof ReceptionistDashboardRoute
   ReceptionistPatientsRoute: typeof ReceptionistPatientsRoute
+  ReceptionistReportsRoute: typeof ReceptionistReportsRoute
+  ReceptionistServicesRoute: typeof ReceptionistServicesRoute
   ReceptionistTransactionsRoute: typeof ReceptionistTransactionsRoute
+  ReceptionistIndexRoute: typeof ReceptionistIndexRoute
 }
 
 const ReceptionistRouteChildren: ReceptionistRouteChildren = {
   ReceptionistAppointmentsRoute: ReceptionistAppointmentsRoute,
-  ReceptionistDashboardRoute: ReceptionistDashboardRoute,
   ReceptionistPatientsRoute: ReceptionistPatientsRoute,
+  ReceptionistReportsRoute: ReceptionistReportsRoute,
+  ReceptionistServicesRoute: ReceptionistServicesRoute,
   ReceptionistTransactionsRoute: ReceptionistTransactionsRoute,
+  ReceptionistIndexRoute: ReceptionistIndexRoute,
 }
 
 const ReceptionistRouteWithChildren = ReceptionistRoute._addFileChildren(

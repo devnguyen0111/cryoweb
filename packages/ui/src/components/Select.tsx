@@ -265,3 +265,8 @@ function BadgeClearButton({ data }: { data: BsSelectOption }) {
         </div>
     )
 }
+
+// Re-export Select and ListBoxItem from react-aria-components for use in forms
+// Attach ListBoxItem as Select.Item for convenience
+;(Select as any).Item = ListBoxItem
+export { Select, ListBoxItem }

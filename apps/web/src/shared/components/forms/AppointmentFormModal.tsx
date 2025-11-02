@@ -3,11 +3,18 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Dialog } from '@workspace/ui/components/Dialog'
+import {
+    DialogTrigger,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from '@workspace/ui/components/Dialog'
 import { Button } from '@workspace/ui/components/Button'
 import { Input } from '@workspace/ui/components/Textfield'
 import { Textarea } from '@workspace/ui/components/Textarea'
-import { Select } from '@workspace/ui/components/Select'
+import { Select, ListBoxItem } from '@workspace/ui/components/Select'
 import { DatePicker } from '@workspace/ui/components/DatePicker'
 import { api } from '@/shared/lib/api'
 import { toast, handleApiError, showCrudSuccess } from '@/shared/lib/toast'
@@ -15,14 +22,16 @@ import { CalendarDate, parseDate } from '@internationalized/date'
 
 // Appointment form validation schema
 const appointmentSchema = z.object({
-    patientId: z.number({ required_error: 'Patient is required' }),
-    doctorId: z.number({ required_error: 'Doctor is required' }),
+    patientId: z.string({ required_error: 'Patient is required' }),
+    providerId: z.string({ required_error: 'Doctor is required' }),
     date: z.string({ required_error: 'Date is required' }),
     startTime: z.string({ required_error: 'Start time is required' }),
     endTime: z.string({ required_error: 'End time is required' }),
-    type: z.string({ required_error: 'Appointment type is required' }),
+    type: z.enum(['consultation', 'procedure', 'follow-up', 'testing', 'other'], {
+        required_error: 'Appointment type is required',
+    }),
     title: z.string().min(1, 'Title is required'),
-    location: z.string().optional(),
+    location: z.string().default(''),
     notes: z.string().optional(),
     status: z.enum(['scheduled', 'confirmed', 'cancelled', 'completed']).default('scheduled'),
 })
@@ -32,7 +41,7 @@ type AppointmentFormData = z.infer<typeof appointmentSchema>
 interface AppointmentFormModalProps {
     isOpen: boolean
     onClose: () => void
-    appointmentId?: number
+    appointmentId?: string
     initialData?: Partial<AppointmentFormData>
 }
 
@@ -40,7 +49,7 @@ const appointmentTypes = [
     { id: 'consultation', name: 'Consultation' },
     { id: 'follow-up', name: 'Follow-up' },
     { id: 'procedure', name: 'Procedure' },
-    { id: 'test', name: 'Test/Screening' },
+    { id: 'testing', name: 'Test/Screening' },
     { id: 'other', name: 'Other' },
 ]
 
@@ -57,14 +66,18 @@ export function AppointmentFormModal({ isOpen, onClose, appointmentId, initialDa
         setValue,
         watch,
     } = useForm<AppointmentFormData>({
-        resolver: zodResolver(appointmentSchema),
-        defaultValues: initialData,
+        resolver: zodResolver(appointmentSchema) as any,
+        defaultValues: {
+            status: 'scheduled',
+            location: '',
+            ...initialData,
+        },
     })
 
     // Fetch patients for selection
     const { data: patientsData } = useQuery({
         queryKey: ['patients', 'all'],
-        queryFn: () => api.patients.getPatients({ page: 1, limit: 100 }),
+        queryFn: () => api.patient.getPatients({ page: 1, limit: 100 }),
         enabled: isOpen,
     })
 
@@ -77,7 +90,19 @@ export function AppointmentFormModal({ isOpen, onClose, appointmentId, initialDa
 
     // Create appointment mutation
     const createMutation = useMutation({
-        mutationFn: (data: AppointmentFormData) => api.appointments.createAppointment(data),
+        mutationFn: (data: AppointmentFormData) => {
+            return api.appointments.createAppointment({
+                patientId: data.patientId,
+                providerId: data.providerId,
+                type: data.type,
+                title: data.title,
+                date: data.date,
+                startTime: data.startTime,
+                endTime: data.endTime,
+                location: data.location || '',
+                notes: data.notes,
+            })
+        },
         onSuccess: () => {
             showCrudSuccess.create('Appointment')
             queryClient.invalidateQueries({ queryKey: ['appointments'] })
@@ -112,30 +137,30 @@ export function AppointmentFormModal({ isOpen, onClose, appointmentId, initialDa
     const isLoading = createMutation.isPending || updateMutation.isPending
 
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <Dialog.Content className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <Dialog.Header>
-                    <Dialog.Title>{appointmentId ? 'Edit Appointment' : 'Create New Appointment'}</Dialog.Title>
-                    <Dialog.Description>
+        <DialogTrigger isOpen={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle>{appointmentId ? 'Edit Appointment' : 'Create New Appointment'}</DialogTitle>
+                    <DialogDescription>
                         {appointmentId
                             ? 'Update appointment details below'
                             : 'Fill in the appointment details to schedule a new appointment'}
-                    </Dialog.Description>
-                </Dialog.Header>
+                    </DialogDescription>
+                </DialogHeader>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-4">
+                <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6 py-4">
                     {/* Patient Selection */}
                     <div>
                         <label className="block text-sm font-medium mb-2">Patient *</label>
                         <Select
                             placeholder="Select a patient"
-                            onSelectionChange={value => setValue('patientId', Number(value))}
+                            onSelectionChange={value => setValue('patientId', value as string)}
                             selectedKey={watch('patientId')?.toString()}
                         >
-                            {patientsData?.data.map(patient => (
-                                <Select.Item key={patient.id} id={patient.id.toString()}>
+                            {patientsData?.data.map((patient: any) => (
+                                <ListBoxItem key={patient.id} id={patient.id.toString()}>
                                     {patient.fullName} - {patient.email}
-                                </Select.Item>
+                                </ListBoxItem>
                             ))}
                         </Select>
                         {errors.patientId && <p className="text-red-500 text-sm mt-1">{errors.patientId.message}</p>}
@@ -146,16 +171,18 @@ export function AppointmentFormModal({ isOpen, onClose, appointmentId, initialDa
                         <label className="block text-sm font-medium mb-2">Doctor *</label>
                         <Select
                             placeholder="Select a doctor"
-                            onSelectionChange={value => setValue('doctorId', Number(value))}
-                            selectedKey={watch('doctorId')?.toString()}
+                            onSelectionChange={value => {
+                                setValue('providerId', value as string)
+                            }}
+                            selectedKey={watch('providerId')?.toString()}
                         >
-                            {doctorsData?.data.map(doctor => (
-                                <Select.Item key={doctor.id} id={doctor.id.toString()}>
+                            {doctorsData?.data.map((doctor: any) => (
+                                <ListBoxItem key={doctor.id} id={doctor.id.toString()}>
                                     {doctor.fullName} - {doctor.specialty}
-                                </Select.Item>
+                                </ListBoxItem>
                             ))}
                         </Select>
-                        {errors.doctorId && <p className="text-red-500 text-sm mt-1">{errors.doctorId.message}</p>}
+                        {errors.providerId && <p className="text-red-500 text-sm mt-1">{errors.providerId.message}</p>}
                     </div>
 
                     {/* Date Picker */}
@@ -194,13 +221,18 @@ export function AppointmentFormModal({ isOpen, onClose, appointmentId, initialDa
                         <label className="block text-sm font-medium mb-2">Appointment Type *</label>
                         <Select
                             placeholder="Select appointment type"
-                            onSelectionChange={value => setValue('type', value as string)}
+                            onSelectionChange={value =>
+                                setValue(
+                                    'type',
+                                    value as 'consultation' | 'procedure' | 'follow-up' | 'testing' | 'other',
+                                )
+                            }
                             selectedKey={watch('type')}
                         >
                             {appointmentTypes.map(type => (
-                                <Select.Item key={type.id} id={type.id}>
+                                <ListBoxItem key={type.id} id={type.id}>
                                     {type.name}
-                                </Select.Item>
+                                </ListBoxItem>
                             ))}
                         </Select>
                         {errors.type && <p className="text-red-500 text-sm mt-1">{errors.type.message}</p>}
@@ -237,25 +269,25 @@ export function AppointmentFormModal({ isOpen, onClose, appointmentId, initialDa
                                 onSelectionChange={value => setValue('status', value as any)}
                                 selectedKey={watch('status')}
                             >
-                                <Select.Item id="scheduled">Scheduled</Select.Item>
-                                <Select.Item id="confirmed">Confirmed</Select.Item>
-                                <Select.Item id="cancelled">Cancelled</Select.Item>
-                                <Select.Item id="completed">Completed</Select.Item>
+                                <ListBoxItem id="scheduled">Scheduled</ListBoxItem>
+                                <ListBoxItem id="confirmed">Confirmed</ListBoxItem>
+                                <ListBoxItem id="cancelled">Cancelled</ListBoxItem>
+                                <ListBoxItem id="completed">Completed</ListBoxItem>
                             </Select>
                         </div>
                     )}
 
                     {/* Form Actions */}
-                    <Dialog.Footer>
+                    <DialogFooter>
                         <Button type="button" variant="outline" onPress={onClose} isDisabled={isLoading}>
                             Cancel
                         </Button>
                         <Button type="submit" isDisabled={isLoading}>
                             {isLoading ? 'Saving...' : appointmentId ? 'Update Appointment' : 'Create Appointment'}
                         </Button>
-                    </Dialog.Footer>
+                    </DialogFooter>
                 </form>
-            </Dialog.Content>
-        </Dialog>
+            </DialogContent>
+        </DialogTrigger>
     )
 }

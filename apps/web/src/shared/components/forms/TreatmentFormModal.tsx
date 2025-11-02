@@ -3,11 +3,18 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Dialog } from '@workspace/ui/components/Dialog'
+import {
+    DialogTrigger,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from '@workspace/ui/components/Dialog'
 import { Button } from '@workspace/ui/components/Button'
 import { Input } from '@workspace/ui/components/Textfield'
 import { Textarea } from '@workspace/ui/components/Textarea'
-import { Select } from '@workspace/ui/components/Select'
+import { Select, ListBoxItem } from '@workspace/ui/components/Select'
 import { DatePicker } from '@workspace/ui/components/DatePicker'
 import { api } from '@/shared/lib/api'
 import { toast, handleApiError, showCrudSuccess } from '@/shared/lib/toast'
@@ -65,8 +72,11 @@ export function TreatmentFormModal({ isOpen, onClose, treatmentId, initialData }
         setValue,
         watch,
     } = useForm<TreatmentFormData>({
-        resolver: zodResolver(treatmentSchema),
-        defaultValues: initialData,
+        resolver: zodResolver(treatmentSchema) as any,
+        defaultValues: {
+            status: 'pending',
+            ...initialData,
+        },
     })
 
     // Fetch patients for selection
@@ -136,18 +146,18 @@ export function TreatmentFormModal({ isOpen, onClose, treatmentId, initialData }
     const isLoading = createMutation.isPending || updateMutation.isPending
 
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <Dialog.Content className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                <Dialog.Header>
-                    <Dialog.Title>{treatmentId ? 'Edit Treatment' : 'Create New Treatment'}</Dialog.Title>
-                    <Dialog.Description>
+        <DialogTrigger isOpen={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle>{treatmentId ? 'Edit Treatment' : 'Create New Treatment'}</DialogTitle>
+                    <DialogDescription>
                         {treatmentId
                             ? 'Update treatment details below'
                             : 'Fill in the treatment details to create a new treatment plan'}
-                    </Dialog.Description>
-                </Dialog.Header>
+                    </DialogDescription>
+                </DialogHeader>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-4">
+                <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6 py-4">
                     <div className="grid grid-cols-2 gap-4">
                         {/* Patient Selection */}
                         <div>
@@ -158,9 +168,9 @@ export function TreatmentFormModal({ isOpen, onClose, treatmentId, initialData }
                                 selectedKey={watch('patientId')?.toString()}
                             >
                                 {patientsData?.data.map(patient => (
-                                    <Select.Item key={patient.id} id={patient.id.toString()}>
+                                    <ListBoxItem key={patient.id} id={patient.id.toString()}>
                                         {patient.fullName}
-                                    </Select.Item>
+                                    </ListBoxItem>
                                 ))}
                             </Select>
                             {errors.patientId && (
@@ -177,9 +187,9 @@ export function TreatmentFormModal({ isOpen, onClose, treatmentId, initialData }
                                 selectedKey={watch('doctorId')?.toString()}
                             >
                                 {doctorsData?.data.map(doctor => (
-                                    <Select.Item key={doctor.id} id={doctor.id.toString()}>
+                                    <ListBoxItem key={doctor.id} id={doctor.id.toString()}>
                                         {doctor.fullName}
-                                    </Select.Item>
+                                    </ListBoxItem>
                                 ))}
                             </Select>
                             {errors.doctorId && <p className="text-red-500 text-sm mt-1">{errors.doctorId.message}</p>}
@@ -195,9 +205,9 @@ export function TreatmentFormModal({ isOpen, onClose, treatmentId, initialData }
                             selectedKey={watch('type')}
                         >
                             {treatmentTypes.map(type => (
-                                <Select.Item key={type.id} id={type.id}>
+                                <ListBoxItem key={type.id} id={type.id}>
                                     {type.name}
-                                </Select.Item>
+                                </ListBoxItem>
                             ))}
                         </Select>
                         {errors.type && <p className="text-red-500 text-sm mt-1">{errors.type.message}</p>}
@@ -262,10 +272,10 @@ export function TreatmentFormModal({ isOpen, onClose, treatmentId, initialData }
                             onSelectionChange={value => setValue('status', value as any)}
                             selectedKey={watch('status')}
                         >
-                            <Select.Item id="pending">Pending</Select.Item>
-                            <Select.Item id="in-progress">In Progress</Select.Item>
-                            <Select.Item id="completed">Completed</Select.Item>
-                            <Select.Item id="cancelled">Cancelled</Select.Item>
+                            <ListBoxItem id="pending">Pending</ListBoxItem>
+                            <ListBoxItem id="in-progress">In Progress</ListBoxItem>
+                            <ListBoxItem id="completed">Completed</ListBoxItem>
+                            <ListBoxItem id="cancelled">Cancelled</ListBoxItem>
                         </Select>
                     </div>
 
@@ -285,8 +295,13 @@ export function TreatmentFormModal({ isOpen, onClose, treatmentId, initialData }
                                 className="hidden"
                                 id="file-upload"
                             />
-                            <label htmlFor="file-upload">
-                                <Button type="button" variant="outline" size="sm" as="span">
+                            <label htmlFor="file-upload" className="cursor-pointer">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onPress={() => document.getElementById('file-upload')?.click()}
+                                >
                                     Choose Files
                                 </Button>
                             </label>
@@ -313,16 +328,16 @@ export function TreatmentFormModal({ isOpen, onClose, treatmentId, initialData }
                     </div>
 
                     {/* Form Actions */}
-                    <Dialog.Footer>
+                    <DialogFooter>
                         <Button type="button" variant="outline" onPress={onClose} isDisabled={isLoading}>
                             Cancel
                         </Button>
                         <Button type="submit" isDisabled={isLoading}>
                             {isLoading ? 'Saving...' : treatmentId ? 'Update Treatment' : 'Create Treatment'}
                         </Button>
-                    </Dialog.Footer>
+                    </DialogFooter>
                 </form>
-            </Dialog.Content>
-        </Dialog>
+            </DialogContent>
+        </DialogTrigger>
     )
 }

@@ -3,11 +3,18 @@ import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Dialog } from '@workspace/ui/components/Dialog'
+import {
+    DialogTrigger,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from '@workspace/ui/components/Dialog'
 import { Button } from '@workspace/ui/components/Button'
 import { Input } from '@workspace/ui/components/Textfield'
 import { Textarea } from '@workspace/ui/components/Textarea'
-import { Select } from '@workspace/ui/components/Select'
+import { Select, ListBoxItem } from '@workspace/ui/components/Select'
 import { DatePicker } from '@workspace/ui/components/DatePicker'
 import { api } from '@/shared/lib/api'
 import { toast, handleApiError, showCrudSuccess } from '@/shared/lib/toast'
@@ -57,9 +64,11 @@ export function PrescriptionFormModal({ isOpen, onClose, prescriptionId, initial
         setValue,
         watch,
     } = useForm<PrescriptionFormData>({
-        resolver: zodResolver(prescriptionSchema),
-        defaultValues: initialData || {
+        resolver: zodResolver(prescriptionSchema) as any,
+        defaultValues: {
+            status: 'draft',
             medications: [{ name: '', dosage: '', frequency: '', duration: '', instructions: '' }],
+            ...initialData,
         },
     })
 
@@ -158,18 +167,18 @@ export function PrescriptionFormModal({ isOpen, onClose, prescriptionId, initial
     const currentStatus = watch('status')
 
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <Dialog.Content className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <Dialog.Header>
-                    <Dialog.Title>{prescriptionId ? 'Edit Prescription' : 'Create New Prescription'}</Dialog.Title>
-                    <Dialog.Description>
+        <DialogTrigger isOpen={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle>{prescriptionId ? 'Edit Prescription' : 'Create New Prescription'}</DialogTitle>
+                    <DialogDescription>
                         {prescriptionId
                             ? 'Update prescription details below'
                             : 'Fill in the prescription details to create a new prescription'}
-                    </Dialog.Description>
-                </Dialog.Header>
+                    </DialogDescription>
+                </DialogHeader>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-4">
+                <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6 py-4">
                     <div className="grid grid-cols-2 gap-4">
                         {/* Patient Selection */}
                         <div>
@@ -180,9 +189,9 @@ export function PrescriptionFormModal({ isOpen, onClose, prescriptionId, initial
                                 selectedKey={watch('patientId')?.toString()}
                             >
                                 {patientsData?.data.map(patient => (
-                                    <Select.Item key={patient.id} id={patient.id.toString()}>
+                                    <ListBoxItem key={patient.id} id={patient.id.toString()}>
                                         {patient.fullName}
-                                    </Select.Item>
+                                    </ListBoxItem>
                                 ))}
                             </Select>
                             {errors.patientId && (
@@ -199,9 +208,9 @@ export function PrescriptionFormModal({ isOpen, onClose, prescriptionId, initial
                                 selectedKey={watch('doctorId')?.toString()}
                             >
                                 {doctorsData?.data.map(doctor => (
-                                    <Select.Item key={doctor.id} id={doctor.id.toString()}>
+                                    <ListBoxItem key={doctor.id} id={doctor.id.toString()}>
                                         {doctor.fullName}
-                                    </Select.Item>
+                                    </ListBoxItem>
                                 ))}
                             </Select>
                             {errors.doctorId && <p className="text-red-500 text-sm mt-1">{errors.doctorId.message}</p>}
@@ -340,7 +349,7 @@ export function PrescriptionFormModal({ isOpen, onClose, prescriptionId, initial
                     </div>
 
                     {/* Form Actions */}
-                    <Dialog.Footer>
+                    <DialogFooter>
                         <div className="flex items-center justify-between w-full">
                             <div className="flex gap-2">
                                 {prescriptionId && currentStatus === 'draft' && (
@@ -379,9 +388,9 @@ export function PrescriptionFormModal({ isOpen, onClose, prescriptionId, initial
                                 </Button>
                             </div>
                         </div>
-                    </Dialog.Footer>
+                    </DialogFooter>
                 </form>
-            </Dialog.Content>
-        </Dialog>
+            </DialogContent>
+        </DialogTrigger>
     )
 }

@@ -3,7 +3,14 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Dialog } from '@workspace/ui/components/Dialog'
+import {
+    DialogTrigger,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from '@workspace/ui/components/Dialog'
 import { Button } from '@workspace/ui/components/Button'
 import { Input } from '@workspace/ui/components/Textfield'
 import { Switch } from '@workspace/ui/components/Switch'
@@ -43,7 +50,7 @@ export function ScheduleFormModal({ isOpen, onClose, scheduleId, doctorId, initi
         formState: { errors },
         reset,
     } = useForm<ScheduleFormData>({
-        resolver: zodResolver(scheduleSchema),
+        resolver: zodResolver(scheduleSchema) as any,
         defaultValues: {
             ...initialData,
             doctorId,
@@ -103,18 +110,18 @@ export function ScheduleFormModal({ isOpen, onClose, scheduleId, doctorId, initi
     const isLoading = createMutation.isPending || updateMutation.isPending
 
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <Dialog.Content className="max-w-lg">
-                <Dialog.Header>
-                    <Dialog.Title>{scheduleId ? 'Edit Work Schedule' : 'Add Work Schedule'}</Dialog.Title>
-                    <Dialog.Description>
+        <DialogTrigger isOpen={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>{scheduleId ? 'Edit Work Schedule' : 'Add Work Schedule'}</DialogTitle>
+                    <DialogDescription>
                         {scheduleId
                             ? 'Update your work schedule details'
                             : 'Add a new work schedule for a specific date'}
-                    </Dialog.Description>
-                </Dialog.Header>
+                    </DialogDescription>
+                </DialogHeader>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-4">
+                <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6 py-4">
                     {/* Work Date */}
                     <div>
                         <label className="block text-sm font-medium mb-2">Date *</label>
@@ -160,16 +167,16 @@ export function ScheduleFormModal({ isOpen, onClose, scheduleId, doctorId, initi
                     </div>
 
                     {/* Form Actions */}
-                    <Dialog.Footer>
+                    <DialogFooter>
                         <Button type="button" variant="outline" onPress={onClose} isDisabled={isLoading}>
                             Cancel
                         </Button>
                         <Button type="submit" isDisabled={isLoading}>
                             {isLoading ? 'Saving...' : scheduleId ? 'Update Schedule' : 'Add Schedule'}
                         </Button>
-                    </Dialog.Footer>
+                    </DialogFooter>
                 </form>
-            </Dialog.Content>
-        </Dialog>
+            </DialogContent>
+        </DialogTrigger>
     )
 }

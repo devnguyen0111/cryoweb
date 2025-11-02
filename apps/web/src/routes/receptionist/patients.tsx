@@ -25,12 +25,13 @@ function ReceptionistPatientsPage() {
     const filteredPatients = patients?.data?.filter(
         patient =>
             !searchQuery ||
-            patient.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            patient.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             patient.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             patient.code?.toLowerCase().includes(searchQuery.toLowerCase()),
     )
 
-    const getStatusBadge = (status: string) => {
+    const getStatusBadge = (status?: string) => {
+        if (!status) return <Badge className="bg-gray-100 text-gray-800">Unknown</Badge>
         const statusConfig = {
             active: { color: 'bg-green-100 text-green-800', label: 'Active' },
             inactive: { color: 'bg-gray-100 text-gray-800', label: 'Inactive' },
@@ -44,7 +45,8 @@ function ReceptionistPatientsPage() {
         return <Badge className={config.color}>{config.label}</Badge>
     }
 
-    const getGenderBadge = (gender: string) => {
+    const getGenderBadge = (gender?: string) => {
+        if (!gender) return <Badge className="bg-gray-100 text-gray-800">Unknown</Badge>
         const genderConfig = {
             male: { color: 'bg-blue-100 text-blue-800', label: 'Male' },
             female: { color: 'bg-pink-100 text-pink-800', label: 'Female' },

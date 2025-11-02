@@ -15,6 +15,7 @@ import { Button } from '@workspace/ui/components/Button'
 import { Input } from '@workspace/ui/components/Textfield'
 import { Textarea } from '@workspace/ui/components/Textarea'
 import { Select, ListBoxItem } from '@workspace/ui/components/Select'
+import { ListBox, Popover } from 'react-aria-components'
 import { DatePicker } from '@workspace/ui/components/DatePicker'
 import { api } from '@/shared/lib/api'
 import { toast, handleApiError, showCrudSuccess } from '@/shared/lib/toast'
@@ -93,7 +94,7 @@ export function AppointmentFormModal({ isOpen, onClose, appointmentId, initialDa
         mutationFn: (data: AppointmentFormData) => {
             return api.appointments.createAppointment({
                 patientId: data.patientId,
-                providerId: data.providerId,
+                providerId: data.providerId, // API accepts providerId, will map to doctorId if needed
                 type: data.type,
                 title: data.title,
                 date: data.date,
@@ -152,36 +153,56 @@ export function AppointmentFormModal({ isOpen, onClose, appointmentId, initialDa
                     {/* Patient Selection */}
                     <div>
                         <label className="block text-sm font-medium mb-2">Patient *</label>
-                        <Select
-                            placeholder="Select a patient"
-                            onSelectionChange={value => setValue('patientId', value as string)}
-                            selectedKey={watch('patientId')?.toString()}
-                        >
-                            {patientsData?.data.map((patient: any) => (
-                                <ListBoxItem key={patient.id} id={patient.id.toString()}>
-                                    {patient.fullName} - {patient.email}
-                                </ListBoxItem>
-                            ))}
-                        </Select>
+                        {patientsData?.data && patientsData.data.length > 0 ? (
+                            <Select
+                                placeholder="Select a patient"
+                                onSelectionChange={value => setValue('patientId', value as string)}
+                                selectedKey={watch('patientId')?.toString()}
+                                aria-label="Select a patient"
+                            >
+                                <Popover className="max-h-[300px] overflow-auto">
+                                    <ListBox>
+                                        {patientsData.data.map((patient: any) => (
+                                            <ListBoxItem key={patient.id} id={patient.id.toString()}>
+                                                {patient.fullName || patient.accountInfo?.username} -{' '}
+                                                {patient.email || patient.accountInfo?.email || 'No email'}
+                                            </ListBoxItem>
+                                        ))}
+                                    </ListBox>
+                                </Popover>
+                            </Select>
+                        ) : (
+                            <Input placeholder="Loading patients..." disabled />
+                        )}
                         {errors.patientId && <p className="text-red-500 text-sm mt-1">{errors.patientId.message}</p>}
                     </div>
 
                     {/* Doctor Selection */}
                     <div>
                         <label className="block text-sm font-medium mb-2">Doctor *</label>
-                        <Select
-                            placeholder="Select a doctor"
-                            onSelectionChange={value => {
-                                setValue('providerId', value as string)
-                            }}
-                            selectedKey={watch('providerId')?.toString()}
-                        >
-                            {doctorsData?.data.map((doctor: any) => (
-                                <ListBoxItem key={doctor.id} id={doctor.id.toString()}>
-                                    {doctor.fullName} - {doctor.specialty}
-                                </ListBoxItem>
-                            ))}
-                        </Select>
+                        {doctorsData?.data && doctorsData.data.length > 0 ? (
+                            <Select
+                                placeholder="Select a doctor"
+                                onSelectionChange={value => {
+                                    setValue('providerId', value as string)
+                                }}
+                                selectedKey={watch('providerId')?.toString()}
+                                aria-label="Select a doctor"
+                            >
+                                <Popover className="max-h-[300px] overflow-auto">
+                                    <ListBox>
+                                        {doctorsData.data.map((doctor: any) => (
+                                            <ListBoxItem key={doctor.id} id={doctor.id.toString()}>
+                                                {doctor.fullName || doctor.userName} -{' '}
+                                                {doctor.specialization || doctor.doctorSpecialization || 'General'}
+                                            </ListBoxItem>
+                                        ))}
+                                    </ListBox>
+                                </Popover>
+                            </Select>
+                        ) : (
+                            <Input placeholder="Loading doctors..." disabled />
+                        )}
                         {errors.providerId && <p className="text-red-500 text-sm mt-1">{errors.providerId.message}</p>}
                     </div>
 
@@ -228,12 +249,17 @@ export function AppointmentFormModal({ isOpen, onClose, appointmentId, initialDa
                                 )
                             }
                             selectedKey={watch('type')}
+                            aria-label="Select appointment type"
                         >
-                            {appointmentTypes.map(type => (
-                                <ListBoxItem key={type.id} id={type.id}>
-                                    {type.name}
-                                </ListBoxItem>
-                            ))}
+                            <Popover className="max-h-[300px] overflow-auto">
+                                <ListBox>
+                                    {appointmentTypes.map(type => (
+                                        <ListBoxItem key={type.id} id={type.id}>
+                                            {type.name}
+                                        </ListBoxItem>
+                                    ))}
+                                </ListBox>
+                            </Popover>
                         </Select>
                         {errors.type && <p className="text-red-500 text-sm mt-1">{errors.type.message}</p>}
                     </div>
@@ -268,11 +294,16 @@ export function AppointmentFormModal({ isOpen, onClose, appointmentId, initialDa
                             <Select
                                 onSelectionChange={value => setValue('status', value as any)}
                                 selectedKey={watch('status')}
+                                aria-label="Select appointment status"
                             >
-                                <ListBoxItem id="scheduled">Scheduled</ListBoxItem>
-                                <ListBoxItem id="confirmed">Confirmed</ListBoxItem>
-                                <ListBoxItem id="cancelled">Cancelled</ListBoxItem>
-                                <ListBoxItem id="completed">Completed</ListBoxItem>
+                                <Popover className="max-h-[300px] overflow-auto">
+                                    <ListBox>
+                                        <ListBoxItem id="scheduled">Scheduled</ListBoxItem>
+                                        <ListBoxItem id="confirmed">Confirmed</ListBoxItem>
+                                        <ListBoxItem id="cancelled">Cancelled</ListBoxItem>
+                                        <ListBoxItem id="completed">Completed</ListBoxItem>
+                                    </ListBox>
+                                </Popover>
                             </Select>
                         </div>
                     )}

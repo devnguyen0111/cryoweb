@@ -1,28 +1,64 @@
 import { AxiosInstance } from 'axios'
 
 /**
+ * Base response wrapper from API
+ */
+interface BaseResponse<T> {
+    code: number
+    systemCode: string | null
+    message: string
+    data: T
+    timestamp: string
+    success: boolean
+}
+
+interface DynamicResponse<T> {
+    code: number
+    systemCode: string | null
+    message: string
+    metaData?: {
+        page: number
+        size: number
+        total: number
+        totalPages: number
+        hasNext: boolean
+        hasPrevious: boolean
+        currentPageSize: number
+    }
+    data: T
+    timestamp: string
+    success: boolean
+}
+
+/**
  * Appointment API types
  */
 export interface Appointment {
     id: string
     patientId: string
+    doctorId?: string
     type: 'consultation' | 'procedure' | 'follow-up' | 'testing' | 'other'
     title: string
-    description: string
+    description?: string
     date: string
     startTime: string
     endTime: string
     status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'no-show'
-    provider: {
+    provider?: {
         id: string
         name: string
         specialty: string
     }
-    location: string
-    notes: string
-    reminderSent: boolean
+    doctor?: {
+        id: string
+        name: string
+        specialization?: string
+    }
+    location?: string
+    notes?: string
+    reminderSent?: boolean
     createdAt: string
-    updatedAt: string
+    updatedAt?: string
 }
 
 export interface CreateAppointmentRequest {
@@ -57,10 +93,20 @@ export interface AppointmentListQuery {
 
 export interface AppointmentListResponse {
     data: Appointment[]
-    total: number
-    page: number
-    limit: number
-    totalPages: number
+    metaData?: {
+        page: number
+        size: number
+        total: number
+        totalPages: number
+        hasNext: boolean
+        hasPrevious: boolean
+        currentPageSize: number
+    }
+    // Legacy support
+    total?: number
+    page?: number
+    limit?: number
+    totalPages?: number
 }
 
 export interface TimeSlot {
@@ -73,43 +119,85 @@ export interface TimeSlot {
 /**
  * Appointment Management API
  * Handles all appointment scheduling and management operations
+ *
+ * NOTE: According to Swagger JSON at https://cryofert.runasp.net/swagger/v1/swagger.json,
+ * the `/api/appointment` endpoint does not exist. This API class is prepared for when
+ * the backend endpoint is implemented.
+ *
+ * TODO: Update endpoint paths once the backend appointment API is available
  */
 export class AppointmentsApi {
     constructor(private readonly client: AxiosInstance) {}
 
     /**
      * Get list of appointments with pagination and filtering
+     *
+     * WARNING: This endpoint may not exist in the backend yet.
+     * Returns empty data if endpoint returns 404.
+     *
      * @example
      * const response = await appointmentsApi.getAppointments({ page: 1, limit: 10, status: 'scheduled' })
      */
     async getAppointments(query?: AppointmentListQuery): Promise<AppointmentListResponse> {
-        const params = new URLSearchParams()
-        if (query) {
-            Object.entries(query).forEach(([key, value]) => {
-                if (value !== undefined && value !== null && value !== '') {
-                    params.append(key, String(value))
+        try {
+            const params = new URLSearchParams()
+            if (query) {
+                Object.entries(query).forEach(([key, value]) => {
+                    if (value !== undefined && value !== null && value !== '') {
+                        params.append(key, String(value))
+                    }
+                })
+            }
+            const response = await this.client.get<DynamicResponse<Appointment[]>>(`/appointment?${params}`)
+            const result = response.data
+            return {
+                data: result.data || [],
+                metaData: result.metaData,
+                total: result.metaData?.total || result.data?.length || 0,
+                page: result.metaData?.page || 1,
+                limit: result.metaData?.size || 10,
+                totalPages: result.metaData?.totalPages || 1,
+            }
+        } catch (error: any) {
+            // Return empty data if endpoint doesn't exist (404)
+            if (error.response?.status === 404) {
+                console.warn('Appointment endpoint not found. Returning empty data.')
+                return {
+                    data: [],
+                    total: 0,
+                    page: 1,
+                    limit: query?.limit || 10,
+                    totalPages: 0,
                 }
-            })
+            }
+            throw error
         }
-        return this.client.get<AppointmentListResponse>(`/appointments?${params}`).then(res => res.data)
     }
 
     /**
      * Get a single appointment by ID
-     * TODO: Implement actual API endpoint
+     *
+     * WARNING: This endpoint may not exist in the backend yet.
+     *
      * @example
      * const appointment = await appointmentsApi.getAppointment('appointment-id-123')
      */
     async getAppointment(id: string): Promise<Appointment> {
-        // TODO: Replace with actual API call
-        // return this.client.get<Appointment>(`/appointments/${id}`).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        try {
+            return this.client.get<BaseResponse<Appointment>>(`/appointment/${id}`).then(res => res.data.data)
+        } catch (error: any) {
+            if (error.response?.status === 404) {
+                throw new Error('Appointment endpoint not found. Please check if the backend API is implemented.')
+            }
+            throw error
+        }
     }
 
     /**
      * Create a new appointment
-     * TODO: Implement actual API endpoint
+     *
+     * WARNING: This endpoint may not exist in the backend yet.
+     *
      * @example
      * const newAppointment = await appointmentsApi.createAppointment({
      *   patientId: 'patient-123',
@@ -118,92 +206,152 @@ export class AppointmentsApi {
      * })
      */
     async createAppointment(data: CreateAppointmentRequest): Promise<Appointment> {
-        // TODO: Replace with actual API call
-        // return this.client.post<Appointment>('/appointments', data).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        try {
+            return this.client.post<BaseResponse<Appointment>>('/appointment', data).then(res => res.data.data)
+        } catch (error: any) {
+            if (error.response?.status === 404) {
+                throw new Error('Appointment endpoint not found. Please check if the backend API is implemented.')
+            }
+            throw error
+        }
     }
 
     /**
      * Update an existing appointment
-     * TODO: Implement actual API endpoint
+     *
+     * WARNING: This endpoint may not exist in the backend yet.
+     *
      * @example
      * const updated = await appointmentsApi.updateAppointment('appointment-id-123', { status: 'confirmed' })
      */
     async updateAppointment(id: string, data: UpdateAppointmentRequest): Promise<Appointment> {
-        // TODO: Replace with actual API call
-        // return this.client.patch<Appointment>(`/appointments/${id}`, data).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        try {
+            return this.client.put<BaseResponse<Appointment>>(`/appointment/${id}`, data).then(res => res.data.data)
+        } catch (error: any) {
+            if (error.response?.status === 404) {
+                throw new Error('Appointment endpoint not found. Please check if the backend API is implemented.')
+            }
+            throw error
+        }
     }
 
     /**
      * Cancel an appointment
-     * TODO: Implement actual API endpoint
+     *
+     * WARNING: This endpoint may not exist in the backend yet.
+     *
      * @example
      * await appointmentsApi.cancelAppointment('appointment-id-123', 'Patient requested cancellation')
      */
     async cancelAppointment(id: string, reason?: string): Promise<Appointment> {
-        // TODO: Replace with actual API call
-        // return this.client.post<Appointment>(`/appointments/${id}/cancel`, { reason }).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        try {
+            return this.client
+                .post<BaseResponse<Appointment>>(`/appointment/${id}/cancel`, { reason })
+                .then(res => res.data.data)
+        } catch (error: any) {
+            if (error.response?.status === 404) {
+                throw new Error('Appointment endpoint not found. Please check if the backend API is implemented.')
+            }
+            throw error
+        }
     }
 
     /**
      * Delete an appointment
-     * TODO: Implement actual API endpoint
+     *
+     * WARNING: This endpoint may not exist in the backend yet.
      */
     async deleteAppointment(id: string): Promise<void> {
-        // TODO: Replace with actual API call
-        // return this.client.delete(`/appointments/${id}`).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        try {
+            return this.client.delete(`/appointment/${id}`).then(() => undefined)
+        } catch (error: any) {
+            if (error.response?.status === 404) {
+                throw new Error('Appointment endpoint not found. Please check if the backend API is implemented.')
+            }
+            throw error
+        }
     }
 
     /**
      * Get available time slots for a provider
-     * TODO: Implement actual API endpoint
+     *
+     * WARNING: This endpoint may not exist in the backend yet.
      */
     async getAvailableSlots(providerId: string, startDate: string, endDate: string): Promise<TimeSlot[]> {
-        // TODO: Replace with actual API call
-        // return this.client.get<TimeSlot[]>(`/appointments/available-slots`, {
-        //     params: { providerId, startDate, endDate }
-        // }).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        try {
+            const params = new URLSearchParams()
+            params.append('providerId', providerId)
+            params.append('startDate', startDate)
+            params.append('endDate', endDate)
+            return this.client
+                .get<BaseResponse<TimeSlot[]>>(`/appointment/available-slots?${params}`)
+                .then(res => res.data.data || [])
+        } catch (error: any) {
+            if (error.response?.status === 404) {
+                console.warn('Appointment available-slots endpoint not found. Returning empty array.')
+                return []
+            }
+            throw error
+        }
     }
 
     /**
      * Get appointments by patient ID
-     * TODO: Implement actual API endpoint
+     *
+     * WARNING: This endpoint may not exist in the backend yet.
      */
     async getAppointmentsByPatient(patientId: string): Promise<Appointment[]> {
-        // TODO: Replace with actual API call
-        // return this.client.get<Appointment[]>(`/patients/${patientId}/appointments`).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        try {
+            return this.client
+                .get<BaseResponse<Appointment[]>>(`/appointment/patient/${patientId}`)
+                .then(res => res.data.data || [])
+        } catch (error: any) {
+            if (error.response?.status === 404) {
+                console.warn('Appointment patient endpoint not found. Returning empty array.')
+                return []
+            }
+            throw error
+        }
     }
 
     /**
      * Send appointment reminder
-     * TODO: Implement actual API endpoint
+     *
+     * WARNING: This endpoint may not exist in the backend yet.
      */
     async sendReminder(id: string): Promise<{ success: boolean; message: string }> {
-        // TODO: Replace with actual API call
-        // return this.client.post(`/appointments/${id}/send-reminder`).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        try {
+            return this.client
+                .post<BaseResponse<{ success: boolean; message: string }>>(`/appointment/${id}/reminder`)
+                .then(res => res.data.data)
+        } catch (error: any) {
+            if (error.response?.status === 404) {
+                throw new Error(
+                    'Appointment reminder endpoint not found. Please check if the backend API is implemented.',
+                )
+            }
+            throw error
+        }
     }
 
     /**
      * Get upcoming appointments
-     * TODO: Implement actual API endpoint
+     *
+     * WARNING: This endpoint may not exist in the backend yet.
      */
     async getUpcomingAppointments(limit?: number): Promise<Appointment[]> {
-        // TODO: Replace with actual API call
-        // return this.client.get<Appointment[]>('/appointments/upcoming', { params: { limit } }).then(res => res.data)
-
-        throw new Error('API endpoint not implemented yet. Replace with actual API call.')
+        try {
+            const params = new URLSearchParams()
+            if (limit) params.append('limit', String(limit))
+            return this.client
+                .get<BaseResponse<Appointment[]>>(`/appointment/upcoming?${params}`)
+                .then(res => res.data.data || [])
+        } catch (error: any) {
+            if (error.response?.status === 404) {
+                console.warn('Appointment upcoming endpoint not found. Returning empty array.')
+                return []
+            }
+            throw error
+        }
     }
 }

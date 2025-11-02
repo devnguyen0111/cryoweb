@@ -56,6 +56,36 @@ export interface Patient {
     address?: string
     maritalStatus?: string
     status?: 'active' | 'inactive' | 'archived'
+    // Extended fields for details endpoint
+    relationships?: Relationship[]
+    treatments?: Treatment[]
+    labSamples?: LabSample[]
+}
+
+export interface Relationship {
+    id: string
+    relatedPatientId: string
+    relationshipType: string
+    notes?: string | null
+    createdAt: string
+    updatedAt?: string | null
+}
+
+export interface Treatment {
+    id: string
+    treatmentCode?: string | null
+    startDate?: string | null
+    endDate?: string | null
+    status?: string | null
+    notes?: string | null
+}
+
+export interface LabSample {
+    id: string
+    sampleCode?: string | null
+    sampleType?: string | null
+    collectionDate?: string | null
+    status?: string | null
 }
 
 export interface CreatePatientRequest {
@@ -145,11 +175,45 @@ export class PatientApi {
                 }
             })
         }
-        return this.client
-            .get<
-                PatientListResponse & { code: number; message: string; timestamp: string; success: boolean }
-            >(`/patient?${params}`)
-            .then(res => res.data)
+        const response = await this.client.get<{
+            code: number
+            message: string
+            metaData?: {
+                page: number
+                size: number
+                total: number
+                totalPages: number
+                hasNext: boolean
+                hasPrevious: boolean
+                currentPageSize: number
+            }
+            data: Patient[]
+            timestamp: string
+            success: boolean
+        }>(`/patient?${params}`)
+        const result = response.data
+        const dataLength = result.data?.length || 0
+        const total = result.metaData?.total || dataLength
+        const page = result.metaData?.page || 1
+        const limit = result.metaData?.size || 10
+        const totalPages = result.metaData?.totalPages || 1
+
+        return {
+            data: result.data || [],
+            metaData: result.metaData || {
+                page,
+                size: limit,
+                total,
+                totalPages,
+                hasNext: false,
+                hasPrevious: false,
+                currentPageSize: dataLength,
+            },
+            total,
+            page,
+            limit,
+            totalPages,
+        }
     }
 
     /**
@@ -174,10 +238,10 @@ export class PatientApi {
     }
 
     /**
-     * Get patient details by ID
+     * Get patient details by ID (includes relationships, treatments, labSamples)
      */
     async getPatientDetails(id: string): Promise<Patient> {
-        return this.client.get<Patient>(`/patient/${id}/details`).then(res => res.data)
+        return this.client.get<BaseResponse<Patient>>(`/patient/${id}/details`).then(res => res.data.data)
     }
 
     /**

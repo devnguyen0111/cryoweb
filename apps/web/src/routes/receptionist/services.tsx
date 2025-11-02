@@ -1,10 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '@workspace/ui/components/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/Card'
 import { Badge } from '@workspace/ui/components/Badge'
+import { ConfirmDialog } from '@workspace/ui/components/ConfirmDialog'
 import { api } from '../../shared/lib/api'
+import { handleApiError, showCrudSuccess } from '../../shared/lib/toast'
 import { Search, Filter, Stethoscope, Calendar, User, CheckCircle, XCircle, AlertCircle, Eye } from 'lucide-react'
 import { Input } from '@workspace/ui/components/Textfield'
 
@@ -13,14 +15,43 @@ export const Route = createFileRoute('/receptionist/services')({
 })
 
 function ReceptionistServicesPage() {
+    const queryClient = useQueryClient()
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<string>('all')
+    const [approveRequestId, setApproveRequestId] = useState<string | null>(null)
+    const [rejectRequestId, setRejectRequestId] = useState<string | null>(null)
 
     // Fetch service requests
     const { data: requests, isLoading } = useQuery({
         queryKey: ['receptionist-service-requests'],
         queryFn: () => api.serviceRequest.getServiceRequests({ limit: 100 }).catch(() => ({ data: [], total: 0 })),
         retry: false,
+    })
+
+    // Approve service request mutation
+    const approveMutation = useMutation({
+        mutationFn: (id: string) => api.serviceRequest.approveServiceRequest(id),
+        onSuccess: () => {
+            showCrudSuccess.update('Service Request')
+            queryClient.invalidateQueries({ queryKey: ['receptionist-service-requests'] })
+            setApproveRequestId(null)
+        },
+        onError: error => {
+            handleApiError(error, 'Failed to approve service request')
+        },
+    })
+
+    // Reject service request mutation
+    const rejectMutation = useMutation({
+        mutationFn: (id: string) => api.serviceRequest.rejectServiceRequest(id),
+        onSuccess: () => {
+            showCrudSuccess.update('Service Request')
+            queryClient.invalidateQueries({ queryKey: ['receptionist-service-requests'] })
+            setRejectRequestId(null)
+        },
+        onError: error => {
+            handleApiError(error, 'Failed to reject service request')
+        },
     })
 
     const filteredRequests = requests?.data?.filter(request => {
@@ -162,20 +193,26 @@ function ReceptionistServicesPage() {
                                         <div className="flex flex-col gap-2">
                                             {request.status === 'pending' && (
                                                 <>
-                                                    <Button variant="default" size="sm" className="bg-green-600">
+                                                    <Button
+                                                        variant="default"
+                                                        size="sm"
+                                                        className="bg-green-600"
+                                                        onPress={() => setApproveRequestId(request.id)}
+                                                    >
                                                         <CheckCircle className="h-4 w-4 mr-1" />
                                                         Approve
                                                     </Button>
-                                                    <Button variant="outline" size="sm" className="text-red-600">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="text-red-600"
+                                                        onPress={() => setRejectRequestId(request.id)}
+                                                    >
                                                         <XCircle className="h-4 w-4 mr-1" />
                                                         Reject
                                                     </Button>
                                                 </>
                                             )}
-                                            <Button variant="outline" size="sm">
-                                                <Eye className="h-4 w-4 mr-1" />
-                                                View
-                                            </Button>
                                         </div>
                                     </div>
                                 </div>
@@ -184,6 +221,41 @@ function ReceptionistServicesPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Approve Confirmation */}
+            {approveRequestId && (
+                <ConfirmDialog
+                    isOpen={!!approveRequestId}
+                    onClose={() => setApproveRequestId(null)}
+                    onConfirm={() => {
+                        if (approveRequestId) {
+                            approveMutation.mutate(approveRequestId)
+                        }
+                    }}
+                    title="Approve Service Request"
+                    description="Are you sure you want to approve this service request? This action cannot be undone."
+                    confirmText="Approve"
+                    cancelText="Cancel"
+                />
+            )}
+
+            {/* Reject Confirmation */}
+            {rejectRequestId && (
+                <ConfirmDialog
+                    isOpen={!!rejectRequestId}
+                    onClose={() => setRejectRequestId(null)}
+                    onConfirm={() => {
+                        if (rejectRequestId) {
+                            rejectMutation.mutate(rejectRequestId)
+                        }
+                    }}
+                    title="Reject Service Request"
+                    description="Are you sure you want to reject this service request? This action cannot be undone."
+                    confirmText="Reject"
+                    cancelText="Cancel"
+                    variant="destructive"
+                />
+            )}
         </div>
     )
 }

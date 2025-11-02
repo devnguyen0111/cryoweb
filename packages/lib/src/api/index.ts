@@ -10,6 +10,8 @@ import { ServiceCategoryApi } from './sdk/servicecategory.api'
 import { ServiceRequestApi } from './sdk/servicerequest.api'
 import { ServiceRequestDetailsApi } from './sdk/servicerequestdetails.api'
 import { AppointmentsApi } from './sdk/appointments.api'
+import { SlotsApi } from './sdk/slots.api'
+import { DoctorSchedulesApi } from './sdk/doctorschedules.api'
 
 /**
  * API class for the Fertility Service and Cryobank Management System
@@ -41,6 +43,8 @@ export class Api {
     serviceRequest: ServiceRequestApi
     serviceRequestDetails: ServiceRequestDetailsApi
     appointments: AppointmentsApi
+    slots: SlotsApi
+    doctorSchedules: DoctorSchedulesApi
 
     constructor(private readonly client: AxiosInstance) {
         this.example = new ExampleApi(this.client)
@@ -54,6 +58,8 @@ export class Api {
         this.serviceRequest = new ServiceRequestApi(this.client)
         this.serviceRequestDetails = new ServiceRequestDetailsApi(this.client)
         this.appointments = new AppointmentsApi(this.client)
+        this.slots = new SlotsApi(this.client)
+        this.doctorSchedules = new DoctorSchedulesApi(this.client)
     }
 }
 
@@ -67,6 +73,8 @@ export * from './sdk/service.api'
 export * from './sdk/servicecategory.api'
 export * from './sdk/servicerequest.api'
 export * from './sdk/servicerequestdetails.api'
+export * from './sdk/slots.api'
+export * from './sdk/doctorschedules.api'
 export type {
     Appointment,
     CreateAppointmentRequest,

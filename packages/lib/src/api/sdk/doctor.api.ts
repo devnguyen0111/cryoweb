@@ -1,16 +1,5 @@
 import { AxiosInstance } from 'axios'
-
-/**
- * Base response wrapper from API
- */
-export interface BaseResponse<T> {
-    code: number
-    systemCode: string
-    message: string
-    data: T
-    timestamp: string
-    success: boolean
-}
+import { BaseResponse } from './types'
 
 /**
  * Doctor API types

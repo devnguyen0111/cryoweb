@@ -29,8 +29,6 @@ import {
     Maximize2,
     Minimize2,
     Edit,
-    Save,
-    X,
     Search,
     Plus,
     FileDown,
@@ -52,7 +50,6 @@ interface PatientDetailModalProps {
 export function PatientDetailModal({ isOpen, onClose, patientId }: PatientDetailModalProps) {
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [activeTab, setActiveTab] = useState('basic')
-    const [isEditing, setIsEditing] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
 
     const { data: patientDetails, isLoading } = useQuery({
@@ -364,29 +361,10 @@ export function PatientDetailModal({ isOpen, onClose, patientId }: PatientDetail
                                 <TabPanel id="basic" className="space-y-4">
                                     <Card className="border-2">
                                         <CardHeader className="bg-muted/50 pb-3">
-                                            <div className="flex items-center justify-between">
-                                                <CardTitle className="flex items-center gap-2 text-lg">
-                                                    <User className="h-5 w-5 text-primary" />
-                                                    Basic Information
-                                                </CardTitle>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onPress={() => setIsEditing(!isEditing)}
-                                                >
-                                                    {isEditing ? (
-                                                        <>
-                                                            <X className="h-4 w-4 mr-1" />
-                                                            Cancel
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Edit className="h-4 w-4 mr-1" />
-                                                            Edit
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            </div>
+                                            <CardTitle className="flex items-center gap-2 text-lg">
+                                                <User className="h-5 w-5 text-primary" />
+                                                Basic Information
+                                            </CardTitle>
                                         </CardHeader>
                                         <CardContent className="pt-6">
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -394,13 +372,9 @@ export function PatientDetailModal({ isOpen, onClose, patientId }: PatientDetail
                                                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                                         Full Name
                                                     </p>
-                                                    {isEditing ? (
-                                                        <Input defaultValue={displayName} className="text-lg" />
-                                                    ) : (
-                                                        <p className="text-lg font-semibold text-foreground break-words">
-                                                            {displayName}
-                                                        </p>
-                                                    )}
+                                                    <p className="text-lg font-semibold text-foreground break-words">
+                                                        {displayName}
+                                                    </p>
                                                 </div>
                                                 <div className="space-y-1 min-w-0">
                                                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

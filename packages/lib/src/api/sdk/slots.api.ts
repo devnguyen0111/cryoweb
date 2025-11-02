@@ -1,34 +1,5 @@
 import { AxiosInstance } from 'axios'
-
-/**
- * Base response wrapper from API
- */
-interface BaseResponse<T> {
-    code: number
-    systemCode: string | null
-    message: string
-    data: T
-    timestamp: string
-    success: boolean
-}
-
-interface DynamicResponse<T> {
-    code: number
-    systemCode: string | null
-    message: string
-    metaData?: {
-        page: number
-        size: number
-        total: number
-        totalPages: number
-        hasNext: boolean
-        hasPrevious: boolean
-        currentPageSize: number
-    }
-    data: T
-    timestamp: string
-    success: boolean
-}
+import { BaseResponse, DynamicResponse } from './types'
 
 /**
  * Slot API types

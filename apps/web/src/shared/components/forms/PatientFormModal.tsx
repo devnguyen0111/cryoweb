@@ -23,24 +23,39 @@ import { toast, handleApiError, showCrudSuccess } from '@/shared/lib/toast'
 import { CalendarDate, parseDate } from '@internationalized/date'
 
 // Patient form validation schema
-const patientSchema = z.object({
-    fullName: z.string().min(1, 'Full name is required'),
-    dateOfBirth: z.string({ required_error: 'Date of birth is required' }),
-    gender: z.enum(['male', 'female', 'other'], { required_error: 'Gender is required' }),
-    nationality: z.string().min(1, 'Nationality is required'),
-    nationalId: z.string().optional(),
-    email: z.string().email('Invalid email').optional().or(z.literal('')),
-    phone: z.string().min(1, 'Phone number is required'),
-    address: z.string().min(1, 'Address is required'),
-    bloodType: z.string().optional(),
-    maritalStatus: z.string().optional(),
-    occupation: z.string().optional(),
-    emergencyContactName: z.string().optional(),
-    emergencyContactRelationship: z.string().optional(),
-    emergencyContactPhone: z.string().optional(),
-    medicalHistory: z.string().optional(),
-    notes: z.string().optional(),
-})
+const patientSchema = z
+    .object({
+        fullName: z.string().min(1, 'Full name is required'),
+        dateOfBirth: z.string({ required_error: 'Date of birth is required' }),
+        gender: z.enum(['male', 'female', 'other'], { required_error: 'Gender is required' }),
+        nationality: z.string().min(1, 'Nationality is required'),
+        nationalId: z.string().optional(),
+        email: z.string().email('Invalid email').optional().or(z.literal('')),
+        phone: z.string().min(1, 'Phone number is required'),
+        address: z.string().min(1, 'Address is required'),
+        bloodType: z.string().optional(),
+        maritalStatus: z.string().optional(),
+        occupation: z.string().optional(),
+        emergencyContactName: z.string().optional(),
+        emergencyContactRelationship: z.string().optional(),
+        emergencyContactPhone: z.string().optional(),
+        medicalHistory: z.string().optional(),
+        notes: z.string().optional(),
+    })
+    .refine(
+        data => {
+            const hasAnyEmergencyContact =
+                !!data.emergencyContactName || !!data.emergencyContactRelationship || !!data.emergencyContactPhone
+            if (hasAnyEmergencyContact) {
+                return !!data.emergencyContactName && !!data.emergencyContactPhone
+            }
+            return true
+        },
+        {
+            message: 'Emergency contact name and phone are required if any emergency contact information is provided',
+            path: ['emergencyContactName'],
+        },
+    )
 
 type PatientFormData = z.infer<typeof patientSchema>
 
@@ -117,6 +132,10 @@ export function PatientFormModal({ isOpen, onClose, patientId, initialData }: Pa
                 bloodType: patientData.bloodType || '',
                 maritalStatus: patientData.maritalStatus || '',
                 occupation: patientData.occupation || '',
+                emergencyContactName:
+                    typeof patientData.emergencyContact === 'string' ? patientData.emergencyContact : '',
+                emergencyContactPhone: patientData.emergencyPhone || '',
+                emergencyContactRelationship: '',
                 medicalHistory: patientData.medicalHistory || '',
                 notes: patientData.notes || '',
             })
@@ -181,6 +200,14 @@ export function PatientFormModal({ isOpen, onClose, patientId, initialData }: Pa
                 bloodType: data.bloodType,
                 maritalStatus: data.maritalStatus,
                 occupation: data.occupation,
+                emergencyContact:
+                    data.emergencyContactName && data.emergencyContactPhone
+                        ? {
+                              name: data.emergencyContactName,
+                              relationship: data.emergencyContactRelationship || 'Unknown',
+                              phone: data.emergencyContactPhone,
+                          }
+                        : undefined,
                 medicalHistory: data.medicalHistory,
                 notes: data.notes,
             }
@@ -358,6 +385,9 @@ export function PatientFormModal({ isOpen, onClose, patientId, initialData }: Pa
                             <div>
                                 <label className="block text-sm font-medium mb-2">Contact Name</label>
                                 <Input placeholder="Enter contact name" {...register('emergencyContactName')} />
+                                {errors.emergencyContactName && (
+                                    <p className="text-red-500 text-sm mt-1">{errors.emergencyContactName.message}</p>
+                                )}
                             </div>
 
                             <div>
@@ -366,6 +396,11 @@ export function PatientFormModal({ isOpen, onClose, patientId, initialData }: Pa
                                     placeholder="e.g., Spouse, Parent"
                                     {...register('emergencyContactRelationship')}
                                 />
+                                {errors.emergencyContactRelationship && (
+                                    <p className="text-red-500 text-sm mt-1">
+                                        {errors.emergencyContactRelationship.message}
+                                    </p>
+                                )}
                             </div>
 
                             <div>
@@ -375,6 +410,9 @@ export function PatientFormModal({ isOpen, onClose, patientId, initialData }: Pa
                                     placeholder="Enter phone number"
                                     {...register('emergencyContactPhone')}
                                 />
+                                {errors.emergencyContactPhone && (
+                                    <p className="text-red-500 text-sm mt-1">{errors.emergencyContactPhone.message}</p>
+                                )}
                             </div>
                         </div>
                     </div>

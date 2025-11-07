@@ -4,7 +4,6 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import { UserRole } from "@/types/auth";
 
 export const Route = createFileRoute("/admin/dashboard")({
   component: AdminDashboardComponent,

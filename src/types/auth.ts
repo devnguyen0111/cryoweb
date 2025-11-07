@@ -49,6 +49,11 @@ export interface RolePermissions {
   canViewReports: boolean;
   canViewSettings: boolean;
   canManageSystem: boolean;
+  canManageEncounters: boolean;
+  canManageTreatmentCycles: boolean;
+  canManagePrescriptions: boolean;
+  canAccessCryobank: boolean;
+  canManageSchedule: boolean;
 }
 
 /**
@@ -75,6 +80,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: true,
     canManageSystem: true,
+    canManageEncounters: true,
+    canManageTreatmentCycles: true,
+    canManagePrescriptions: true,
+    canAccessCryobank: true,
+    canManageSchedule: true,
   },
   Doctor: {
     canViewPatients: true,
@@ -96,6 +106,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: false,
     canManageSystem: false,
+    canManageEncounters: true,
+    canManageTreatmentCycles: true,
+    canManagePrescriptions: true,
+    canAccessCryobank: true,
+    canManageSchedule: true,
   },
   "Lab Technician": {
     canViewPatients: true,
@@ -117,6 +132,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: false,
     canManageSystem: false,
+    canManageEncounters: false,
+    canManageTreatmentCycles: false,
+    canManagePrescriptions: false,
+    canAccessCryobank: true,
+    canManageSchedule: false,
   },
   Receptionist: {
     canViewPatients: true,
@@ -138,6 +158,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: false,
     canViewSettings: false,
     canManageSystem: false,
+    canManageEncounters: false,
+    canManageTreatmentCycles: false,
+    canManagePrescriptions: false,
+    canAccessCryobank: false,
+    canManageSchedule: true,
   },
 };
 
@@ -213,22 +238,46 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       permission: "canViewPatients",
     },
     {
-      label: "Samples",
-      href: "/doctor/samples",
-      icon: "FlaskConical",
-      permission: "canViewSamples",
-    },
-    {
       label: "Appointments",
       href: "/doctor/appointments",
       icon: "Calendar",
       permission: "canViewAppointments",
     },
     {
+      label: "Encounters",
+      href: "/doctor/encounters",
+      icon: "ClipboardList",
+      permission: "canManageEncounters",
+    },
+    {
+      label: "Treatment Cycles",
+      href: "/doctor/treatment-cycles",
+      icon: "Workflow",
+      permission: "canManageTreatmentCycles",
+    },
+    {
+      label: "Prescriptions",
+      href: "/doctor/prescriptions",
+      icon: "Pill",
+      permission: "canManagePrescriptions",
+    },
+    {
+      label: "Cryobank",
+      href: "/doctor/cryobank",
+      icon: "Snowflake",
+      permission: "canAccessCryobank",
+    },
+    {
       label: "Reports",
       href: "/doctor/reports",
       icon: "BarChart3",
       permission: "canViewReports",
+    },
+    {
+      label: "Schedule",
+      href: "/doctor/schedule",
+      icon: "Clock",
+      permission: "canManageSchedule",
     },
   ],
   "Lab Technician": [

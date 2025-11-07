@@ -1,4 +1,4 @@
-import { AxiosInstance } from "axios";
+import { AxiosInstance, AxiosError } from "axios";
 import type {
   BaseResponse,
   LoginRequest,
@@ -40,15 +40,35 @@ export class AuthApi {
   }
 
   /**
-   * Get current user
-   * GET /api/auth/me
+   * Get current user profile
+   * GET /api/user/profile
    */
   async getCurrentUser(): Promise<User> {
-    const response = await this.client.get<BaseResponse<User>>("/auth/me");
-    if (!response.data.data) {
-      throw new Error("User data not found");
+    const endpoints = ["/user/profile", "/auth/me", "/auth/profile"] as const;
+    let lastError: unknown;
+
+    for (const endpoint of endpoints) {
+      try {
+        const response = await this.client.get<BaseResponse<User>>(endpoint);
+        const payload = response.data as BaseResponse<User> | User;
+
+        if (typeof payload === "object" && "data" in payload && payload.data) {
+          return payload.data;
+        }
+
+        if ((payload as User)?.id) {
+          return payload as User;
+        }
+      } catch (error) {
+        lastError = error;
+        if (error instanceof AxiosError && error.response?.status === 404) {
+          continue;
+        }
+        throw error;
+      }
     }
-    return response.data.data;
+
+    throw (lastError as Error) ?? new Error("User data not found");
   }
 
   /**
@@ -69,11 +89,11 @@ export class AuthApi {
 
   /**
    * Update profile
-   * PUT /api/auth/profile
+   * PUT /api/user/profile
    */
   async updateProfile(data: Partial<User>): Promise<User> {
     const response = await this.client.put<BaseResponse<User>>(
-      "/auth/profile",
+      "/user/profile",
       data
     );
     if (!response.data.data) {

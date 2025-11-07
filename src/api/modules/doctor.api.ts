@@ -1,4 +1,4 @@
-import { AxiosInstance } from "axios";
+import { AxiosInstance, AxiosError } from "axios";
 import type {
   BaseResponse,
   DynamicResponse,
@@ -36,16 +36,32 @@ export class DoctorApi {
   }
 
   /**
-   * Get doctor statistics
-   * GET /api/doctor/{id}/statistics
+   * Get doctor statistics overview
+   * GET /api/doctor/statistics
    */
   async getDoctorStatistics(
-    id: string
+    doctorId?: string
   ): Promise<BaseResponse<DoctorStatistics>> {
-    const response = await this.client.get<BaseResponse<DoctorStatistics>>(
-      `/doctor/${id}/statistics`
-    );
-    return response.data;
+    const endpoints = doctorId
+      ? [`/doctor/${doctorId}/statistics`, "/doctor/statistics"]
+      : ["/doctor/statistics"];
+    let lastError: unknown;
+
+    for (const endpoint of endpoints) {
+      try {
+        const response =
+          await this.client.get<BaseResponse<DoctorStatistics>>(endpoint);
+        return response.data;
+      } catch (error) {
+        lastError = error;
+        if (error instanceof AxiosError && error.response?.status === 404) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw (lastError as Error) ?? new Error("Doctor statistics not found");
   }
 
   /**

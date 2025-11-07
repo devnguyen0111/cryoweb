@@ -31,15 +31,15 @@ function AdminDashboardComponent() {
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Dashboard - Quản trị viên</h1>
-            <p className="text-gray-600 mt-2">Tổng quan hệ thống</p>
+            <h1 className="text-3xl font-bold">Dashboard - Admin</h1>
+            <p className="text-gray-600 mt-2">Overview of system</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Tổng người dùng
+                  Total users
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -52,7 +52,7 @@ function AdminDashboardComponent() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Tổng cuộc hẹn
+                  Total appointments
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -65,7 +65,7 @@ function AdminDashboardComponent() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Tổng bệnh nhân
+                  Total patients
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -77,10 +77,10 @@ function AdminDashboardComponent() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Hệ thống</CardTitle>
+                <CardTitle className="text-sm font-medium">System</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">Hoạt động</div>
+                <div className="text-2xl font-bold">Active</div>
               </CardContent>
             </Card>
           </div>

@@ -20,16 +20,16 @@ function LabTechnicianDashboardComponent() {
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">
-              Dashboard - Kỹ thuật viên Lab
-            </h1>
-            <p className="text-gray-600 mt-2">Tổng quan công việc</p>
+            <h1 className="text-3xl font-bold">Dashboard - Lab Technician</h1>
+            <p className="text-gray-600 mt-2">Overview of work</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Tổng mẫu</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Total samples
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
@@ -41,7 +41,7 @@ function LabTechnicianDashboardComponent() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Mẫu đang xử lý
+                  Samples being processed
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -52,7 +52,7 @@ function LabTechnicianDashboardComponent() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Mẫu hoàn thành
+                  Completed samples
                 </CardTitle>
               </CardHeader>
               <CardContent>

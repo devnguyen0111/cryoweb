@@ -20,17 +20,17 @@ function ReceptionistPatientsComponent() {
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Quản lý bệnh nhân</h1>
-            <p className="text-gray-600 mt-2">Danh sách bệnh nhân</p>
+            <h1 className="text-3xl font-bold">Patient management</h1>
+            <p className="text-gray-600 mt-2">Patient list</p>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Danh sách bệnh nhân</CardTitle>
+              <CardTitle>Patient list</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-8">Đang tải...</div>
+                <div className="text-center py-8">Loading...</div>
               ) : (
                 <div className="space-y-4">
                   {data?.data && data.data.length > 0 ? (
@@ -38,9 +38,9 @@ function ReceptionistPatientsComponent() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b">
-                            <th className="text-left p-2">Tên</th>
+                            <th className="text-left p-2">Name</th>
                             <th className="text-left p-2">Email</th>
-                            <th className="text-left p-2">Số điện thoại</th>
+                            <th className="text-left p-2">Phone</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -58,7 +58,7 @@ function ReceptionistPatientsComponent() {
                     </div>
                   ) : (
                     <div className="text-center py-8 text-gray-500">
-                      Không có dữ liệu
+                      No data
                     </div>
                   )}
                 </div>

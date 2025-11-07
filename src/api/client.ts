@@ -14,6 +14,7 @@ import {
   ServiceRequestDetailsApi,
   SlotApi,
   TreatmentCycleApi,
+  TreatmentApi,
   CycleDocumentApi,
   RelationshipApi,
 } from "./modules";
@@ -110,6 +111,7 @@ export class ApiClient {
   serviceRequestDetails: ServiceRequestDetailsApi;
   slot: SlotApi;
   treatmentCycle: TreatmentCycleApi;
+  treatment: TreatmentApi;
   cycleDocument: CycleDocumentApi;
   relationship: RelationshipApi;
 
@@ -127,6 +129,7 @@ export class ApiClient {
     this.serviceRequestDetails = new ServiceRequestDetailsApi(client);
     this.slot = new SlotApi(client);
     this.treatmentCycle = new TreatmentCycleApi(client);
+    this.treatment = new TreatmentApi(client);
     this.cycleDocument = new CycleDocumentApi(client);
     this.relationship = new RelationshipApi(client);
   }

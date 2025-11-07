@@ -18,18 +18,18 @@ function UnauthorizedComponent() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">
-            Không có quyền truy cập
+            No access
           </CardTitle>
           <CardDescription className="text-center">
-            Bạn không có quyền truy cập trang này
+            You do not have access to this page
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-center text-gray-600">
-            Vui lòng liên hệ quản trị viên nếu bạn cần quyền truy cập.
+            Please contact the administrator if you need access.
           </p>
           <Link to="/">
-            <Button className="w-full">Về trang chủ</Button>
+            <Button className="w-full">Back to home</Button>
           </Link>
         </CardContent>
       </Card>

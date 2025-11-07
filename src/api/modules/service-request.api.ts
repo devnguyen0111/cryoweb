@@ -20,7 +20,7 @@ export class ServiceRequestApi {
     params?: ServiceRequestListQuery
   ): Promise<DynamicResponse<ServiceRequest>> {
     const response = await this.client.get<DynamicResponse<ServiceRequest>>(
-      "/service-request",
+      "/service-requests",
       { params }
     );
     return response.data;
@@ -34,7 +34,7 @@ export class ServiceRequestApi {
     id: string
   ): Promise<BaseResponse<ServiceRequest>> {
     const response = await this.client.get<BaseResponse<ServiceRequest>>(
-      `/service-request/${id}`
+      `/service-requests/${id}`
     );
     return response.data;
   }
@@ -47,7 +47,7 @@ export class ServiceRequestApi {
     data: Partial<ServiceRequest>
   ): Promise<BaseResponse<ServiceRequest>> {
     const response = await this.client.post<BaseResponse<ServiceRequest>>(
-      "/service-request",
+      "/service-requests",
       data
     );
     return response.data;
@@ -62,7 +62,7 @@ export class ServiceRequestApi {
     data: Partial<ServiceRequest>
   ): Promise<BaseResponse<ServiceRequest>> {
     const response = await this.client.put<BaseResponse<ServiceRequest>>(
-      `/service-request/${id}`,
+      `/service-requests/${id}`,
       data
     );
     return response.data;
@@ -74,7 +74,7 @@ export class ServiceRequestApi {
    */
   async deleteServiceRequest(id: string): Promise<BaseResponse> {
     const response = await this.client.delete<BaseResponse>(
-      `/service-request/${id}`
+      `/service-requests/${id}`
     );
     return response.data;
   }

@@ -25,15 +25,15 @@ function ReceptionistDashboardComponent() {
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Dashboard - Lễ tân</h1>
-            <p className="text-gray-600 mt-2">Tổng quan công việc</p>
+            <h1 className="text-3xl font-bold">Dashboard - Receptionist</h1>
+            <p className="text-gray-600 mt-2">Overview of work</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Cuộc hẹn hôm nay
+                  Appointments today
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -46,7 +46,7 @@ function ReceptionistDashboardComponent() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Tổng bệnh nhân
+                  Total patients
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -59,7 +59,7 @@ function ReceptionistDashboardComponent() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Cuộc hẹn đang chờ
+                  Pending appointments
                 </CardTitle>
               </CardHeader>
               <CardContent>

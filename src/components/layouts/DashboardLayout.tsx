@@ -1,6 +1,6 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { ROLE_NAVIGATION, UserRole } from "@/types/auth";
+import { ROLE_NAVIGATION } from "@/types/auth";
 import { LogOut, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -140,6 +140,99 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
       />
     </svg>
   ),
+  ClipboardList: () => (
+    <svg
+      className="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12h6M9 16h6M9 8h.01M9 20h.01"
+      />
+    </svg>
+  ),
+  Workflow: () => (
+    <svg
+      className="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M8 7a4 4 0 118 0v5a4 4 0 11-8 0V7z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M5 12h14M12 16v5"
+      />
+    </svg>
+  ),
+  Pill: () => (
+    <svg
+      className="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M8.5 8.5l7 7M15 3a5 5 0 017 7l-7 7a5 5 0 11-7-7l7-7z"
+      />
+    </svg>
+  ),
+  Snowflake: () => (
+    <svg
+      className="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 3v18M12 12l6.928-4M12 12l6.928 4M12 12L5.072 8M12 12l-6.928 4"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M6.5 5.5l3 1.732M17.5 5.5l-3 1.732M17.5 18.5l-3-1.732M6.5 18.5l3-1.732"
+      />
+    </svg>
+  ),
+  Clock: () => (
+    <svg
+      className="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  ),
 };
 
 interface DashboardLayoutProps {
@@ -232,7 +325,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               onClick={handleLogout}
             >
               <LogOut className="w-4 h-4 mr-2" />
-              Đăng xuất
+              Log out
             </Button>
           </div>
         </div>

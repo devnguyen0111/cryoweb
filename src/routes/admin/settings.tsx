@@ -13,18 +13,16 @@ function AdminSettingsComponent() {
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Cài đặt</h1>
-            <p className="text-gray-600 mt-2">Cài đặt hệ thống</p>
+            <h1 className="text-3xl font-bold">Settings</h1>
+            <p className="text-gray-600 mt-2">System settings</p>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Cài đặt hệ thống</CardTitle>
+              <CardTitle>System settings</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600">
-                Tính năng cài đặt đang được phát triển...
-              </p>
+              <p className="text-gray-600">Feature is under development...</p>
             </CardContent>
           </Card>
         </div>

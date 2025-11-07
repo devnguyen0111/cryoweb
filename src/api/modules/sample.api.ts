@@ -20,7 +20,7 @@ export class SampleApi {
     params?: SampleListQuery
   ): Promise<DynamicResponse<LabSample>> {
     const response = await this.client.get<DynamicResponse<LabSample>>(
-      "/sample",
+      "/labsample",
       { params }
     );
     return response.data;
@@ -32,7 +32,7 @@ export class SampleApi {
    */
   async getSampleById(id: string): Promise<BaseResponse<LabSample>> {
     const response = await this.client.get<BaseResponse<LabSample>>(
-      `/sample/${id}`
+      `/labsample/${id}`
     );
     return response.data;
   }
@@ -45,7 +45,7 @@ export class SampleApi {
     data: Partial<LabSample>
   ): Promise<BaseResponse<LabSample>> {
     const response = await this.client.post<BaseResponse<LabSample>>(
-      "/sample",
+      "/labsample",
       data
     );
     return response.data;
@@ -60,7 +60,7 @@ export class SampleApi {
     data: Partial<LabSample>
   ): Promise<BaseResponse<LabSample>> {
     const response = await this.client.put<BaseResponse<LabSample>>(
-      `/sample/${id}`,
+      `/labsample/${id}`,
       data
     );
     return response.data;
@@ -71,7 +71,7 @@ export class SampleApi {
    * DELETE /api/sample/{id}
    */
   async deleteSample(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(`/sample/${id}`);
+    const response = await this.client.delete<BaseResponse>(`/labsample/${id}`);
     return response.data;
   }
 }

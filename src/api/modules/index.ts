@@ -16,5 +16,6 @@ export { ServiceRequestApi } from "./service-request.api";
 export { ServiceRequestDetailsApi } from "./service-request-details.api";
 export { SlotApi } from "./slot.api";
 export { TreatmentCycleApi } from "./treatment-cycle.api";
+export { TreatmentApi } from "./treatment.api";
 export { CycleDocumentApi } from "./cycle-document.api";
 export { RelationshipApi } from "./relationship.api";

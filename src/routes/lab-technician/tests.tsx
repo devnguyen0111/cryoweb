@@ -13,16 +13,16 @@ function LabTechnicianTestsComponent() {
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Xét nghiệm</h1>
-            <p className="text-gray-600 mt-2">Quản lý xét nghiệm</p>
+            <h1 className="text-3xl font-bold">Test management</h1>
+            <p className="text-gray-600 mt-2">Test list</p>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Danh sách xét nghiệm</CardTitle>
+              <CardTitle>Test list</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600">Tính năng đang được phát triển...</p>
+              <p className="text-gray-600">Feature is under development...</p>
             </CardContent>
           </Card>
         </div>

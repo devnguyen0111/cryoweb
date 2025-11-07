@@ -53,14 +53,14 @@ function LoginComponent() {
 
     try {
       await login(email, password);
-      toast.success("Đăng nhập thành công!");
+      toast.success("Login successful!");
       // Redirect to home, which will redirect to appropriate dashboard
       navigate({ to: "/" });
     } catch (error: any) {
       const errorMessage =
         error?.response?.data?.message ||
         error?.message ||
-        "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.";
+        "Login failed. Please check your information.";
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -93,7 +93,7 @@ function LoginComponent() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Mật khẩu</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -104,7 +104,7 @@ function LoginComponent() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Đang đăng nhập..." : "Đăng nhập"}
+              {isLoading ? "Logging in..." : "Login"}
             </Button>
           </form>
         </CardContent>

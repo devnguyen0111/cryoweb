@@ -4,6 +4,9 @@ import type {
   DynamicResponse,
   TreatmentCycle,
   TreatmentCycleListQuery,
+  StartTreatmentCycleRequest,
+  CompleteTreatmentCycleRequest,
+  CancelTreatmentCycleRequest,
 } from "../types";
 
 /**
@@ -20,7 +23,7 @@ export class TreatmentCycleApi {
     params?: TreatmentCycleListQuery
   ): Promise<DynamicResponse<TreatmentCycle>> {
     const response = await this.client.get<DynamicResponse<TreatmentCycle>>(
-      "/treatment-cycle",
+      "/treatment-cycles",
       { params }
     );
     return response.data;
@@ -34,7 +37,7 @@ export class TreatmentCycleApi {
     id: string
   ): Promise<BaseResponse<TreatmentCycle>> {
     const response = await this.client.get<BaseResponse<TreatmentCycle>>(
-      `/treatment-cycle/${id}`
+      `/treatment-cycles/${id}`
     );
     return response.data;
   }
@@ -47,7 +50,7 @@ export class TreatmentCycleApi {
     data: Partial<TreatmentCycle>
   ): Promise<BaseResponse<TreatmentCycle>> {
     const response = await this.client.post<BaseResponse<TreatmentCycle>>(
-      "/treatment-cycle",
+      "/treatment-cycles",
       data
     );
     return response.data;
@@ -62,7 +65,7 @@ export class TreatmentCycleApi {
     data: Partial<TreatmentCycle>
   ): Promise<BaseResponse<TreatmentCycle>> {
     const response = await this.client.put<BaseResponse<TreatmentCycle>>(
-      `/treatment-cycle/${id}`,
+      `/treatment-cycles/${id}`,
       data
     );
     return response.data;
@@ -74,7 +77,52 @@ export class TreatmentCycleApi {
    */
   async deleteTreatmentCycle(id: string): Promise<BaseResponse> {
     const response = await this.client.delete<BaseResponse>(
-      `/treatment-cycle/${id}`
+      `/treatment-cycles/${id}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Start treatment cycle
+   * POST /api/treatment-cycles/{id}/start
+   */
+  async startTreatmentCycle(
+    id: string,
+    data?: StartTreatmentCycleRequest
+  ): Promise<BaseResponse<TreatmentCycle>> {
+    const response = await this.client.post<BaseResponse<TreatmentCycle>>(
+      `/treatment-cycles/${id}/start`,
+      data
+    );
+    return response.data;
+  }
+
+  /**
+   * Complete treatment cycle
+   * POST /api/treatment-cycles/{id}/complete
+   */
+  async completeTreatmentCycle(
+    id: string,
+    data: CompleteTreatmentCycleRequest
+  ): Promise<BaseResponse<TreatmentCycle>> {
+    const response = await this.client.post<BaseResponse<TreatmentCycle>>(
+      `/treatment-cycles/${id}/complete`,
+      data
+    );
+    return response.data;
+  }
+
+  /**
+   * Cancel treatment cycle
+   * POST /api/treatment-cycles/{id}/cancel
+   */
+  async cancelTreatmentCycle(
+    id: string,
+    data: CancelTreatmentCycleRequest
+  ): Promise<BaseResponse<TreatmentCycle>> {
+    const response = await this.client.post<BaseResponse<TreatmentCycle>>(
+      `/treatment-cycles/${id}/cancel`,
+      data
     );
     return response.data;
   }

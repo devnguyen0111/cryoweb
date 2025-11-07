@@ -10,14 +10,13 @@ export interface BaseResponse<T = any> {
   success?: boolean;
 }
 
-export interface DynamicResponse<T = any> extends BaseResponse<T> {
+export interface DynamicResponse<T = any> extends BaseResponse<T[]> {
   metaData?: {
     page?: number;
     size?: number;
     total?: number;
     totalPages?: number;
   };
-  data?: T[];
 }
 
 /**
@@ -218,18 +217,24 @@ export interface DoctorListQuery {
   Status?: string;
   Sort?: string;
   Order?: "asc" | "desc";
+  AccountId?: string;
 }
 
 export interface DoctorStatistics {
-  totalPatients?: number;
-  totalAppointments?: number;
-  completedAppointments?: number;
-  cancelledAppointments?: number;
-  upcomingAppointments?: number;
-  totalPrescriptions?: number;
-  totalLabTests?: number;
-  averageRating?: number;
-  totalReviews?: number;
+  totalDoctors?: number;
+  activeDoctors?: number;
+  inactiveDoctors?: number;
+  totalSchedulesToday?: number;
+  totalSlotsToday?: number;
+  bookedSlotsToday?: number;
+  availableSlotsToday?: number;
+  specialties?: SpecialtyStatistic[];
+}
+
+export interface SpecialtyStatistic {
+  specialty?: string;
+  doctorCount?: number;
+  averageExperience?: number;
 }
 
 /**
@@ -270,6 +275,7 @@ export interface ServiceListQuery {
 export interface ServiceRequest {
   id: string;
   patientId?: string;
+  appointmentId?: string;
   serviceId?: string;
   status?: string;
   requestedDate?: string;
@@ -325,6 +331,8 @@ export interface SlotListQuery {
 export interface DoctorSchedule {
   id: string;
   doctorId?: string;
+  slotId?: string;
+  slot?: TimeSlot;
   workDate?: string;
   startTime?: string;
   endTime?: string;
@@ -366,6 +374,67 @@ export interface TreatmentCycleListQuery {
   PatientId?: string;
   Status?: string;
   SearchTerm?: string;
+}
+
+export interface StartTreatmentCycleRequest {
+  startDate?: string;
+  notes?: string;
+}
+
+export interface CompleteTreatmentCycleRequest {
+  endDate?: string;
+  outcome: string;
+  notes?: string;
+}
+
+export interface CancelTreatmentCycleRequest {
+  reason: string;
+  notes?: string;
+}
+
+/**
+ * Treatment Types
+ */
+export type TreatmentTypeEnum = "IVF" | "IUI" | "Consultation" | "Other";
+
+export type TreatmentStatusEnum =
+  | "Planned"
+  | "InProgress"
+  | "Completed"
+  | "Cancelled"
+  | "OnHold"
+  | "Failed";
+
+export interface Treatment {
+  id: string;
+  patientId?: string;
+  doctorId?: string;
+  treatmentName?: string;
+  treatmentType?: TreatmentTypeEnum;
+  status?: TreatmentStatusEnum;
+  diagnosis?: string;
+  goals?: string;
+  notes?: string;
+  estimatedCost?: number;
+  actualCost?: number;
+  startDate?: string;
+  endDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TreatmentListQuery {
+  Page?: number;
+  Size?: number;
+  PatientId?: string;
+  DoctorId?: string;
+  TreatmentType?: TreatmentTypeEnum;
+  Status?: TreatmentStatusEnum;
+  SearchTerm?: string;
+  StartDateFrom?: string;
+  StartDateTo?: string;
+  Sort?: string;
+  Order?: "asc" | "desc";
 }
 
 /**

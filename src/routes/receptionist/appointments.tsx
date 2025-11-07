@@ -20,17 +20,17 @@ function ReceptionistAppointmentsComponent() {
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Quản lý cuộc hẹn</h1>
-            <p className="text-gray-600 mt-2">Danh sách cuộc hẹn</p>
+            <h1 className="text-3xl font-bold">Appointment management</h1>
+            <p className="text-gray-600 mt-2">Appointment list</p>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Danh sách cuộc hẹn</CardTitle>
+              <CardTitle>Appointment list</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-8">Đang tải...</div>
+                <div className="text-center py-8">Loading...</div>
               ) : (
                 <div className="space-y-4">
                   {data?.data && data.data.length > 0 ? (
@@ -38,10 +38,10 @@ function ReceptionistAppointmentsComponent() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b">
-                            <th className="text-left p-2">Tiêu đề</th>
-                            <th className="text-left p-2">Ngày</th>
-                            <th className="text-left p-2">Thời gian</th>
-                            <th className="text-left p-2">Trạng thái</th>
+                            <th className="text-left p-2">Title</th>
+                            <th className="text-left p-2">Date</th>
+                            <th className="text-left p-2">Time</th>
+                            <th className="text-left p-2">Status</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -62,7 +62,7 @@ function ReceptionistAppointmentsComponent() {
                     </div>
                   ) : (
                     <div className="text-center py-8 text-gray-500">
-                      Không có dữ liệu
+                      No data
                     </div>
                   )}
                 </div>

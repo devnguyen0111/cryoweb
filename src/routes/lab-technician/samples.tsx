@@ -20,17 +20,17 @@ function LabTechnicianSamplesComponent() {
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Quản lý mẫu</h1>
-            <p className="text-gray-600 mt-2">Danh sách mẫu xét nghiệm</p>
+            <h1 className="text-3xl font-bold">Sample management</h1>
+            <p className="text-gray-600 mt-2">Sample list</p>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Danh sách mẫu</CardTitle>
+              <CardTitle>Sample list</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-8">Đang tải...</div>
+                <div className="text-center py-8">Loading...</div>
               ) : (
                 <div className="space-y-4">
                   {data?.data && data.data.length > 0 ? (
@@ -39,9 +39,9 @@ function LabTechnicianSamplesComponent() {
                         <thead>
                           <tr className="border-b">
                             <th className="text-left p-2">ID</th>
-                            <th className="text-left p-2">Loại mẫu</th>
-                            <th className="text-left p-2">Ngày thu thập</th>
-                            <th className="text-left p-2">Trạng thái</th>
+                            <th className="text-left p-2">Sample type</th>
+                            <th className="text-left p-2">Collection date</th>
+                            <th className="text-left p-2">Status</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -58,7 +58,7 @@ function LabTechnicianSamplesComponent() {
                     </div>
                   ) : (
                     <div className="text-center py-8 text-gray-500">
-                      Không có dữ liệu
+                      No data
                     </div>
                   )}
                 </div>

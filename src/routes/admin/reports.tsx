@@ -13,18 +13,16 @@ function AdminReportsComponent() {
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Báo cáo</h1>
-            <p className="text-gray-600 mt-2">Báo cáo và thống kê hệ thống</p>
+            <h1 className="text-3xl font-bold">Reports</h1>
+            <p className="text-gray-600 mt-2">Reports and system statistics</p>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Báo cáo hệ thống</CardTitle>
+              <CardTitle>System reports</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600">
-                Tính năng báo cáo đang được phát triển...
-              </p>
+              <p className="text-gray-600">Feature is under development...</p>
             </CardContent>
           </Card>
         </div>

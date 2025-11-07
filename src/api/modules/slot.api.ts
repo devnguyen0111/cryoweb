@@ -17,9 +17,12 @@ export class SlotApi {
    * GET /api/slot
    */
   async getSlots(params?: SlotListQuery): Promise<DynamicResponse<TimeSlot>> {
-    const response = await this.client.get<DynamicResponse<TimeSlot>>("/slot", {
-      params,
-    });
+    const response = await this.client.get<DynamicResponse<TimeSlot>>(
+      "/slots",
+      {
+        params,
+      }
+    );
     return response.data;
   }
 
@@ -29,7 +32,7 @@ export class SlotApi {
    */
   async getSlotById(id: string): Promise<BaseResponse<TimeSlot>> {
     const response = await this.client.get<BaseResponse<TimeSlot>>(
-      `/slot/${id}`
+      `/slots/${id}`
     );
     return response.data;
   }
@@ -40,7 +43,7 @@ export class SlotApi {
    */
   async createSlot(data: Partial<TimeSlot>): Promise<BaseResponse<TimeSlot>> {
     const response = await this.client.post<BaseResponse<TimeSlot>>(
-      "/slot",
+      "/slots",
       data
     );
     return response.data;
@@ -55,7 +58,7 @@ export class SlotApi {
     data: Partial<TimeSlot>
   ): Promise<BaseResponse<TimeSlot>> {
     const response = await this.client.put<BaseResponse<TimeSlot>>(
-      `/slot/${id}`,
+      `/slots/${id}`,
       data
     );
     return response.data;
@@ -66,7 +69,7 @@ export class SlotApi {
    * DELETE /api/slot/{id}
    */
   async deleteSlot(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(`/slot/${id}`);
+    const response = await this.client.delete<BaseResponse>(`/slots/${id}`);
     return response.data;
   }
 
@@ -77,11 +80,17 @@ export class SlotApi {
   async generateSlots(
     scheduleId: string,
     startDate: string,
-    endDate: string
+    endDate: string,
+    slotDuration = 30
   ): Promise<BaseResponse<TimeSlot[]>> {
     const response = await this.client.post<BaseResponse<TimeSlot[]>>(
-      "/slot/generate",
-      { scheduleId, startDate, endDate }
+      `/slots/schedule/${scheduleId}/generate`,
+      { startDate, endDate },
+      {
+        params: {
+          slotDuration,
+        },
+      }
     );
     return response.data;
   }

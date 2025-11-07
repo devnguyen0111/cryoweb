@@ -20,19 +20,17 @@ function AdminUsersComponent() {
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Quản lý người dùng</h1>
-            <p className="text-gray-600 mt-2">
-              Danh sách tất cả người dùng hệ thống
-            </p>
+            <h1 className="text-3xl font-bold">User management</h1>
+            <p className="text-gray-600 mt-2">User list</p>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Danh sách người dùng</CardTitle>
+              <CardTitle>User list</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-8">Đang tải...</div>
+                <div className="text-center py-8">Loading...</div>
               ) : (
                 <div className="space-y-4">
                   {data?.data && data.data.length > 0 ? (
@@ -40,10 +38,10 @@ function AdminUsersComponent() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b">
-                            <th className="text-left p-2">Tên</th>
+                            <th className="text-left p-2">Name</th>
                             <th className="text-left p-2">Email</th>
-                            <th className="text-left p-2">Vai trò</th>
-                            <th className="text-left p-2">Trạng thái</th>
+                            <th className="text-left p-2">Role</th>
+                            <th className="text-left p-2">Status</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -55,7 +53,7 @@ function AdminUsersComponent() {
                               <td className="p-2">{user.email}</td>
                               <td className="p-2">{user.roleName}</td>
                               <td className="p-2">
-                                {user.status ? "Hoạt động" : "Không hoạt động"}
+                                {user.status ? "Active" : "Inactive"}
                               </td>
                             </tr>
                           ))}
@@ -64,7 +62,7 @@ function AdminUsersComponent() {
                     </div>
                   ) : (
                     <div className="text-center py-8 text-gray-500">
-                      Không có dữ liệu
+                      No data
                     </div>
                   )}
                 </div>

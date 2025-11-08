@@ -1,12 +1,47 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
+import type { DynamicResponse, TreatmentCycle } from "@/api/types";
+import { cn } from "@/utils/cn";
+
+const emptyCycleResponse: DynamicResponse<TreatmentCycle> = {
+  data: [],
+  metaData: { page: 1, size: 0, total: 0, totalPages: 0 },
+};
+
+const bloodTypeOptions = [
+  "",
+  "A+",
+  "A-",
+  "B+",
+  "B-",
+  "AB+",
+  "AB-",
+  "O+",
+  "O-",
+] as const;
+
+const formatDate = (value?: string | null) => {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
 
 export const Route = createFileRoute("/doctor/patients")({
   component: DoctorPatientsComponent,
@@ -15,80 +50,299 @@ export const Route = createFileRoute("/doctor/patients")({
 
 function DoctorPatientsComponent() {
   const { q } = Route.useSearch();
+  const navigate = useNavigate();
+
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [searchTerm, setSearchTerm] = useState(q ?? "");
-  const [genderFilter, setGenderFilter] = useState<string>("");
-  const [treatmentFilter, setTreatmentFilter] = useState<string>("");
-  const navigate = useNavigate();
+  const [bloodTypeFilter, setBloodTypeFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
+    null
+  );
 
   const filters = useMemo(
-    () => ({ searchTerm, genderFilter, treatmentFilter, page }),
-    [searchTerm, genderFilter, treatmentFilter, page]
+    () => ({ searchTerm, bloodTypeFilter, statusFilter, page }),
+    [searchTerm, bloodTypeFilter, statusFilter, page]
   );
 
   const { data, isFetching } = useQuery({
     queryKey: ["doctor", "patients", filters],
-    queryFn: () =>
-      api.patient.getPatients({
+    queryFn: async () => {
+      const response = await api.patient.getPatients({
         SearchTerm: searchTerm || undefined,
+        BloodType: bloodTypeFilter || undefined,
+        IsActive:
+          statusFilter === ""
+            ? undefined
+            : statusFilter === "active"
+              ? true
+              : false,
         Page: page,
         Size: pageSize,
-        // Gender and treatment filter are placeholders waiting for backend support
-      }),
+      });
+
+      if (!response?.data) {
+        return {
+          ...response,
+          data: [],
+        };
+      }
+
+      return response;
+    },
   });
 
-  const total = data?.metaData?.total ?? 0;
+  const patients = data?.data ?? [];
+  const total = data?.metaData?.total ?? patients.length;
   const totalPages = data?.metaData?.totalPages ?? 1;
+
+  useEffect(() => {
+    if (!patients.length) {
+      setSelectedPatientId(null);
+      return;
+    }
+    setSelectedPatientId((current) => {
+      if (current && patients.some((patient) => patient.id === current)) {
+        return current;
+      }
+      return patients[0]?.id ?? null;
+    });
+  }, [patients]);
+
+  const cycleSnapshots = useQueries({
+    queries: patients.map((patient) => ({
+      queryKey: ["doctor", "patients", patient.id, "cycle-snapshot"],
+      enabled: Boolean(patient.id),
+      retry: false,
+      queryFn: async () => {
+        if (!patient.id) {
+          return emptyCycleResponse;
+        }
+        try {
+          return (
+            (await api.treatmentCycle.getTreatmentCycles({
+              PatientId: patient.id,
+            })) ?? emptyCycleResponse
+          );
+        } catch (error) {
+          if (
+            isAxiosError(error) &&
+            (error.response?.status === 404 ||
+              error.response?.status === 400 ||
+              error.response?.status === 500)
+          ) {
+            console.warn(
+              "[DoctorPatients] Unable to load cycle snapshot",
+              patient.id,
+              error.response?.status
+            );
+            return emptyCycleResponse;
+          }
+          throw error;
+        }
+      },
+    })),
+  });
+
+  const treatmentStatusByPatient = new Map<string, string>();
+  cycleSnapshots.forEach((query, index) => {
+    const patient = patients[index];
+    if (!patient) {
+      return;
+    }
+    const cycles = (query.data?.data ?? []) as TreatmentCycle[];
+    const activeCycle =
+      cycles.find((cycle) =>
+        (cycle.status ?? "")
+          .toLowerCase()
+          .match(/active|in-progress|ongoing|processing/)
+      ) ?? cycles[0];
+
+    if (activeCycle?.treatmentType) {
+      treatmentStatusByPatient.set(patient.id, activeCycle.treatmentType);
+    } else if (patient.treatmentCount && patient.treatmentCount > 0) {
+      treatmentStatusByPatient.set(patient.id, "In follow-up");
+    }
+  });
+
+  const selectedPatient = useMemo(
+    () => patients.find((patient) => patient.id === selectedPatientId) ?? null,
+    [patients, selectedPatientId]
+  );
+
+  const {
+    data: selectedPatientCycles = emptyCycleResponse,
+    isFetching: selectedPatientCyclesLoading,
+  } = useQuery({
+    queryKey: ["doctor", "patients", selectedPatientId, "cycles", pageSize],
+    enabled: Boolean(selectedPatientId),
+    retry: false,
+    queryFn: async () => {
+      if (!selectedPatientId) {
+        return emptyCycleResponse;
+      }
+      try {
+        return (
+          (await api.treatmentCycle.getTreatmentCycles({
+            PatientId: selectedPatientId,
+          })) ?? emptyCycleResponse
+        );
+      } catch (error) {
+        if (
+          isAxiosError(error) &&
+          (error.response?.status === 404 ||
+            error.response?.status === 400 ||
+            error.response?.status === 500)
+        ) {
+          console.warn(
+            "[DoctorPatients] Unable to load treatment cycles",
+            selectedPatientId,
+            error.response?.status
+          );
+          return emptyCycleResponse;
+        }
+        throw error;
+      }
+    },
+  });
+
+  const orderedCycles = useMemo(() => {
+    return [...(selectedPatientCycles.data ?? [])].sort((a, b) => {
+      const aTime = new Date(a.startDate ?? "").getTime();
+      const bTime = new Date(b.startDate ?? "").getTime();
+      if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+        return (
+          (b.createdAt ? new Date(b.createdAt).getTime() : 0) -
+          (a.createdAt ? new Date(a.createdAt).getTime() : 0)
+        );
+      }
+      return bTime - aTime;
+    });
+  }, [selectedPatientCycles.data]);
+
+  const activeCycle =
+    orderedCycles.find((cycle) =>
+      (cycle.status ?? "")
+        .toLowerCase()
+        .match(/active|in-progress|ongoing|processing/)
+    ) ?? orderedCycles[0];
+
+  const careStatus = selectedPatient
+    ? activeCycle?.treatmentType
+      ? activeCycle.treatmentType
+      : selectedPatient.treatmentCount
+        ? "In follow-up"
+        : "Not started"
+    : "No patient selected";
+
+  const completedCycles = orderedCycles.filter((cycle) =>
+    (cycle.status ?? "").toLowerCase().match(/completed|done|success/)
+  ).length;
+
+  const quickStats = selectedPatient
+    ? [
+        { label: "Current treatment", value: careStatus },
+        {
+          label: "Total treatment cycles",
+          value: orderedCycles.length,
+        },
+        {
+          label: "Completed cycles",
+          value: completedCycles,
+        },
+        {
+          label: "Relationships on file",
+          value: selectedPatient.relationshipCount ?? 0,
+        },
+      ]
+    : [];
 
   const resetFilters = () => {
     setSearchTerm("");
-    setGenderFilter("");
-    setTreatmentFilter("");
+    setBloodTypeFilter("");
+    setStatusFilter("");
     setPage(1);
+  };
+
+  const getAccountStatus = (patient: (typeof patients)[number]) => {
+    const isActive = patient.isActive ?? patient.accountInfo?.isActive ?? false;
+    return {
+      label: isActive ? "Active" : "Inactive",
+      tone: isActive ? "text-emerald-600" : "text-gray-500",
+    };
+  };
+
+  const handleOpenPatientDetail = (patientId?: string | null) => {
+    if (!patientId) {
+      console.warn("[DoctorPatients] Cannot open profile without patientId");
+      return;
+    }
+    console.log("[DoctorPatients] Navigate to patient profile", patientId);
+    navigate({
+      to: "/doctor/patients/$patientId",
+      params: { patientId },
+    }).catch((error) => {
+      console.error("[DoctorPatients] Failed to navigate", error);
+    });
   };
 
   return (
     <ProtectedRoute allowedRoles={["Doctor"]}>
       <DashboardLayout>
         <div className="space-y-8">
-          <section className="flex flex-col gap-2">
-            <h1 className="text-3xl font-bold">Patient directory</h1>
-            <p className="text-gray-600">
-              Quickly access patient charts, encounter history, and treatment
-              cycles.
-            </p>
-          </section>
+          <header className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Patient Directory
+              </h1>
+              <p className="mt-1 text-sm text-gray-600">
+                Review demographics, treatment status, and jump straight into
+                encounters or prescriptions.
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+              <p>
+                Showing <strong>{patients.length}</strong> of{" "}
+                <strong>{total}</strong> patients
+              </p>
+              <p className="text-xs text-gray-500">
+                Page {page} of {totalPages}
+              </p>
+            </div>
+          </header>
 
           <Card>
-            <CardHeader className="space-y-4">
+            <CardHeader>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <CardTitle>Search filters</CardTitle>
                   <p className="text-sm text-gray-500">
-                    Results: {total} patients - Page {page}/{totalPages}
+                    Narrow the list using patient identifiers, blood type and
+                    account status.
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button variant="outline" onClick={resetFilters}>
-                    Clear filters
+                    Reset filters
                   </Button>
                   <Button
                     onClick={() => navigate({ to: "/doctor/treatment-cycles" })}
                   >
-                    View treatment cycles
+                    Manage treatment cycles
                   </Button>
                 </div>
               </div>
-
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <div className="space-y-2 xl:col-span-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Search by name, email, or patient ID
+                    Search by patient code, national ID, phone or email
                   </label>
                   <Input
-                    placeholder="Ex: Jane Doe, 0987..."
                     value={searchTerm}
+                    placeholder="e.g. PAT001, 090..., patient@cryo.com"
                     onChange={(event) => {
                       setSearchTerm(event.target.value);
                       setPage(1);
@@ -97,140 +351,372 @@ function DoctorPatientsComponent() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Gender
+                    Blood type
                   </label>
                   <select
-                    value={genderFilter}
-                    onChange={(event) => setGenderFilter(event.target.value)}
+                    value={bloodTypeFilter}
+                    onChange={(event) => {
+                      setBloodTypeFilter(event.target.value);
+                      setPage(1);
+                    }}
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
-                    <option value="">All</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
+                    {bloodTypeOptions.map((value) => (
+                      <option key={value || "all"} value={value}>
+                        {value ? value : "All blood types"}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Treatment status
+                    Account status
                   </label>
                   <select
-                    value={treatmentFilter}
-                    onChange={(event) => setTreatmentFilter(event.target.value)}
+                    value={statusFilter}
+                    onChange={(event) => {
+                      setStatusFilter(event.target.value);
+                      setPage(1);
+                    }}
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
-                    <option value="">All</option>
-                    <option value="iui">IUI in progress</option>
-                    <option value="ivf">IVF in progress</option>
-                    <option value="follow-up">Post-treatment follow-up</option>
+                    <option value="">All statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
                   </select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {isFetching ? (
-                <div className="py-12 text-center text-gray-500">
-                  Loading data...
-                </div>
-              ) : data?.data?.length ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 text-left text-gray-600">
-                        <th className="px-4 py-3 font-medium">Patient</th>
-                        <th className="px-4 py-3 font-medium">Contact</th>
-                        <th className="px-4 py-3 font-medium">Date of birth</th>
-                        <th className="px-4 py-3 font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {data.data.map((patient) => (
-                        <tr key={patient.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 font-medium text-gray-900">
-                            {[patient.firstName, patient.lastName]
-                              .filter(Boolean)
-                              .join(" ") || "Not updated"}
-                            <p className="text-xs text-gray-500">
-                              #{patient.id}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3 text-gray-600">
-                            <div>{patient.email || "-"}</div>
-                            <div className="text-xs">
-                              {patient.phone || "-"}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-gray-600">
-                            {patient.dateOfBirth || "-"}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  navigate({
-                                    to: "/doctor/patients/$patientId",
-                                    params: { patientId: patient.id },
-                                  })
-                                }
-                              >
-                                View profile
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  navigate({
-                                    to: "/doctor/encounters/create",
-                                    search: { patientId: patient.id },
-                                  })
-                                }
-                              >
-                                Create encounter
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="py-12 text-center text-gray-500">
-                  No patients match the filters.
-                </div>
-              )}
-
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-500">
-                  Showing {data?.data?.length ?? 0} of {total} patients
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-gray-600">
-                    Page {page}/{totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() =>
-                      setPage((prev) => Math.min(totalPages, prev + 1))
-                    }
-                  >
-                    Next
-                  </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          <section className="grid gap-6 xl:grid-cols-[1.4fr,1fr]">
+            <Card>
+              <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle>Patient list</CardTitle>
+                  <p className="text-sm text-gray-500">
+                    Select a patient to review their care summary on the right.
+                  </p>
+                </div>
+                <div className="text-sm text-gray-500">
+                  Total patients: {total}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {isFetching ? (
+                  <div className="py-10 text-center text-gray-500">
+                    Loading patients...
+                  </div>
+                ) : patients.length ? (
+                  <div className="space-y-3">
+                    {patients.map((patient, index) => {
+                      const displayName =
+                        patient.accountInfo?.username ||
+                        patient.patientCode ||
+                        "Unnamed patient";
+                      const email =
+                        patient.accountInfo?.email || "Email not provided";
+                      const phone =
+                        patient.accountInfo?.phone || "Phone not provided";
+                      const treatmentLabel =
+                        treatmentStatusByPatient.get(patient.id) ??
+                        (patient.treatmentCount && patient.treatmentCount > 0
+                          ? "In follow-up"
+                          : "Not started");
+                      const queryState = cycleSnapshots[index];
+                      const treatmentLoading = queryState?.isFetching;
+                      const { label: statusLabel, tone } =
+                        getAccountStatus(patient);
+
+                      return (
+                        <button
+                          key={patient.id}
+                          type="button"
+                          onClick={() => setSelectedPatientId(patient.id)}
+                          className={cn(
+                            "w-full rounded-lg border p-4 text-left transition hover:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/40",
+                            selectedPatientId === patient.id
+                              ? "border-primary bg-primary/5 shadow"
+                              : "border-gray-200"
+                          )}
+                        >
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="space-y-1">
+                              <p className="text-base font-semibold text-gray-900">
+                                {displayName}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Patient code: {patient.patientCode ?? "—"}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Account ID: {patient.accountId ?? "—"}
+                              </p>
+                            </div>
+                            <span className={cn("text-sm font-medium", tone)}>
+                              {statusLabel}
+                            </span>
+                          </div>
+
+                          <div className="mt-3 grid gap-2 text-sm text-gray-600 md:grid-cols-3">
+                            <div>
+                              <p className="text-xs uppercase text-gray-500">
+                                Contact
+                              </p>
+                              <p>{email}</p>
+                              <p>{phone}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase text-gray-500">
+                                Treatment status
+                              </p>
+                              <p>
+                                {treatmentLoading
+                                  ? "Loading..."
+                                  : treatmentLabel}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Total cycles: {patient.treatmentCount ?? 0}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase text-gray-500">
+                                Additional info
+                              </p>
+                              <p>Blood type: {patient.bloodType || "N/A"}</p>
+                              <p>Lab samples: {patient.labSampleCount ?? 0}</p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-10 text-center text-gray-500">
+                    No patients match the current filters.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-primary/20 shadow-sm">
+              <CardHeader>
+                <CardTitle>Care summary</CardTitle>
+                <p className="text-sm text-gray-500">
+                  Key indicators and quick actions for the selected patient.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {selectedPatient ? (
+                  <>
+                    <div className="flex flex-col gap-2">
+                      <h2 className="text-xl font-semibold text-gray-900">
+                        {selectedPatient.accountInfo?.username ||
+                          selectedPatient.patientCode ||
+                          "Unnamed patient"}
+                      </h2>
+                      <p className="text-sm text-gray-600">
+                        Account ID: {selectedPatient.accountId ?? "—"}
+                      </p>
+                      <div className="flex flex-wrap gap-2 text-xs font-medium">
+                        <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">
+                          {careStatus}
+                        </span>
+                        <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-600">
+                          {getAccountStatus(selectedPatient).label}
+                        </span>
+                      </div>
+                    </div>
+
+                    {quickStats.length ? (
+                      <div className="grid gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+                        {quickStats.map((stat) => (
+                          <div
+                            key={stat.label}
+                            className="flex items-center justify-between"
+                          >
+                            <span className="text-gray-500">{stat.label}</span>
+                            <span className="font-semibold text-gray-900">
+                              {stat.value}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <section className="space-y-3 text-sm text-gray-700">
+                      <p className="text-sm font-semibold text-gray-900">
+                        Contact details
+                      </p>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <div>
+                          <p className="text-gray-500">Email</p>
+                          <p>
+                            {selectedPatient.accountInfo?.email ||
+                              "Not provided"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Phone</p>
+                          <p>
+                            {selectedPatient.accountInfo?.phone ||
+                              "Not provided"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Emergency contact</p>
+                          <p>
+                            {selectedPatient.emergencyContact || "Not provided"}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {selectedPatient.emergencyPhone || "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Insurance</p>
+                          <p>{selectedPatient.insurance || "Not recorded"}</p>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-gray-900">
+                          Latest treatment activity
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          type="button"
+                          onClick={() =>
+                            navigate({
+                              to: "/doctor/treatment-cycles",
+                              search: { patientId: selectedPatient.id },
+                            })
+                          }
+                        >
+                          View treatment cycles
+                        </Button>
+                      </div>
+                      {selectedPatientCyclesLoading ? (
+                        <p className="text-sm text-gray-500">
+                          Loading treatment cycles...
+                        </p>
+                      ) : orderedCycles.length ? (
+                        <div className="space-y-2">
+                          {orderedCycles.slice(0, 3).map((cycle) => (
+                            <div
+                              key={cycle.id}
+                              className="rounded-md border border-gray-200 p-3 text-sm text-gray-700"
+                            >
+                              <div className="flex items-center justify-between">
+                                <p className="font-semibold text-gray-900">
+                                  {cycle.treatmentType || "Treatment cycle"}
+                                </p>
+                                <span className="text-xs font-medium uppercase text-primary">
+                                  {cycle.status || "In progress"}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-500">
+                                {formatDate(cycle.startDate)} →{" "}
+                                {formatDate(cycle.endDate)}
+                              </p>
+                              {cycle.notes ? (
+                                <p className="mt-1 text-xs text-gray-600">
+                                  {cycle.notes}
+                                </p>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">
+                          No treatment cycles recorded yet.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="space-y-3">
+                      <p className="text-sm font-semibold text-gray-900">
+                        Quick actions
+                      </p>
+                      <div className="grid gap-2">
+                        <Button
+                          variant="outline"
+                          type="button"
+                          onClick={() =>
+                            handleOpenPatientDetail(selectedPatient.id)
+                          }
+                        >
+                          View full patient record
+                        </Button>
+                        <Button
+                          variant="outline"
+                          type="button"
+                          onClick={() =>
+                            navigate({
+                              to: "/doctor/encounters/create",
+                              search: {
+                                patientId: selectedPatient.id,
+                                accountId:
+                                  selectedPatient.accountId ?? undefined,
+                              } as any,
+                            })
+                          }
+                        >
+                          Create encounter
+                        </Button>
+                        <Button
+                          variant="outline"
+                          type="button"
+                          onClick={() =>
+                            navigate({
+                              to: "/doctor/prescriptions",
+                              search: { patientId: selectedPatient.id },
+                            })
+                          }
+                        >
+                          Order prescription or service
+                        </Button>
+                      </div>
+                    </section>
+                  </>
+                ) : (
+                  <div className="py-10 text-center text-gray-500">
+                    Select a patient to see their care summary.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </section>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-500">
+              Displaying {patients.length} of {total} patients
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-gray-600">
+                Page {page} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() =>
+                  setPage((prev) => Math.min(totalPages, prev + 1))
+                }
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

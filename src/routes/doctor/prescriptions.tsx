@@ -38,6 +38,12 @@ const createEmptyResponse = <T,>(): DynamicResponse<T> => ({
   metaData: { total: 0, page: 1, size: 0, totalPages: 0 },
 });
 
+const usdFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+});
+
 export const Route = createFileRoute("/doctor/prescriptions")({
   component: DoctorPrescriptionComponent,
   validateSearch: (search: { patientId?: string } = {}) => search,
@@ -414,7 +420,7 @@ function DoctorPrescriptionComponent() {
                           <option key={service.id} value={service.id}>
                             {service.name}
                             {service.price
-                              ? ` - ${service.price.toLocaleString()} VND`
+                              ? ` - ${usdFormatter.format(service.price)}`
                               : ""}
                           </option>
                         ))}

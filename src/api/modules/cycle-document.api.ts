@@ -14,41 +14,41 @@ export class CycleDocumentApi {
 
   /**
    * Get list of cycle documents
-   * GET /api/treatment-cycle/{treatmentCycleId}/documents
+   * GET /api/treatment-cycles/{treatmentCycleId}/documents
    */
   async getCycleDocuments(
     treatmentCycleId: string
   ): Promise<DynamicResponse<CycleDocument>> {
     const response = await this.client.get<DynamicResponse<CycleDocument>>(
-      `/treatment-cycle/${treatmentCycleId}/documents`
+      `/treatment-cycles/${treatmentCycleId}/documents`
     );
     return response.data;
   }
 
   /**
    * Get cycle document by ID
-   * GET /api/treatment-cycle/{treatmentCycleId}/documents/{id}
+   * GET /api/treatment-cycles/{treatmentCycleId}/documents/{id}
    */
   async getCycleDocumentById(
     treatmentCycleId: string,
     id: string
   ): Promise<BaseResponse<CycleDocument>> {
     const response = await this.client.get<BaseResponse<CycleDocument>>(
-      `/treatment-cycle/${treatmentCycleId}/documents/${id}`
+      `/treatment-cycles/${treatmentCycleId}/documents/${id}`
     );
     return response.data;
   }
 
   /**
    * Upload cycle document
-   * POST /api/treatment-cycle/{treatmentCycleId}/documents
+   * POST /api/treatment-cycles/{treatmentCycleId}/documents
    */
   async uploadCycleDocument(
     treatmentCycleId: string,
     data: UploadCycleDocumentRequest
   ): Promise<BaseResponse<CycleDocument>> {
     const response = await this.client.post<BaseResponse<CycleDocument>>(
-      `/treatment-cycle/${treatmentCycleId}/documents`,
+      `/treatment-cycles/${treatmentCycleId}/documents`,
       data
     );
     return response.data;
@@ -56,7 +56,7 @@ export class CycleDocumentApi {
 
   /**
    * Update cycle document
-   * PUT /api/treatment-cycle/{treatmentCycleId}/documents/{id}
+   * PUT /api/treatment-cycles/{treatmentCycleId}/documents/{id}
    */
   async updateCycleDocument(
     treatmentCycleId: string,
@@ -64,7 +64,7 @@ export class CycleDocumentApi {
     data: Partial<CycleDocument>
   ): Promise<BaseResponse<CycleDocument>> {
     const response = await this.client.put<BaseResponse<CycleDocument>>(
-      `/treatment-cycle/${treatmentCycleId}/documents/${id}`,
+      `/treatment-cycles/${treatmentCycleId}/documents/${id}`,
       data
     );
     return response.data;
@@ -72,14 +72,14 @@ export class CycleDocumentApi {
 
   /**
    * Delete cycle document
-   * DELETE /api/treatment-cycle/{treatmentCycleId}/documents/{id}
+   * DELETE /api/treatment-cycles/{treatmentCycleId}/documents/{id}
    */
   async deleteCycleDocument(
     treatmentCycleId: string,
     id: string
   ): Promise<BaseResponse> {
     const response = await this.client.delete<BaseResponse>(
-      `/treatment-cycle/${treatmentCycleId}/documents/${id}`
+      `/treatment-cycles/${treatmentCycleId}/documents/${id}`
     );
     return response.data;
   }

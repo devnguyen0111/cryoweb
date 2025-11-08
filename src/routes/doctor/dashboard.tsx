@@ -486,35 +486,40 @@ function DoctorDashboardComponent() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {activePatients.data.map((patient) => (
-                          <tr key={patient.id}>
-                            <td className="px-4 py-3 font-medium text-gray-900">
-                              {[patient.firstName, patient.lastName]
-                                .filter(Boolean)
-                                .join(" ") || "Not updated"}
-                            </td>
-                            <td className="px-4 py-3 text-gray-600">
-                              {patient.email || "-"}
-                            </td>
-                            <td className="px-4 py-3 text-gray-600">
-                              {patient.phone || "-"}
-                            </td>
-                            <td className="px-4 py-3">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  navigate({
-                                    to: "/doctor/patients/$patientId",
-                                    params: { patientId: patient.id },
-                                  })
-                                }
-                              >
-                                View profile
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
+                        {activePatients.data.map((patient) => {
+                          const displayName =
+                            patient.accountInfo?.username ||
+                            patient.patientCode ||
+                            "Unknown";
+                          return (
+                            <tr key={patient.id}>
+                              <td className="px-4 py-3 font-medium text-gray-900">
+                                {displayName}
+                              </td>
+                              <td className="px-4 py-3 text-gray-600">
+                                {patient.accountInfo?.email || "-"}
+                              </td>
+                              <td className="px-4 py-3 text-gray-600">
+                                {patient.accountInfo?.phone || "-"}
+                              </td>
+                              <td className="px-4 py-3">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  type="button"
+                                  onClick={() =>
+                                    navigate({
+                                      to: "/doctor/patients/$patientId",
+                                      params: { patientId: patient.id },
+                                    })
+                                  }
+                                >
+                                  View profile
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

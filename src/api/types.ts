@@ -73,14 +73,28 @@ export type AppointmentType =
   | "procedure"
   | "follow-up"
   | "testing"
-  | "other";
+  | "other"
+  | "Consultation"
+  | "Ultrasound"
+  | "BloodTest"
+  | "OPU"
+  | "ET"
+  | "IUI"
+  | "FollowUp"
+  | "Injection";
 export type AppointmentStatus =
   | "scheduled"
   | "confirmed"
   | "in-progress"
   | "completed"
   | "cancelled"
-  | "no-show";
+  | "no-show"
+  | "Scheduled"
+  | "Confirmed"
+  | "In-Progress"
+  | "Completed"
+  | "Cancelled"
+  | "No-Show";
 
 export interface Appointment {
   id: string;
@@ -99,18 +113,26 @@ export interface Appointment {
   updatedAt?: string;
 }
 
-export interface CreateAppointmentRequest {
+export interface AppointmentRequestPayload {
   patientId: string;
   type: AppointmentType;
   title: string;
-  description?: string;
   appointmentDate: string;
   startTime: string;
   endTime: string;
+  status?: AppointmentStatus;
+  description?: string;
+  instructions?: string;
+  reason?: string;
+  notes?: string;
   slotId?: string;
   treatmentCycleId?: string;
-  reason?: string;
-  instructions?: string;
+}
+
+export interface CreateAppointmentRequest {
+  request: AppointmentRequestPayload;
+  doctorIds?: string[];
+  doctorRoles?: string[];
 }
 
 export interface UpdateAppointmentRequest {
@@ -124,6 +146,7 @@ export interface UpdateAppointmentRequest {
   slotId?: string;
   reason?: string;
   instructions?: string;
+  notes?: string;
 }
 
 export interface AppointmentListQuery {
@@ -144,21 +167,53 @@ export interface AppointmentListQuery {
 /**
  * Patient Types
  */
+export interface PatientAccountInfo {
+  username?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  isVerified?: boolean;
+  isActive?: boolean;
+}
+
 export interface Patient {
   id: string;
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  phone?: string;
-  dateOfBirth?: string;
-  gender?: string;
-  address?: string;
+  patientCode?: string | null;
+  nationalId?: string | null;
+  emergencyContact?: string | null;
+  emergencyPhone?: string | null;
+  insurance?: string | null;
+  occupation?: string | null;
+  medicalHistory?: string | null;
+  allergies?: string | null;
+  bloodType?: string | null;
+  height?: number | null;
+  weight?: number | null;
+  bmi?: number | null;
+  isActive?: boolean;
+  notes?: string | null;
+  accountId?: string | null;
   createdAt?: string;
-  updatedAt?: string;
+  updatedAt?: string | null;
+  accountInfo?: PatientAccountInfo | null;
+  treatmentCount?: number;
+  labSampleCount?: number;
+  relationshipCount?: number;
 }
 
 export interface PatientListQuery {
   SearchTerm?: string;
+  PatientCode?: string;
+  NationalID?: string;
+  BloodType?: string;
+  IsActive?: boolean;
+  HasInsurance?: boolean;
+  MinHeight?: number;
+  MaxHeight?: number;
+  MinWeight?: number;
+  MaxWeight?: number;
+  CreatedFrom?: string;
+  CreatedTo?: string;
   Page?: number;
   Size?: number;
   Sort?: string;

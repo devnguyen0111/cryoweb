@@ -19,7 +19,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <AuthProvider>
         {children}
         <Toaster position="top-right" richColors closeButton />
-        <ReactQueryDevtools initialIsOpen={false} />
+        {import.meta.env.DEV && (
+          <ReactQueryDevtools initialIsOpen={false} />
+        )}
       </AuthProvider>
     </QueryClientProvider>
   );

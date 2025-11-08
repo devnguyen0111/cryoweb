@@ -6,21 +6,31 @@ import type {
   ServiceRequestListQuery,
 } from "../types";
 
-/**
- * Service Request API
- */
+const BASE_PATH = "/servicerequest";
+const STATUS_PATH = `${BASE_PATH}/status`;
+
 export class ServiceRequestApi {
   constructor(private readonly client: AxiosInstance) {}
 
   /**
    * Get list of service requests
-   * GET /api/service-request
+   * GET /api/servicerequest
    */
   async getServiceRequests(
     params?: ServiceRequestListQuery
   ): Promise<DynamicResponse<ServiceRequest>> {
+    const { Status, ...rest } = params ?? {};
+
+    if (Status !== undefined && Status !== null && Status !== "") {
+      const response = await this.client.get<DynamicResponse<ServiceRequest>>(
+        `${STATUS_PATH}/${encodeURIComponent(Status)}`,
+        { params: rest }
+      );
+      return response.data;
+    }
+
     const response = await this.client.get<DynamicResponse<ServiceRequest>>(
-      "/service-requests",
+      BASE_PATH,
       { params }
     );
     return response.data;
@@ -28,26 +38,26 @@ export class ServiceRequestApi {
 
   /**
    * Get service request by ID
-   * GET /api/service-request/{id}
+   * GET /api/servicerequest/{id}
    */
   async getServiceRequestById(
     id: string
   ): Promise<BaseResponse<ServiceRequest>> {
     const response = await this.client.get<BaseResponse<ServiceRequest>>(
-      `/service-requests/${id}`
+      `${BASE_PATH}/${id}`
     );
     return response.data;
   }
 
   /**
    * Create new service request
-   * POST /api/service-request
+   * POST /api/servicerequest
    */
   async createServiceRequest(
     data: Partial<ServiceRequest>
   ): Promise<BaseResponse<ServiceRequest>> {
     const response = await this.client.post<BaseResponse<ServiceRequest>>(
-      "/service-requests",
+      BASE_PATH,
       data
     );
     return response.data;
@@ -55,14 +65,14 @@ export class ServiceRequestApi {
 
   /**
    * Update service request
-   * PUT /api/service-request/{id}
+   * PUT /api/servicerequest/{id}
    */
   async updateServiceRequest(
     id: string,
     data: Partial<ServiceRequest>
   ): Promise<BaseResponse<ServiceRequest>> {
     const response = await this.client.put<BaseResponse<ServiceRequest>>(
-      `/service-requests/${id}`,
+      `${BASE_PATH}/${id}`,
       data
     );
     return response.data;
@@ -70,11 +80,11 @@ export class ServiceRequestApi {
 
   /**
    * Delete service request
-   * DELETE /api/service-request/{id}
+   * DELETE /api/servicerequest/{id}
    */
   async deleteServiceRequest(id: string): Promise<BaseResponse> {
     const response = await this.client.delete<BaseResponse>(
-      `/service-requests/${id}`
+      `${BASE_PATH}/${id}`
     );
     return response.data;
   }

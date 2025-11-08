@@ -9,7 +9,7 @@ export class ServiceCategoryApi {
 
   /**
    * Get list of service categories
-   * GET /api/service-category
+   * GET /api/servicecategory
    */
   async getServiceCategories(params?: {
     Page?: number;
@@ -17,7 +17,7 @@ export class ServiceCategoryApi {
     SearchTerm?: string;
   }): Promise<DynamicResponse<ServiceCategory>> {
     const response = await this.client.get<DynamicResponse<ServiceCategory>>(
-      "/service-category",
+      "/servicecategory",
       { params }
     );
     return response.data;
@@ -25,26 +25,26 @@ export class ServiceCategoryApi {
 
   /**
    * Get service category by ID
-   * GET /api/service-category/{id}
+   * GET /api/servicecategory/{id}
    */
   async getServiceCategoryById(
     id: string
   ): Promise<BaseResponse<ServiceCategory>> {
     const response = await this.client.get<BaseResponse<ServiceCategory>>(
-      `/service-category/${id}`
+      `/servicecategory/${id}`
     );
     return response.data;
   }
 
   /**
    * Create new service category
-   * POST /api/service-category
+   * POST /api/servicecategory
    */
   async createServiceCategory(
     data: Partial<ServiceCategory>
   ): Promise<BaseResponse<ServiceCategory>> {
     const response = await this.client.post<BaseResponse<ServiceCategory>>(
-      "/service-category",
+      "/servicecategory",
       data
     );
     return response.data;
@@ -52,14 +52,14 @@ export class ServiceCategoryApi {
 
   /**
    * Update service category
-   * PUT /api/service-category/{id}
+   * PUT /api/servicecategory/{id}
    */
   async updateServiceCategory(
     id: string,
     data: Partial<ServiceCategory>
   ): Promise<BaseResponse<ServiceCategory>> {
     const response = await this.client.put<BaseResponse<ServiceCategory>>(
-      `/service-category/${id}`,
+      `/servicecategory/${id}`,
       data
     );
     return response.data;
@@ -67,11 +67,11 @@ export class ServiceCategoryApi {
 
   /**
    * Delete service category
-   * DELETE /api/service-category/{id}
+   * DELETE /api/servicecategory/{id}
    */
   async deleteServiceCategory(id: string): Promise<BaseResponse> {
     const response = await this.client.delete<BaseResponse>(
-      `/service-category/${id}`
+      `/servicecategory/${id}`
     );
     return response.data;
   }

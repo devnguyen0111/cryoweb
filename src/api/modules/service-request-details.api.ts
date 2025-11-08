@@ -32,53 +32,53 @@ export class ServiceRequestDetailsApi {
 
   /**
    * Get list of service request details
-   * GET /api/service-request-details
+   * GET /api/servicerequestdetails
    */
   async getServiceRequestDetails(
     params?: ServiceRequestDetailsListQuery
   ): Promise<DynamicResponse<ServiceRequestDetails>> {
     const response = await this.client.get<
       DynamicResponse<ServiceRequestDetails>
-    >("/service-request-details", { params });
+    >("/servicerequestdetails", { params });
     return response.data;
   }
 
   /**
    * Get service request details by ID
-   * GET /api/service-request-details/{id}
+   * GET /api/servicerequestdetails/{id}
    */
   async getServiceRequestDetailsById(
     id: string
   ): Promise<BaseResponse<ServiceRequestDetails>> {
     const response = await this.client.get<BaseResponse<ServiceRequestDetails>>(
-      `/service-request-details/${id}`
+      `/servicerequestdetails/${id}`
     );
     return response.data;
   }
 
   /**
    * Create new service request details
-   * POST /api/service-request-details
+   * POST /api/servicerequestdetails
    */
   async createServiceRequestDetails(
     data: Partial<ServiceRequestDetails>
   ): Promise<BaseResponse<ServiceRequestDetails>> {
     const response = await this.client.post<
       BaseResponse<ServiceRequestDetails>
-    >("/service-request-details", data);
+    >("/servicerequestdetails", data);
     return response.data;
   }
 
   /**
    * Update service request details
-   * PUT /api/service-request-details/{id}
+   * PUT /api/servicerequestdetails/{id}
    */
   async updateServiceRequestDetails(
     id: string,
     data: Partial<ServiceRequestDetails>
   ): Promise<BaseResponse<ServiceRequestDetails>> {
     const response = await this.client.put<BaseResponse<ServiceRequestDetails>>(
-      `/service-request-details/${id}`,
+      `/servicerequestdetails/${id}`,
       data
     );
     return response.data;
@@ -86,11 +86,11 @@ export class ServiceRequestDetailsApi {
 
   /**
    * Delete service request details
-   * DELETE /api/service-request-details/{id}
+   * DELETE /api/servicerequestdetails/{id}
    */
   async deleteServiceRequestDetails(id: string): Promise<BaseResponse> {
     const response = await this.client.delete<BaseResponse>(
-      `/service-request-details/${id}`
+      `/servicerequestdetails/${id}`
     );
     return response.data;
   }

@@ -1,19 +1,23 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/admin/patients")({
   component: AdminPatientsComponent,
 });
 
 function AdminPatientsComponent() {
+  const navigate = useNavigate();
   const { data, isLoading } = useQuery({
     queryKey: ["patients", { Page: 1, Size: 20 }],
     queryFn: () => api.patient.getPatients({ Page: 1, Size: 20 }),
   });
+
+  const patients = data?.data ?? [];
 
   return (
     <ProtectedRoute allowedRoles={["Admin"]}>
@@ -33,28 +37,77 @@ function AdminPatientsComponent() {
                 <div className="text-center py-8">Loading...</div>
               ) : (
                 <div className="space-y-4">
-                  {data?.data && data.data.length > 0 ? (
+                  {patients.length ? (
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
                           <tr className="border-b">
                             <th className="text-left p-2">ID</th>
-                            <th className="text-left p-2">Name</th>
+                            <th className="text-left p-2">Patient</th>
                             <th className="text-left p-2">Email</th>
                             <th className="text-left p-2">Phone</th>
+                            <th className="text-left p-2">Status</th>
+                            <th className="text-left p-2">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {data.data.map((patient) => (
-                            <tr key={patient.id} className="border-b">
-                              <td className="p-2">{patient.id}</td>
-                              <td className="p-2">
-                                {patient.firstName} {patient.lastName}
-                              </td>
-                              <td className="p-2">{patient.email}</td>
-                              <td className="p-2">{patient.phone}</td>
-                            </tr>
-                          ))}
+                          {patients.map((patient) => {
+                            const displayName =
+                              patient.accountInfo?.username ||
+                              patient.patientCode ||
+                              "Unknown";
+                            return (
+                              <tr key={patient.id} className="border-b">
+                                <td className="p-2 text-xs text-gray-500">
+                                  {patient.id}
+                                </td>
+                                <td className="p-2">
+                                  <div className="font-medium text-gray-900">
+                                    {displayName}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    Patient code:{" "}
+                                    {patient.patientCode || "N/A"}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    Account ID: {patient.accountId || "—"}
+                                  </div>
+                                </td>
+                                <td className="p-2 text-sm text-gray-600">
+                                  {patient.accountInfo?.email || "-"}
+                                </td>
+                                <td className="p-2 text-sm text-gray-600">
+                                  {patient.accountInfo?.phone || "-"}
+                                </td>
+                                <td className="p-2 text-sm text-gray-600">
+                                  {patient.isActive ? (
+                                    <span className="font-medium text-emerald-600">
+                                      Active
+                                    </span>
+                                  ) : (
+                                    <span className="font-medium text-red-600">
+                                      Inactive
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                  type="button"
+                                    onClick={() =>
+                                      navigate({
+                                        to: "/admin/patients/$patientId",
+                                        params: { patientId: patient.id },
+                                      })
+                                    }
+                                  >
+                                    View details
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

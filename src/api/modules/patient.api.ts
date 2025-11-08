@@ -38,6 +38,17 @@ export class PatientApi {
   }
 
   /**
+   * Get detailed patient information
+   * GET /api/patient/{id}/details
+   */
+  async getPatientDetails(id: string): Promise<BaseResponse<Patient>> {
+    const response = await this.client.get<BaseResponse<Patient>>(
+      `/patient/${id}/details`
+    );
+    return response.data;
+  }
+
+  /**
    * Create new patient
    * POST /api/patient
    */

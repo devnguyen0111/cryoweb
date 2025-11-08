@@ -155,7 +155,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canCreateUsers: false,
     canEditUsers: false,
     canDeleteUsers: false,
-    canViewReports: false,
+    canViewReports: true,
     canViewSettings: false,
     canManageSystem: false,
     canManageEncounters: false,
@@ -306,6 +306,11 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       icon: "LayoutDashboard",
     },
     {
+      label: "Service requests",
+      href: "/receptionist/service-requests",
+      icon: "ClipboardList",
+    },
+    {
       label: "Patients",
       href: "/receptionist/patients",
       icon: "Users",
@@ -316,6 +321,12 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       href: "/receptionist/appointments",
       icon: "Calendar",
       permission: "canViewAppointments",
+    },
+    {
+      label: "Reports",
+      href: "/receptionist/reports",
+      icon: "BarChart3",
+      permission: "canViewReports",
     },
   ],
 };

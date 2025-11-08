@@ -25,6 +25,7 @@ export interface DynamicResponse<T = any> extends BaseResponse<T[]> {
 export interface User {
   id: string;
   userName?: string | null;
+  fullName?: string | null;
   age?: number | null;
   email?: string;
   phone?: string | null;
@@ -33,8 +34,10 @@ export interface User {
   image?: string | null;
   status?: boolean;
   emailVerified?: boolean;
+  isEmailVerified?: boolean;
   roleId?: string;
   roleName?: string;
+  role?: string | null;
   createdAt?: string;
   updatedAt?: string | null;
   doctorSpecialization?: string | null;
@@ -313,6 +316,14 @@ export interface ServiceCategory {
   name?: string;
   description?: string;
   status?: "active" | "inactive";
+  categoryType?: string;
+  isActive?: boolean;
+  priceHistory?: Array<{
+    id: string;
+    price: number;
+    effectiveFrom: string;
+    updatedBy?: string;
+  }>;
   createdAt?: string;
   updatedAt?: string;
 }

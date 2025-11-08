@@ -193,28 +193,22 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
   Admin: [
     { label: "Dashboard", href: "/admin/dashboard", icon: "LayoutDashboard" },
     {
-      label: "Patients",
-      href: "/admin/patients",
-      icon: "Users",
-      permission: "canViewPatients",
-    },
-    {
-      label: "Samples",
-      href: "/admin/samples",
-      icon: "FlaskConical",
-      permission: "canViewSamples",
-    },
-    {
-      label: "Appointments",
-      href: "/admin/appointments",
-      icon: "Calendar",
-      permission: "canViewAppointments",
-    },
-    {
       label: "Users",
       href: "/admin/users",
       icon: "UserCog",
       permission: "canViewUsers",
+    },
+    {
+      label: "Service categories",
+      href: "/admin/categories",
+      icon: "ClipboardList",
+      permission: "canManageSystem",
+    },
+    {
+      label: "Content",
+      href: "/admin/content",
+      icon: "FileText",
+      permission: "canManageSystem",
     },
     {
       label: "Reports",
@@ -227,6 +221,12 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       href: "/admin/settings",
       icon: "Settings",
       permission: "canViewSettings",
+    },
+    {
+      label: "Audit logs",
+      href: "/admin/logs",
+      icon: "ClipboardList",
+      permission: "canManageSystem",
     },
   ],
   Doctor: [

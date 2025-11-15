@@ -44,7 +44,8 @@ function DoctorCryobankComponent() {
       }),
   });
 
-  const totalPages = data?.metaData?.totalPages ?? 1;
+  const totalPages =
+    data?.metaData?.totalPage ?? data?.metaData?.totalPages ?? 1;
 
   const handleAction = (action: "reserve" | "thaw" | "discard") => {
     toast.info(

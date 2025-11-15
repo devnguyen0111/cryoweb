@@ -1,13 +1,20 @@
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { api } from "@/api/client";
 import { cn } from "@/utils/cn";
+import {
+  APPOINTMENT_STATUS_LABELS,
+  normalizeAppointmentStatus,
+  ensureAppointmentStatus,
+} from "@/utils/appointments";
+import type { AppointmentStatus } from "@/api/types";
 
 export const Route = createFileRoute("/doctor/appointments/$appointmentId")({
   component: DoctorAppointmentDetailsComponent,
@@ -15,29 +22,68 @@ export const Route = createFileRoute("/doctor/appointments/$appointmentId")({
 
 function DoctorAppointmentDetailsComponent() {
   const { appointmentId } = Route.useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showCancelReason, setShowCancelReason] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
 
-  const { data, isFetching } = useQuery({
+  const { data: appointment, isFetching } = useQuery({
     queryKey: ["doctor", "appointments", "detail", appointmentId],
     queryFn: async () => {
-      const response =
-        await api.appointment.getAppointmentDetails(appointmentId);
+      const response = await api.appointment.getAppointmentDetails(appointmentId);
       return response.data;
     },
   });
 
-  const appointment = data;
+  const patientId = useMemo(() => {
+    if (!appointment) return null;
+    const raw = appointment as unknown as Record<string, any>;
+    return (
+      appointment.patientId ??
+      raw.patientID ??
+      raw.PatientId ??
+      raw.PatientID ??
+      raw.patient?.id ??
+      null
+    );
+  }, [appointment]);
+
+  const { data: patient } = useQuery({
+    queryKey: ["doctor", "patient", patientId],
+    enabled: Boolean(patientId),
+    queryFn: async () => {
+      if (!patientId) return null;
+      try {
+        const response = await api.patient.getPatientDetails(patientId);
+        return response.data;
+      } catch {
+        try {
+          const response = await api.patient.getPatientById(patientId);
+          return response.data;
+        } catch {
+          return null;
+        }
+      }
+    },
+  });
 
   const invalidateAppointmentLists = () => {
     queryClient.invalidateQueries({ queryKey: ["doctor", "appointments"] });
     queryClient.invalidateQueries({ queryKey: ["appointments", "today"] });
   };
 
+  const normalizedStatus = useMemo(() => {
+    if (!appointment?.status) return "Scheduled" as AppointmentStatus | string;
+    return (normalizeAppointmentStatus(appointment.status) ?? "Scheduled") as
+      | AppointmentStatus
+      | string;
+  }, [appointment?.status]);
+
   const updateStatusMutation = useMutation({
-    mutationFn: (status: string) =>
-      api.appointment.updateAppointmentStatus(appointmentId, status as any),
+    mutationFn: (status: AppointmentStatus) =>
+      api.appointment.updateAppointmentStatus(appointmentId, {
+        status: ensureAppointmentStatus(status),
+      }),
     onSuccess: () => {
       toast.success("Appointment status updated.");
       queryClient.invalidateQueries({
@@ -55,7 +101,9 @@ function DoctorAppointmentDetailsComponent() {
 
   const cancelMutation = useMutation({
     mutationFn: () =>
-      api.appointment.cancelAppointment(appointmentId, cancelReason),
+      api.appointment.cancelAppointment(appointmentId, {
+        cancellationReason: cancelReason,
+      }),
     onSuccess: () => {
       toast.success("Appointment cancelled.");
       setShowCancelReason(false);
@@ -73,241 +121,625 @@ function DoctorAppointmentDetailsComponent() {
     },
   });
 
-  const actions = useMemo(
-    () => [
-      {
-        label: "Confirm",
-        status: "confirmed",
-        description: "Send a confirmation notification to the patient",
-      },
-      {
-        label: "Check-in",
-        status: "in-progress",
-        description: "Mark the patient as arrived",
-      },
-      {
-        label: "Complete",
-        status: "completed",
-        description: "Close the appointment and log the encounter",
-      },
-    ],
-    []
-  );
+  const checkInMutation = useMutation({
+    mutationFn: () => api.appointment.checkIn(appointmentId),
+    onSuccess: () => {
+      toast.success("Patient checked in.");
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "appointments", "detail", appointmentId],
+      });
+      invalidateAppointmentLists();
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          "Unable to check in patient. Please try again."
+      );
+    },
+  });
 
-  const statusClass = (status?: string) => {
-    switch (status) {
-      case "confirmed":
-      case "scheduled":
-        return "bg-blue-100 text-blue-700";
-      case "in-progress":
-        return "bg-yellow-100 text-yellow-700";
-      case "completed":
-        return "bg-green-100 text-green-700";
-      case "cancelled":
-      case "no-show":
-        return "bg-red-100 text-red-700";
-      default:
-        return "bg-gray-100 text-gray-700";
+  const checkOutMutation = useMutation({
+    mutationFn: () => api.appointment.checkOut(appointmentId),
+    onSuccess: () => {
+      toast.success("Patient checked out.");
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "appointments", "detail", appointmentId],
+      });
+      invalidateAppointmentLists();
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          "Unable to check out patient. Please try again."
+      );
+    },
+  });
+
+  const formatDateTime = (dateString?: string | null) => {
+    if (!dateString) return "—";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch {
+      return dateString;
     }
   };
+
+  const formatTime = (dateString?: string | null) => {
+    if (!dateString) return "—";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const statusBadgeClass = (status: AppointmentStatus | string) => {
+    const normalized = (normalizeAppointmentStatus(status) ??
+      "Scheduled") as string;
+    switch (normalized) {
+      case "Scheduled":
+        return "bg-blue-100 text-blue-700 border-blue-200";
+      case "CheckedIn":
+        return "bg-amber-100 text-amber-700 border-amber-200";
+      case "InProgress":
+        return "bg-purple-100 text-purple-700 border-purple-200";
+      case "Completed":
+        return "bg-emerald-100 text-emerald-700 border-emerald-200";
+      case "Cancelled":
+        return "bg-rose-100 text-rose-700 border-rose-200";
+      case "NoShow":
+        return "bg-slate-100 text-slate-700 border-slate-200";
+      default:
+        return "bg-gray-100 text-gray-700 border-gray-200";
+    }
+  };
+
+  const patientDisplayName = useMemo(() => {
+    if (!patient) {
+      const raw = appointment as unknown as Record<string, any> | undefined;
+      return (
+        raw?.patient?.fullName ??
+        raw?.patientName ??
+        raw?.patientFullName ??
+        patientId ??
+        "Not available"
+      );
+    }
+    const raw = patient as unknown as Record<string, any>;
+    return (
+      patient.fullName ??
+      raw.accountInfo?.fullName ??
+      raw.accountInfo?.username ??
+      patient.patientCode ??
+      patientId ??
+      "Not available"
+    );
+  }, [patient, appointment, patientId]);
+
+  const canCheckIn = normalizedStatus === ("Scheduled" as string);
+  const canCheckOut =
+    normalizedStatus === ("CheckedIn" as string) ||
+    normalizedStatus === ("InProgress" as string);
+  const canComplete =
+    normalizedStatus === ("CheckedIn" as string) ||
+    normalizedStatus === ("InProgress" as string);
+  const canCancel =
+    normalizedStatus !== ("Completed" as string) &&
+    normalizedStatus !== ("Cancelled" as string);
 
   return (
     <ProtectedRoute allowedRoles={["Doctor"]}>
       <DashboardLayout>
-        <div className="space-y-8">
-          <section className="flex flex-col gap-1">
-            <h1 className="text-3xl font-bold">Appointment details</h1>
-            <p className="text-gray-600">
-              Appointment ID:{" "}
-              <span className="font-semibold">{appointmentId}</span>
-            </p>
-          </section>
-
-          <section className="grid gap-6 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Appointment information</CardTitle>
-                  <p className="text-sm text-gray-500">
-                    {appointment?.appointmentDate} - {appointment?.startTime} -{" "}
-                    {appointment?.endTime}
-                  </p>
-                </div>
-                <span
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-semibold",
-                    statusClass(appointment?.status)
-                  )}
-                >
-                  {appointment?.status || "pending"}
-                </span>
-              </CardHeader>
-              <CardContent className="space-y-6 text-sm">
-                {isFetching ? (
-                  <div className="py-10 text-center text-gray-500">
-                    Loading data...
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <p className="text-gray-500">Appointment type</p>
-                        <p className="text-base font-medium text-gray-900">
-                          {appointment?.type ?? "-"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Related treatment cycle</p>
-                        <p className="text-base font-medium text-gray-900">
-                          {appointment?.treatmentCycleId ?? "None"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Description</p>
-                        <p className="text-base text-gray-800">
-                          {appointment?.description ||
-                            "No description provided."}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">System note</p>
-                        <p className="text-base text-gray-800">
-                          Close the encounter notes before 18:00 on the same
-                          day.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="font-semibold text-gray-900">
-                        Update history
-                      </h3>
-                      <ul className="mt-3 space-y-2 text-gray-600">
-                        <li>- 07:30 - Scheduled by coordinator.</li>
-                        <li>- 08:00 - Reminder email sent to patient.</li>
-                        <li>- 08:45 - Patient confirmed attendance.</li>
-                      </ul>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                {actions.map((action) => (
-                  <div
-                    key={action.status}
-                    className="rounded-lg border border-gray-200 p-4"
+        <div className="space-y-6">
+          {/* Header Section */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold text-gray-900">
+                  Appointment Details
+                </h1>
+                {appointment && (
+                  <Badge
+                    className={cn(
+                      "border font-semibold",
+                      statusBadgeClass(normalizedStatus)
+                    )}
                   >
-                    <p className="font-semibold text-gray-800">
-                      {action.label}
-                    </p>
-                    <p className="mt-1 text-gray-500">{action.description}</p>
-                    <Button
-                      size="sm"
-                      className="mt-3"
-                      variant="outline"
-                      disabled={updateStatusMutation.isPending}
-                      onClick={() => updateStatusMutation.mutate(action.status)}
+                    {(APPOINTMENT_STATUS_LABELS as Record<string, string>)[
+                      normalizedStatus
+                    ] ?? normalizedStatus}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-gray-600">
+                Appointment ID:{" "}
+                <span className="font-mono font-medium">{appointmentId}</span>
+              </p>
+              {appointment?.appointmentDate && (
+                <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                  <span className="flex items-center gap-2">
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
-                      Update status
-                    </Button>
-                  </div>
-                ))}
-
-                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-                  <p className="font-semibold text-red-700">
-                    Cancel appointment
-                  </p>
-                  {!showCancelReason ? (
-                    <>
-                      <p className="mt-1 text-red-600">
-                        Please provide a reason so it is logged in history.
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-3"
-                        onClick={() => setShowCancelReason(true)}
-                      >
-                        Enter cancellation reason
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <textarea
-                        className="mt-2 w-full rounded-md border border-red-200 p-2 text-sm focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-200"
-                        rows={3}
-                        value={cancelReason}
-                        placeholder="Example: patient requested to reschedule due to work"
-                        onChange={(event) =>
-                          setCancelReason(event.target.value)
-                        }
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                       />
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={
-                            cancelMutation.isPending || !cancelReason.trim()
-                          }
-                          onClick={() => cancelMutation.mutate()}
-                        >
-                          Confirm cancellation
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setShowCancelReason(false);
-                            setCancelReason("");
-                          }}
-                        >
-                          Close
-                        </Button>
-                      </div>
-                    </>
+                    </svg>
+                    {formatDateTime(appointment.appointmentDate)}
+                  </span>
+                  {appointment.appointmentDate && (
+                    <span className="flex items-center gap-2">
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      {formatTime(appointment.appointmentDate)}
+                      {appointment.slot?.endTime &&
+                        ` - ${formatTime(appointment.slot.endTime)}`}
+                    </span>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          </section>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => navigate({ to: "/doctor/appointments" })}
+              >
+                Back to List
+              </Button>
+            </div>
+          </div>
 
-          <section className="grid gap-6 lg:grid-cols-2">
+          {isFetching ? (
             <Card>
-              <CardHeader>
-                <CardTitle>Patient</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-gray-600">
-                <p>
-                  Name:{" "}
-                  <span className="font-semibold text-gray-900">
-                    {appointment?.patientId || "Not available"}
-                  </span>
-                </p>
-                <p>Contact: Information syncs from the patient record.</p>
-                <p>
-                  After the visit, update the encounter to continue with
-                  diagnosis and care planning.
-                </p>
+              <CardContent className="py-12 text-center">
+                <p className="text-gray-500">Loading appointment details...</p>
               </CardContent>
             </Card>
+          ) : !appointment ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-red-600">Appointment not found.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Main Content Grid */}
+              <div className="grid gap-6 lg:grid-cols-3">
+                {/* Left Column - Main Details */}
+                <div className="space-y-6 lg:col-span-2">
+                  {/* Patient Information Card */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Patient Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">
+                            Patient Name
+                          </p>
+                          <p className="mt-1 text-base font-semibold text-gray-900">
+                            {patientDisplayName}
+                          </p>
+                        </div>
+                        {patient?.patientCode && (
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">
+                              Patient Code
+                            </p>
+                            <p className="mt-1 text-base font-mono text-gray-900">
+                              {patient.patientCode}
+                            </p>
+                          </div>
+                        )}
+                        {patient?.phoneNumber && (
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">
+                              Phone Number
+                            </p>
+                            <p className="mt-1 text-base text-gray-900">
+                              {patient.phoneNumber}
+                            </p>
+                          </div>
+                        )}
+                        {patient?.email && (
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">
+                              Email
+                            </p>
+                            <p className="mt-1 text-base text-gray-900">
+                              {patient.email}
+                            </p>
+                          </div>
+                        )}
+                        {patient?.dateOfBirth && (
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">
+                              Date of Birth
+                            </p>
+                            <p className="mt-1 text-base text-gray-900">
+                              {formatDateTime(patient.dateOfBirth)}
+                            </p>
+                          </div>
+                        )}
+                        {patient?.gender && (
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">
+                              Gender
+                            </p>
+                            <p className="mt-1 text-base text-gray-900">
+                              {patient.gender}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      {patientId && (
+                        <div className="pt-4 border-t">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              navigate({
+                                to: "/doctor/patients/$patientId",
+                                params: { patientId },
+                              })
+                            }
+                          >
+                            View Full Patient Profile
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Preparation &amp; checklist</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-gray-600">
-                <p>- Verify electronic consent before any procedure.</p>
-                <p>- Review the latest lab results.</p>
-                <p>- Prepare counseling materials and follow-up plan.</p>
-              </CardContent>
-            </Card>
-          </section>
+                  {/* Appointment Details Card */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Appointment Details</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">
+                            Appointment Type
+                          </p>
+                          <p className="mt-1 text-base font-semibold text-gray-900">
+                            {appointment.appointmentType ?? "Consultation"}
+                          </p>
+                        </div>
+                        {(appointment as any).treatmentCycleId && (
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">
+                              Treatment Cycle
+                            </p>
+                            <p className="mt-1 text-base font-mono text-gray-900">
+                              {(appointment as any).treatmentCycleId}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      {appointment.notes && (
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">
+                            Notes / Description
+                          </p>
+                          <p className="mt-1 text-base text-gray-900 whitespace-pre-wrap">
+                            {appointment.notes}
+                          </p>
+                        </div>
+                      )}
+                      {!appointment.notes && (
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">
+                            Notes / Description
+                          </p>
+                          <p className="mt-1 text-sm text-gray-400 italic">
+                            No notes provided for this appointment.
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Preparation Checklist Card */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Preparation & Checklist</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-3 text-sm text-gray-700">
+                        <li className="flex items-start gap-3">
+                          <svg
+                            className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <span>
+                            Verify electronic consent before any procedure
+                          </span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg
+                            className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <span>Review the latest lab results</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg
+                            className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <span>
+                            Prepare counseling materials and follow-up plan
+                          </span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg
+                            className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <span>
+                            Close the encounter notes before 18:00 on the same
+                            day
+                          </span>
+                        </li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Right Column - Actions */}
+                <div className="space-y-6">
+                  {/* Quick Actions Card */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Quick Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {canCheckIn && (
+                        <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4">
+                          <p className="font-semibold text-blue-900">
+                            Check-in Patient
+                          </p>
+                          <p className="mt-1 text-sm text-blue-700">
+                            Mark the patient as arrived
+                          </p>
+                          <Button
+                            size="sm"
+                            className="mt-3 w-full"
+                            disabled={checkInMutation.isPending}
+                            onClick={() => checkInMutation.mutate()}
+                          >
+                            {checkInMutation.isPending
+                              ? "Processing..."
+                              : "Check-in Now"}
+                          </Button>
+                        </div>
+                      )}
+
+                      {canCheckOut && (
+                        <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-4">
+                          <p className="font-semibold text-purple-900">
+                            Check-out Patient
+                          </p>
+                          <p className="mt-1 text-sm text-purple-700">
+                            Mark the patient as departed
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="mt-3 w-full"
+                            disabled={checkOutMutation.isPending}
+                            onClick={() => checkOutMutation.mutate()}
+                          >
+                            {checkOutMutation.isPending
+                              ? "Processing..."
+                              : "Check-out Now"}
+                          </Button>
+                        </div>
+                      )}
+
+                      {canComplete && (
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
+                          <p className="font-semibold text-emerald-900">
+                            Complete Appointment
+                          </p>
+                          <p className="mt-1 text-sm text-emerald-700">
+                            Close the appointment and log the encounter
+                          </p>
+                          <Button
+                            size="sm"
+                            className="mt-3 w-full bg-emerald-600 hover:bg-emerald-700"
+                            disabled={updateStatusMutation.isPending}
+                            onClick={() =>
+                              updateStatusMutation.mutate("Completed")
+                            }
+                          >
+                            {updateStatusMutation.isPending
+                              ? "Processing..."
+                              : "Mark as Completed"}
+                          </Button>
+                        </div>
+                      )}
+
+                      {canCancel && (
+                        <div className="rounded-lg border border-red-200 bg-red-50/50 p-4">
+                          <p className="font-semibold text-red-900">
+                            Cancel Appointment
+                          </p>
+                          {!showCancelReason ? (
+                            <>
+                              <p className="mt-1 text-sm text-red-700">
+                                Please provide a reason for cancellation
+                              </p>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="mt-3 w-full"
+                                onClick={() => setShowCancelReason(true)}
+                              >
+                                Enter Cancellation Reason
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <textarea
+                                className="mt-2 w-full rounded-md border border-red-200 bg-white p-2 text-sm focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-200"
+                                rows={3}
+                                value={cancelReason}
+                                placeholder="Example: Patient requested to reschedule due to work commitments"
+                                onChange={(event) =>
+                                  setCancelReason(event.target.value)
+                                }
+                              />
+                              <div className="mt-3 flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="flex-1"
+                                  disabled={
+                                    cancelMutation.isPending ||
+                                    !cancelReason.trim()
+                                  }
+                                  onClick={() => cancelMutation.mutate()}
+                                >
+                                  {cancelMutation.isPending
+                                    ? "Cancelling..."
+                                    : "Confirm Cancellation"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setShowCancelReason(false);
+                                    setCancelReason("");
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Status Information Card */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Status Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                      <div>
+                        <p className="font-medium text-gray-500">
+                          Current Status
+                        </p>
+                        <p className="mt-1">
+                          <Badge
+                            className={cn(
+                              "border font-semibold",
+                              statusBadgeClass(normalizedStatus)
+                            )}
+                          >
+                            {(
+                              APPOINTMENT_STATUS_LABELS as Record<
+                                string,
+                                string
+                              >
+                            )[normalizedStatus] ?? normalizedStatus}
+                          </Badge>
+                        </p>
+                      </div>
+                      {appointment.createdAt && (
+                        <div>
+                          <p className="font-medium text-gray-500">
+                            Created At
+                          </p>
+                          <p className="mt-1 text-gray-900">
+                            {formatDateTime(appointment.createdAt)}
+                          </p>
+                        </div>
+                      )}
+                      {appointment.updatedAt && (
+                        <div>
+                          <p className="font-medium text-gray-500">
+                            Last Updated
+                          </p>
+                          <p className="mt-1 text-gray-900">
+                            {formatDateTime(appointment.updatedAt)}
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

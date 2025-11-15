@@ -8,6 +8,16 @@ import type {
 
 /**
  * Treatment API
+ *
+ * Backend Endpoints:
+ * - GET    /api/treatment
+ * - POST   /api/treatment
+ * - GET    /api/treatment/{id}
+ * - PUT    /api/treatment/{id}
+ * - DELETE /api/treatment/{id}
+ * - PUT    /api/treatment/{id}/status
+ *
+ * Note: Treatment entity exists and has doctorId field for filtering
  */
 export class TreatmentApi {
   constructor(private readonly client: AxiosInstance) {}
@@ -19,9 +29,29 @@ export class TreatmentApi {
   async getTreatments(
     params?: TreatmentListQuery
   ): Promise<DynamicResponse<Treatment>> {
+    const mapped = params
+      ? {
+          PageNumber: params.pageNumber,
+          PageSize: params.pageSize,
+          TreatmentType: params.treatmentType,
+          Status: params.status,
+          PatientId: params.patientId,
+          DoctorId: params.doctorId,
+        }
+      : undefined;
+
+    // Remove undefined values
+    if (mapped) {
+      Object.keys(mapped).forEach((key) => {
+        if ((mapped as any)[key] === undefined) {
+          delete (mapped as any)[key];
+        }
+      });
+    }
+
     const response = await this.client.get<DynamicResponse<Treatment>>(
       "/treatment",
-      { params }
+      { params: mapped }
     );
     return response.data;
   }
@@ -70,8 +100,10 @@ export class TreatmentApi {
    * Delete treatment
    * DELETE /api/treatment/{id}
    */
-  async deleteTreatment(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(`/treatment/${id}`);
+  async deleteTreatment(id: string): Promise<BaseResponse<null>> {
+    const response = await this.client.delete<BaseResponse<null>>(
+      `/treatment/${id}`
+    );
     return response.data;
   }
 }

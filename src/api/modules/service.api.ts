@@ -12,6 +12,33 @@ import type {
 export class ServiceApi {
   constructor(private readonly client: AxiosInstance) {}
 
+  private mapServiceListQuery(params?: ServiceListQuery) {
+    if (!params) {
+      return undefined;
+    }
+
+    const mapped: Record<string, unknown> = {
+      page: params.page ?? params.Page,
+      size: params.size ?? params.Size,
+      sort: params.sort ?? params.Sort,
+      order: params.order ?? params.Order,
+      searchTerm: params.searchTerm ?? params.SearchTerm,
+      serviceCategoryId:
+        params.serviceCategoryId ?? params.ServiceCategoryId,
+      isActive: params.isActive ?? params.Status,
+      minPrice: params.minPrice ?? params.MinPrice,
+      maxPrice: params.maxPrice ?? params.MaxPrice,
+    };
+
+    Object.keys(mapped).forEach((key) => {
+      if (mapped[key] === undefined || mapped[key] === null) {
+        delete mapped[key];
+      }
+    });
+
+    return mapped;
+  }
+
   /**
    * Get list of services
    * GET /api/service
@@ -20,8 +47,8 @@ export class ServiceApi {
     params?: ServiceListQuery
   ): Promise<DynamicResponse<Service>> {
     const response = await this.client.get<DynamicResponse<Service>>(
-      "/service",
-      { params }
+      "/Service",
+      { params: this.mapServiceListQuery(params) }
     );
     return response.data;
   }
@@ -32,7 +59,7 @@ export class ServiceApi {
    */
   async getServiceById(id: string): Promise<BaseResponse<Service>> {
     const response = await this.client.get<BaseResponse<Service>>(
-      `/service/${id}`
+      `/Service/${id}`
     );
     return response.data;
   }
@@ -43,7 +70,7 @@ export class ServiceApi {
    */
   async createService(data: Partial<Service>): Promise<BaseResponse<Service>> {
     const response = await this.client.post<BaseResponse<Service>>(
-      "/service",
+      "/Service",
       data
     );
     return response.data;
@@ -58,7 +85,7 @@ export class ServiceApi {
     data: Partial<Service>
   ): Promise<BaseResponse<Service>> {
     const response = await this.client.put<BaseResponse<Service>>(
-      `/service/${id}`,
+      `/Service/${id}`,
       data
     );
     return response.data;
@@ -69,7 +96,18 @@ export class ServiceApi {
    * DELETE /api/service/{id}
    */
   async deleteService(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(`/service/${id}`);
+    const response = await this.client.delete<BaseResponse>(`/Service/${id}`);
+    return response.data;
+  }
+
+  /**
+   * Get active services
+   * GET /api/Service/active
+   */
+  async getActiveServices(): Promise<BaseResponse<Service[]>> {
+    const response = await this.client.get<BaseResponse<Service[]>>(
+      "/Service/active"
+    );
     return response.data;
   }
 }

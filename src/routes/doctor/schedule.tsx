@@ -1,54 +1,47 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { isAxiosError } from "axios";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
-import type { DynamicResponse, DoctorSchedule, TimeSlot } from "@/api/types";
+import type { PaginatedResponse, Appointment, Slot } from "@/api/types";
+import { useAuth } from "@/contexts/AuthContext";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 import { cn } from "@/utils/cn";
 
-type DoctorSchedulePayload = Partial<DoctorSchedule> & {
-  DoctorId?: string;
-  AccountId?: string;
-  SlotId?: string;
-  WorkDate?: string;
-  StartTime?: string;
-  EndTime?: string;
-  Location?: string;
-  Notes?: string;
-  IsAvailable?: boolean;
-};
-
-const DEFAULT_SLOTS: TimeSlot[] = [
+// Default slots from database (Slots table)
+const DEFAULT_SLOTS: (Slot & { notes?: string })[] = [
   {
-    id: "30000000-0000-0000-0000-000000000001",
+    id: "00000000-0000-0000-0000-000000000001",
+    doctorScheduleId: "",
     startTime: "08:00:00",
     endTime: "10:00:00",
     notes: "Morning Slot 1",
     isBooked: false,
   },
   {
-    id: "30000000-0000-0000-0000-000000000002",
+    id: "00000000-0000-0000-0000-000000000002",
+    doctorScheduleId: "",
     startTime: "10:00:00",
     endTime: "12:00:00",
     notes: "Morning Slot 2",
     isBooked: false,
   },
   {
-    id: "30000000-0000-0000-0000-000000000003",
+    id: "00000000-0000-0000-0000-000000000003",
+    doctorScheduleId: "",
     startTime: "13:00:00",
     endTime: "15:00:00",
     notes: "Afternoon Slot 1",
     isBooked: false,
   },
   {
-    id: "30000000-0000-0000-0000-000000000004",
+    id: "00000000-0000-0000-0000-000000000004",
+    doctorScheduleId: "",
     startTime: "15:00:00",
     endTime: "17:00:00",
     notes: "Afternoon Slot 2",
@@ -62,13 +55,10 @@ export const Route = createFileRoute("/doctor/schedule")({
 
 function DoctorScheduleComponent() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(
     () => new Date().toISOString().split("T")[0]
   );
-  const [location, setLocation] = useState("Clinic A");
-  const [notes, setNotes] = useState("");
-  const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
-  const [isCopying, setIsCopying] = useState(false);
 
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -82,92 +72,149 @@ function DoctorScheduleComponent() {
       .join("/")}`;
   }, [selectedDate]);
 
+  // AccountId IS DoctorId - use user.id directly as doctorId
+  const doctorId = user?.id ?? null;
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
     useDoctorProfile();
-  const doctorId = doctorProfile?.id;
 
-  const emptySchedules: DynamicResponse<DoctorSchedule> = useMemo(
-    () => ({
-      data: [],
-      metaData: { total: 0, page: 1, size: 0, totalPages: 0 },
-    }),
-    []
-  );
+  // Check if selected date is a weekend (Saturday = 6, Sunday = 0)
+  const isWeekend = useMemo(() => {
+    const date = new Date(`${selectedDate}T00:00:00`);
+    const dayOfWeek = date.getDay();
+    return dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+  }, [selectedDate]);
 
-  const slotsQuery = useQuery<DynamicResponse<TimeSlot>>({
-    queryKey: ["doctor", "schedule", "slots", doctorId],
-    enabled: !!doctorId,
-    retry: false,
-    queryFn: async (): Promise<DynamicResponse<TimeSlot>> => {
-      try {
-        const response = await api.slot.getSlots({
-          DoctorId: doctorId,
-          Page: 1,
-          Size: 10,
-        });
-        return (
-          response ?? {
-            data: [],
-            metaData: { total: 0, page: 1, size: 0, totalPages: 0 },
-          }
-        );
-      } catch (error: any) {
-        if (isAxiosError(error) && error.response?.status === 404) {
+  // Query appointments for the selected date and doctor to check which slots are booked
+  const { data: appointmentsData, isFetching: isLoadingAppointments } =
+    useQuery<PaginatedResponse<Appointment>>({
+      queryKey: ["doctor", "appointments", doctorId, selectedDate],
+      enabled: !!doctorId && !isWeekend,
+      retry: false,
+      queryFn: async (): Promise<PaginatedResponse<Appointment>> => {
+        if (!doctorId) {
           return {
+            code: 200,
+            message: "",
             data: [],
-            metaData: { total: 0, page: 1, size: 0, totalPages: 0 },
+            metaData: {
+              pageNumber: 1,
+              pageSize: 100,
+              totalCount: 0,
+              totalPages: 0,
+              hasPrevious: false,
+              hasNext: false,
+            },
           };
         }
-        const message =
-          error?.response?.data?.message || "Unable to load time slots.";
-        toast.error(message);
-        return {
-          data: [],
-          metaData: { total: 0, page: 1, size: 0, totalPages: 0 },
-        };
-      }
-    },
-  });
 
-  const { data, isFetching } = useQuery<DynamicResponse<DoctorSchedule>>({
-    queryKey: ["doctor", "schedule", doctorId, selectedDate],
-    enabled: !!doctorId,
-    retry: false,
-    queryFn: async (): Promise<DynamicResponse<DoctorSchedule>> => {
-      if (!doctorId) {
-        return emptySchedules;
-      }
-
-      try {
-        const response = await api.doctorSchedule.getSchedulesByDoctor(
-          doctorId,
-          {
-            WorkDate: selectedDate,
-            Page: 1,
-            Size: 25,
+        try {
+          // Query appointments for the selected date
+          const response = await api.appointment.getAppointments({
+            doctorId,
+            dateFrom: `${selectedDate}T00:00:00`,
+            dateTo: `${selectedDate}T23:59:59`,
+            pageNumber: 1,
+            pageSize: 100,
+          });
+          return response;
+        } catch (error: any) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            return {
+              code: 200,
+              message: "",
+              data: [],
+              metaData: {
+                pageNumber: 1,
+                pageSize: 100,
+                totalCount: 0,
+                totalPages: 0,
+                hasPrevious: false,
+                hasNext: false,
+              },
+            };
           }
-        );
-        return response ?? emptySchedules;
-      } catch (error: any) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return emptySchedules;
+          return {
+            code: 200,
+            message: "",
+            data: [],
+            metaData: {
+              pageNumber: 1,
+              pageSize: 100,
+              totalCount: 0,
+              totalPages: 0,
+              hasPrevious: false,
+              hasNext: false,
+            },
+          };
         }
-        const message =
-          error?.response?.data?.message || "Unable to load work schedule.";
-        toast.error(message);
-        return emptySchedules;
-      }
-    },
-  });
+      },
+    });
 
-  const slots = (
-    slotsQuery.data?.data?.length ? slotsQuery.data.data : DEFAULT_SLOTS
-  ) as TimeSlot[];
+  // Map appointments to slots to determine which slots are booked
+  const bookedSlotIds = useMemo(() => {
+    const appointments = appointmentsData?.data ?? [];
+    const bookedIds = new Set<string>();
+
+    appointments.forEach((appointment) => {
+      // Check if appointment has a slotId
+      if (appointment.slotId) {
+        bookedIds.add(appointment.slotId);
+      } else {
+        // If no slotId, try to match by appointment date time
+        if (appointment.appointmentDate) {
+          const appointmentDate = new Date(appointment.appointmentDate);
+          const appointmentHour = appointmentDate.getHours();
+          const appointmentMinute = appointmentDate.getMinutes();
+          const appointmentTime = `${String(appointmentHour).padStart(2, "0")}:${String(appointmentMinute).padStart(2, "0")}`;
+
+          const matchedSlot = DEFAULT_SLOTS.find((slot) => {
+            // Extract time from slot.startTime (could be ISO datetime or just time string)
+            let slotStart: string | undefined;
+            if (slot.startTime?.includes("T")) {
+              // ISO datetime format - extract HH:mm
+              const slotDate = new Date(slot.startTime);
+              slotStart = `${String(slotDate.getHours()).padStart(2, "0")}:${String(slotDate.getMinutes()).padStart(2, "0")}`;
+            } else if (slot.startTime) {
+              // Time string format (HH:mm:ss or HH:mm) - extract HH:mm
+              slotStart = slot.startTime.slice(0, 5);
+            }
+            // Compare HH:mm format (without seconds)
+            return slotStart === appointmentTime;
+          });
+          if (matchedSlot) {
+            bookedIds.add(matchedSlot.id);
+          }
+        }
+      }
+    });
+
+    return bookedIds;
+  }, [appointmentsData]);
+
+  // Create slots with booking status
+  const slotsWithStatus = useMemo(() => {
+    return DEFAULT_SLOTS.map((slot) => ({
+      ...slot,
+      isBooked: bookedSlotIds.has(slot.id),
+      bookingStatus: bookedSlotIds.has(slot.id)
+        ? ("booked" as const)
+        : ("available" as const),
+    }));
+  }, [bookedSlotIds]);
+
+  const slots = slotsWithStatus;
 
   const handleShiftDay = (offset: number) => {
-    const base = new Date(`${selectedDate}T00:00:00`);
-    base.setDate(base.getDate() + offset);
-    setSelectedDate(base.toISOString().split("T")[0]);
+    // Parse the date string to avoid timezone issues
+    const [year, month, day] = selectedDate.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    date.setDate(date.getDate() + offset);
+
+    // Format back to YYYY-MM-DD
+    const newYear = date.getFullYear();
+    const newMonth = String(date.getMonth() + 1).padStart(2, "0");
+    const newDay = String(date.getDate()).padStart(2, "0");
+    setSelectedDate(`${newYear}-${newMonth}-${newDay}`);
   };
 
   const handleResetToday = () => {
@@ -176,325 +223,46 @@ function DoctorScheduleComponent() {
     }
   };
 
-  const handleSelectAllSlots = () => {
-    setSelectedSlots(slots.map((slot) => slot.id));
-  };
-
-  const handleClearSlots = () => {
-    setSelectedSlots([]);
-  };
-
   const handleRefresh = () => {
     if (!doctorId) {
       return;
     }
     queryClient.invalidateQueries({
-      queryKey: ["doctor", "schedule", doctorId, selectedDate],
-    });
-    queryClient.invalidateQueries({
-      queryKey: ["doctor", "schedule", "slots", doctorId],
+      queryKey: ["doctor", "appointments", doctorId, selectedDate],
     });
   };
 
-  const schedulesForDay = useMemo(() => {
-    const normalizeDate = (value?: string) => value?.split("T")[0] ?? value;
-    return (data?.data ?? []).filter(
-      (schedule) => normalizeDate(schedule.workDate) === selectedDate
-    );
-  }, [data?.data, selectedDate]);
+  // Get appointments for the selected date
+  const appointmentsForDay = useMemo(() => {
+    return appointmentsData?.data ?? [];
+  }, [appointmentsData]);
 
-  const resolveSlotMatch = (schedule: DoctorSchedule) => {
-    if (schedule.slotId) {
-      return schedule.slotId;
-    }
-    const scheduleStart = (schedule.startTime ?? "").slice(0, 5);
-    const scheduleEnd = (schedule.endTime ?? "").slice(0, 5);
-    const matchedSlot = slots.find((slot) => {
-      const slotStart = (slot.startTime ?? "").slice(0, 5);
-      const slotEnd = (slot.endTime ?? "").slice(0, 5);
-      return slotStart === scheduleStart && slotEnd === scheduleEnd;
-    });
-    return matchedSlot?.id;
-  };
+  // Count available and booked slots
+  const availableSlotsCount = useMemo(() => {
+    return slots.filter((slot) => !slot.isBooked).length;
+  }, [slots]);
 
-  const schedulesBySlot = useMemo(() => {
-    const map = new Map<string, DoctorSchedule>();
-    schedulesForDay.forEach((schedule) => {
-      const slotKey = resolveSlotMatch(schedule);
-      if (slotKey) {
-        map.set(slotKey, schedule);
-      }
-    });
-    return map;
-  }, [schedulesForDay, slots]);
-
-  const handleCopyPreviousDay = async () => {
-    if (!doctorId) {
-      toast.error("Unable to find doctor information.");
-      return;
-    }
-
-    setIsCopying(true);
-    try {
-      const base = new Date(`${selectedDate}T00:00:00`);
-      base.setDate(base.getDate() - 1);
-      const previousDate = base.toISOString().split("T")[0];
-
-      const response = await api.doctorSchedule.getSchedulesByDoctor(doctorId, {
-        WorkDate: previousDate,
-        Page: 1,
-        Size: 25,
-      });
-
-      const previousSchedules = response?.data ?? [];
-      if (!previousSchedules.length) {
-        toast.info("No schedule from the previous day to copy.");
-        return;
-      }
-
-      const slotIdSet = new Set<string>();
-      previousSchedules.forEach((schedule) => {
-        const slotKey = schedule.slotId || resolveSlotMatch(schedule);
-        if (slotKey) {
-          slotIdSet.add(slotKey);
-        }
-      });
-
-      if (!slotIdSet.size) {
-        toast.warning("No matching time slots to copy.");
-        return;
-      }
-
-      const orderedSelection = slots
-        .filter((slot) => slotIdSet.has(slot.id))
-        .map((slot) => slot.id);
-
-      setSelectedSlots(orderedSelection);
-      setLocation(previousSchedules[0]?.location || "Clinic A");
-      setNotes(previousSchedules[0]?.notes || "");
-      toast.success(
-        `Copied ${orderedSelection.length} time slots from ${previousDate
-          .split("-")
-          .reverse()
-          .join("/")}.`
-      );
-    } catch (error: any) {
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Unable to copy the previous day's schedule.";
-      toast.error(message);
-    } finally {
-      setIsCopying(false);
-    }
-  };
-
-  const activeSlotIds = useMemo(() => {
-    return schedulesForDay
-      .filter((schedule) => schedule.isAvailable !== false)
-      .map((schedule) => resolveSlotMatch(schedule))
-      .filter((id): id is string => Boolean(id));
-  }, [schedulesForDay, slots]);
-
-  const selectedSlotDetails = useMemo(() => {
-    return slots
-      .filter((slot) => selectedSlots.includes(slot.id))
-      .map((slot) => ({
-        id: slot.id,
-        label: `${(slot.startTime ?? "").slice(0, 5)} - ${(slot.endTime ?? "").slice(0, 5)}`,
-        notes: slot.notes,
-      }));
-  }, [slots, selectedSlots]);
-
-  const savedLocation = schedulesForDay[0]?.location || "";
-  const savedNotes = schedulesForDay[0]?.notes || "";
-  const hasSavedSchedules = schedulesForDay.length > 0;
-
-  const unsavedChanges = useMemo(() => {
-    const currentSet = new Set(selectedSlots);
-    const activeSet = new Set(activeSlotIds);
-    const slotsChanged =
-      currentSet.size !== activeSet.size ||
-      activeSlotIds.some((id) => !currentSet.has(id));
-
-    const locationChanged = hasSavedSchedules
-      ? (location || "") !== (savedLocation || "")
-      : (location || "") !== "Clinic A";
-
-    const notesChanged = hasSavedSchedules
-      ? (notes || "") !== (savedNotes || "")
-      : Boolean(notes);
-
-    return slotsChanged || locationChanged || notesChanged;
-  }, [
-    selectedSlots,
-    activeSlotIds,
-    location,
-    notes,
-    savedLocation,
-    savedNotes,
-    hasSavedSchedules,
-  ]);
-
-  useEffect(() => {
-    setSelectedSlots((prev) => {
-      if (
-        prev.length === activeSlotIds.length &&
-        prev.every((id, index) => id === activeSlotIds[index])
-      ) {
-        return prev;
-      }
-      return activeSlotIds;
-    });
-
-    if (schedulesForDay.length) {
-      const nextLocation = schedulesForDay[0]?.location || "Clinic A";
-      const nextNotes = schedulesForDay[0]?.notes || "";
-
-      setLocation((current) =>
-        current === nextLocation ? current : nextLocation
-      );
-      setNotes((current) => (current === nextNotes ? current : nextNotes));
-    } else {
-      setLocation((current) => (current === "Clinic A" ? current : "Clinic A"));
-      setNotes((current) => (current === "" ? current : ""));
-    }
-  }, [schedulesForDay, slots]);
-
-  const toggleSlotSelection = (slotId: string) => {
-    setSelectedSlots((prev) =>
-      prev.includes(slotId)
-        ? prev.filter((id) => id !== slotId)
-        : [...prev, slotId]
-    );
-  };
-
-  const saveSlotsMutation = useMutation({
-    mutationFn: async () => {
-      if (!doctorId) {
-        throw new Error("Unable to find doctor information.");
-      }
-
-      const workDateValue = selectedDate;
-      const selectedSet = new Set(selectedSlots);
-
-      const deletePromises = schedulesForDay.map((schedule) =>
-        api.doctorSchedule
-          .deleteDoctorSchedule(schedule.id)
-          .catch((error: any) => {
-            if (isAxiosError(error) && error.response?.status === 404) {
-              return Promise.resolve();
-            }
-            throw error;
-          })
-      );
-
-      await Promise.all(deletePromises);
-
-      if (!selectedSet.size) {
-        return { created: 0, failed: 0 };
-      }
-
-      let createdCount = 0;
-      let failedCount = 0;
-      const errors: Array<{ slotId: string; message: string }> = [];
-
-      for (const slot of slots) {
-        if (!selectedSet.has(slot.id)) {
-          continue;
-        }
-
-        try {
-          await api.doctorSchedule.createDoctorSchedule({
-            doctorId,
-            DoctorId: doctorId,
-            AccountId: doctorProfile?.accountId,
-            slotId: slot.id,
-            SlotId: slot.id,
-            workDate: workDateValue,
-            WorkDate: workDateValue,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-            StartTime: slot.startTime,
-            EndTime: slot.endTime,
-            location: location || undefined,
-            Location: location || undefined,
-            notes: notes || undefined,
-            Notes: notes || undefined,
-            isAvailable: true,
-            IsAvailable: true,
-          } as DoctorSchedulePayload);
-          createdCount += 1;
-        } catch (error: any) {
-          failedCount += 1;
-          errors.push({
-            slotId: slot.id,
-            message:
-              error?.response?.data?.message ||
-              error?.message ||
-              "Unable to create this time slot.",
-          });
-        }
-      }
-
-      return { created: createdCount, failed: failedCount, errors };
-    },
-    onSuccess: ({ created, failed, errors }) => {
-      if (created && !failed) {
-        toast.success(
-          `Saved ${created} shifts for ${selectedDate.split("-").reverse().join("/")}.`
-        );
-      } else if (!created && !failed) {
-        toast.success("Deleted the schedule for this day.");
-      } else {
-        toast.warning(
-          `Saved ${created} time slots, ${failed} time slots failed.`
-        );
-        if (errors?.length) {
-          errors.slice(0, 3).forEach((err) => {
-            toast.error(`Slot ${err.slotId}: ${err.message}`);
-          });
-        }
-      }
-      queryClient.invalidateQueries({
-        queryKey: ["doctor", "schedule", doctorId, selectedDate],
-      });
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Unable to update the work schedule.";
-      toast.error(message);
-    },
-  });
-
-  const scheduleEntries = useMemo(
-    () =>
-      schedulesForDay.map((slot) => ({
-        ...slot,
-        startDisplay: (slot.startTime ?? "").slice(0, 5),
-        endDisplay: (slot.endTime ?? "").slice(0, 5),
-      })),
-    [schedulesForDay]
-  );
+  const bookedSlotsCount = useMemo(() => {
+    return slots.filter((slot) => slot.isBooked).length;
+  }, [slots]);
 
   return (
     <ProtectedRoute allowedRoles={["Doctor"]}>
       <DashboardLayout>
         <div className="space-y-8">
-          {!doctorProfileLoading && !doctorId ? (
+          {!doctorProfileLoading && !doctorProfile && doctorId ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              No doctor profile found for this account. Please contact the
-              administrator for access.
+              Doctor profile information is being loaded. If this message
+              persists, please contact the administrator.
             </div>
           ) : null}
 
           <section className="flex flex-col gap-2">
             <h1 className="text-3xl font-bold">My schedule</h1>
             <p className="text-gray-600">
-              Manage consultations, procedures, and availability. The schedule
-              syncs with the Appointments module.
+              View your daily availability. By default, you have 4 available
+              slots per day (Monday-Friday). Booked slots are automatically
+              marked as unavailable.
             </p>
           </section>
 
@@ -535,35 +303,68 @@ function DoctorScheduleComponent() {
                   }}
                   className="w-[160px]"
                 />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={isLoadingAppointments}
+                >
+                  {isLoadingAppointments ? "Refreshing..." : "Refresh"}
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-gray-600">
-              {isFetching ? (
+              {isWeekend ? (
+                <div className="py-6 text-center text-gray-500">
+                  <p className="font-medium text-gray-900 mb-2">
+                    Weekend - No slots available
+                  </p>
+                  <p className="text-sm">
+                    Slots are only available Monday through Friday.
+                  </p>
+                </div>
+              ) : isLoadingAppointments ? (
                 <div className="py-6 text-center text-gray-500">
                   Loading schedule...
                 </div>
-              ) : scheduleEntries.length ? (
-                scheduleEntries.map((slot) => (
-                  <div
-                    key={slot.id}
-                    className="flex flex-col gap-1 rounded-lg border border-gray-100 p-4 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {slot.startDisplay} - {slot.endDisplay}
-                      </p>
-                      <p className="text-gray-500">
-                        {slot.location || "Clinic"}
-                      </p>
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Notes: {slot.notes || "(None)"}
-                    </p>
-                  </div>
-                ))
+              ) : appointmentsForDay.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="font-medium text-gray-900 mb-3">
+                    Appointments for this day ({appointmentsForDay.length})
+                  </p>
+                  {appointmentsForDay.map((appointment) => {
+                    const appointmentTime = appointment.appointmentDate
+                      ? new Date(
+                          appointment.appointmentDate
+                        ).toLocaleTimeString("en-US", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "N/A";
+                    return (
+                      <div
+                        key={appointment.id}
+                        className="flex flex-col gap-1 rounded-lg border border-gray-100 p-4 md:flex-row md:items-center md:justify-between"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {appointmentTime}
+                          </p>
+                          <p className="text-gray-500">
+                            {appointment.appointmentCode ||
+                              `Appointment ${appointment.id.slice(0, 8)}`}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          Status: {appointment.status || "Scheduled"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 <div className="py-6 text-center text-gray-500">
-                  You don't have a schedule for this day.
+                  No appointments scheduled for this day.
                 </div>
               )}
             </CardContent>
@@ -571,86 +372,77 @@ function DoctorScheduleComponent() {
 
           <section className="grid gap-6 lg:grid-cols-[1.5fr,1fr]">
             <Card>
-              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle>Select working time slots</CardTitle>
-                  <p className="text-sm text-gray-500">
-                    The system provides four default slots. Pick the ones you
-                    will accept on {selectedDate.split("-").reverse().join("/")}
-                    .
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleSelectAllSlots}
-                    disabled={!slots.length}
-                  >
-                    Select all
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearSlots}
-                    disabled={!selectedSlots.length}
-                  >
-                    Clear selection
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCopyPreviousDay}
-                    disabled={isCopying || !doctorId}
-                  >
-                    {isCopying ? "Copying..." : "Copy yesterday"}
-                  </Button>
-                </div>
+              <CardHeader>
+                <CardTitle>Daily time slots</CardTitle>
+                <p className="text-sm text-gray-500">
+                  {isWeekend
+                    ? "No slots available on weekends."
+                    : `You have 4 default slots per day. ${availableSlotsCount} available, ${bookedSlotsCount} booked.`}
+                </p>
               </CardHeader>
               <CardContent>
-                {slotsQuery.isFetching ? (
+                {isWeekend ? (
                   <div className="py-6 text-center text-gray-500">
-                    Loading default time slots...
+                    <p className="font-medium text-gray-900 mb-2">
+                      Weekend - No slots available
+                    </p>
+                    <p className="text-sm">
+                      Slots are only available Monday through Friday.
+                    </p>
+                  </div>
+                ) : isLoadingAppointments ? (
+                  <div className="py-6 text-center text-gray-500">
+                    Loading slots...
                   </div>
                 ) : slots.length ? (
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     {slots.map((slot) => {
-                      const checked = selectedSlots.includes(slot.id);
-                      const linkedSchedule = schedulesBySlot.get(slot.id);
-                      const slotLabelStart = (slot.startTime ?? "").slice(0, 5);
-                      const slotLabelEnd = (slot.endTime ?? "").slice(0, 5);
+                      // Extract time from startTime (could be ISO datetime or time string)
+                      const getTimeString = (timeStr?: string) => {
+                        if (!timeStr) return "N/A";
+                        if (timeStr.includes("T")) {
+                          // ISO datetime format
+                          return new Date(timeStr).toLocaleTimeString("en-US", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: false,
+                          });
+                        }
+                        // Time string format (HH:mm:ss or HH:mm)
+                        return timeStr.slice(0, 5);
+                      };
+                      const slotLabelStart = getTimeString(slot.startTime);
+                      const slotLabelEnd = getTimeString(slot.endTime);
+                      const isBooked =
+                        slot.isBooked || slot.bookingStatus === "booked";
                       return (
-                        <button
+                        <div
                           key={slot.id}
-                          type="button"
-                          onClick={() => toggleSlotSelection(slot.id)}
                           className={cn(
-                            "rounded-lg border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-primary/40",
-                            checked
-                              ? "border-primary bg-primary/10 shadow"
-                              : "border-gray-200 bg-white hover:border-primary"
+                            "rounded-lg border p-4 text-left transition",
+                            isBooked
+                              ? "border-red-200 bg-red-50/50"
+                              : "border-green-200 bg-green-50/50"
                           )}
                         >
                           <div className="flex items-center justify-between">
                             <p className="text-base font-semibold text-gray-900">
                               {slotLabelStart} - {slotLabelEnd}
                             </p>
-                            {checked ? (
-                              <span className="text-xs font-medium text-primary">
-                                Selected
+                            {isBooked ? (
+                              <span className="text-xs font-medium text-red-600">
+                                Booked
                               </span>
-                            ) : linkedSchedule ? (
-                              <span className="text-xs text-gray-500">
-                                Saved
+                            ) : (
+                              <span className="text-xs font-medium text-green-600">
+                                Available
                               </span>
-                            ) : null}
+                            )}
                           </div>
                           <p className="mt-1 text-xs text-gray-500">
-                            {linkedSchedule?.isAvailable === false
-                              ? "Disabled"
-                              : slot.notes || "Default time slot"}
+                            {slot.notes || "Default time slot"}
                           </p>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -666,169 +458,89 @@ function DoctorScheduleComponent() {
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>General information</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Location
-                    </label>
-                    <Input
-                      placeholder="Clinic A"
-                      value={location}
-                      onChange={(event) => setLocation(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Notes
-                    </label>
-                    <textarea
-                      className="min-h-[100px] w-full rounded-md border border-gray-200 p-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      placeholder="Additional information for the team, e.g. procedures requiring preparation."
-                      value={notes}
-                      onChange={(event) => setNotes(event.target.value)}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
                   <CardTitle>Daily overview</CardTitle>
-                  <p
-                    className={cn(
-                      "text-sm",
-                      unsavedChanges ? "text-amber-600" : "text-gray-500"
-                    )}
-                  >
-                    {unsavedChanges
-                      ? "You have unsaved changes for this day."
-                      : "The schedule is in sync with the saved data."}
+                  <p className="text-sm text-gray-500">
+                    {isWeekend
+                      ? "No slots available on weekends."
+                      : `Schedule automatically updates based on appointments.`}
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-5 text-sm text-gray-600">
                   <div>
                     <p className="font-medium text-gray-900">
-                      Selected time slots
+                      Slot availability
                     </p>
-                    {selectedSlotDetails.length ? (
-                      <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                        {selectedSlotDetails.map((slot) => (
-                          <li
-                            key={slot.id}
-                            className="flex items-center justify-between rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
-                          >
-                            <span className="font-medium text-gray-900">
-                              {slot.label}
-                            </span>
-                            {slot.notes && (
-                              <span className="text-[11px] text-gray-500">
-                                {slot.notes}
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-xs text-gray-500">
-                        No time slots selected.
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="font-medium text-gray-900">Saved schedule</p>
-                    {scheduleEntries.length ? (
-                      <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                        {scheduleEntries.map((entry) => (
-                          <li
-                            key={entry.id}
-                            className="flex items-center justify-between rounded-md border border-gray-100 px-3 py-2"
-                          >
-                            <span className="font-medium text-gray-900">
-                              {entry.startDisplay} - {entry.endDisplay}
-                            </span>
-                            <span className="text-[11px] text-gray-500">
-                              {entry.location || "Clinic"}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-xs text-gray-500">
-                        No schedule has been saved for this day.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1 text-xs text-gray-500">
-                    <p>
-                      Current location:{" "}
-                      <span className="font-medium text-gray-900">
-                        {location || "Clinic A"}
-                      </span>
-                    </p>
-                    <p>
-                      Notes:{" "}
-                      <span className="font-medium text-gray-900">
-                        {notes ? notes : "None yet"}
-                      </span>
-                    </p>
-                    {hasSavedSchedules ? (
-                      <p className="text-[11px] text-gray-400">
-                        Previously saved at{" "}
-                        <span className="font-medium text-gray-700">
-                          {savedLocation || "Clinic A"}
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-center justify-between rounded-md border border-green-100 bg-green-50 px-3 py-2">
+                        <span className="font-medium text-gray-900">
+                          Available slots
                         </span>
-                        .
+                        <span className="text-sm font-semibold text-green-600">
+                          {availableSlotsCount} / {slots.length}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-md border border-red-100 bg-red-50 px-3 py-2">
+                        <span className="font-medium text-gray-900">
+                          Booked slots
+                        </span>
+                        <span className="text-sm font-semibold text-red-600">
+                          {bookedSlotsCount} / {slots.length}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {!isWeekend && appointmentsForDay.length > 0 && (
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        Appointments ({appointmentsForDay.length})
                       </p>
-                    ) : (
-                      <p className="text-[11px] text-gray-400">
-                        No schedule has been saved previously.
-                      </p>
-                    )}
+                      <ul className="mt-2 space-y-1 text-xs text-gray-600">
+                        {appointmentsForDay.slice(0, 5).map((appointment) => {
+                          const appointmentTime = appointment.appointmentDate
+                            ? new Date(
+                                appointment.appointmentDate
+                              ).toLocaleTimeString("en-US", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "N/A";
+                          return (
+                            <li
+                              key={appointment.id}
+                              className="flex items-center justify-between rounded-md border border-gray-100 px-3 py-2"
+                            >
+                              <span className="font-medium text-gray-900">
+                                {appointmentTime}
+                              </span>
+                              <span className="text-[11px] text-gray-500">
+                                {appointment.appointmentCode || "Appt"}
+                              </span>
+                            </li>
+                          );
+                        })}
+                        {appointmentsForDay.length > 5 && (
+                          <li className="text-xs text-gray-500 px-3 py-1">
+                            +{appointmentsForDay.length - 5} more...
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="space-y-1 text-xs text-gray-500 pt-2 border-t">
+                    <p>
+                      <span className="font-medium text-gray-900">Note:</span>{" "}
+                      Slots are automatically available Monday through Friday.
+                      When a patient books an appointment, the corresponding
+                      slot becomes unavailable. No manual registration is
+                      required.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
             </div>
           </section>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p
-              className={cn(
-                "text-sm",
-                unsavedChanges ? "text-amber-600" : "text-gray-500"
-              )}
-            >
-              {unsavedChanges
-                ? "Unsaved changes detected. Click 'Save schedule' to update the system."
-                : "No changes compared with the saved data."}
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={handleRefresh}
-                disabled={saveSlotsMutation.isPending}
-              >
-                Reload data
-              </Button>
-              <Button
-                type="button"
-                disabled={saveSlotsMutation.isPending || !doctorId}
-                onClick={() => {
-                  if (!selectedSlots.length) {
-                    toast.info(
-                      "You haven't selected any time slots. Active slots will be turned off."
-                    );
-                  }
-                  saveSlotsMutation.mutate();
-                }}
-              >
-                {saveSlotsMutation.isPending ? "Saving..." : "Save schedule"}
-              </Button>
-            </div>
-          </div>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

@@ -1,66 +1,88 @@
 import { AxiosInstance } from "axios";
-import type { BaseResponse, DynamicResponse, User } from "../types";
+import type {
+  BaseResponse,
+  PaginatedResponse,
+  User,
+  UserDetailResponse,
+  UpdateUserRequest,
+  GetUsersRequest,
+} from "../types";
 
 /**
  * User API
+ * Matches Back-End API endpoints from /api/user/*
  */
 export class UserApi {
   constructor(private readonly client: AxiosInstance) {}
 
   /**
+   * Get current user profile
+   * GET /api/user/profile
+   */
+  async getCurrentUser(): Promise<BaseResponse<UserDetailResponse>> {
+    const response =
+      await this.client.get<BaseResponse<UserDetailResponse>>("/user/profile");
+    return response.data;
+  }
+
+  /**
+   * Get user by ID
+   * GET /api/user/{userId}
+   */
+  async getUserById(userId: string): Promise<BaseResponse<UserDetailResponse>> {
+    const response = await this.client.get<BaseResponse<UserDetailResponse>>(
+      `/user/${userId}`
+    );
+    return response.data;
+  }
+
+  /**
    * Get list of users
    * GET /api/user
    */
-  async getUsers(params?: {
-    Page?: number;
-    Size?: number;
-    SearchTerm?: string;
-  }): Promise<DynamicResponse<User>> {
-    const response = await this.client.get<DynamicResponse<User>>("/user", {
+  async getUsers(params?: GetUsersRequest): Promise<PaginatedResponse<User>> {
+    const response = await this.client.get<PaginatedResponse<User>>("/user", {
       params,
     });
     return response.data;
   }
 
   /**
-   * Get user by ID
-   * GET /api/user/{id}
+   * Update user profile
+   * PUT /api/user/profile
    */
-  async getUserById(id: string): Promise<BaseResponse<User>> {
-    const response = await this.client.get<BaseResponse<User>>(`/user/${id}`);
-    return response.data;
-  }
-
-  /**
-   * Create new user
-   * POST /api/user
-   */
-  async createUser(data: Partial<User>): Promise<BaseResponse<User>> {
-    const response = await this.client.post<BaseResponse<User>>("/user", data);
-    return response.data;
-  }
-
-  /**
-   * Update user
-   * PUT /api/user/{id}
-   */
-  async updateUser(
-    id: string,
-    data: Partial<User>
-  ): Promise<BaseResponse<User>> {
+  async updateProfile(data: UpdateUserRequest): Promise<BaseResponse<User>> {
     const response = await this.client.put<BaseResponse<User>>(
-      `/user/${id}`,
+      "/user/profile",
       data
     );
     return response.data;
   }
 
   /**
-   * Delete user
-   * DELETE /api/user/{id}
+   * Update user by ID
+   * PUT /api/user/{userId}
    */
-  async deleteUser(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(`/user/${id}`);
+  async updateUser(
+    userId: string,
+    data: UpdateUserRequest
+  ): Promise<BaseResponse<User>> {
+    const response = await this.client.put<BaseResponse<User>>(
+      `/user/${userId}`,
+      data
+    );
+    return response.data;
+  }
+
+  /**
+   * Check if email exists
+   * GET /api/user/email-exists
+   */
+  async checkEmailExists(email: string): Promise<BaseResponse<boolean>> {
+    const response = await this.client.get<BaseResponse<boolean>>(
+      "/user/email-exists",
+      { params: { email } }
+    );
     return response.data;
   }
 }

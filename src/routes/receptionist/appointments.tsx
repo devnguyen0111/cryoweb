@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -8,9 +8,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import { CreateAppointmentForm } from "@/features/receptionist/appointments/CreateAppointmentForm";
+import { AppointmentDetailForm } from "@/features/receptionist/appointments/AppointmentDetailForm";
 import { api } from "@/api/client";
+import type { Appointment, AppointmentStatus } from "@/api/types";
 import { cn } from "@/utils/cn";
+import {
+  APPOINTMENT_STATUS_LABELS,
+  ensureAppointmentStatus,
+  normalizeAppointmentStatus,
+} from "@/utils/appointments";
 
 export const Route = createFileRoute("/receptionist/appointments")({
   component: ReceptionistAppointmentsComponent,
@@ -22,80 +28,134 @@ function ReceptionistAppointmentsComponent() {
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<AppointmentStatus | "">("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-
-  const filters = useMemo(
-    () => ({ statusFilter, dateFrom, dateTo, searchTerm }),
-    [statusFilter, dateFrom, dateTo, searchTerm]
+  const [detailAppointmentId, setDetailAppointmentId] = useState<string | null>(
+    null
   );
+  const isDetailModalOpen = Boolean(detailAppointmentId);
+  const [detailAppointment, setDetailAppointment] =
+    useState<Appointment | null>(null);
+
+  const resolvePatientLabel = (appointment: Appointment) => {
+    const raw = appointment as unknown as Record<string, any>;
+    return (
+      raw.patient?.accountInfo?.username ??
+      raw.patient?.fullName ??
+      raw.patientName ??
+      raw.patientCode ??
+      raw.patient?.patientCode ??
+      appointment.patientId ??
+      raw.patientID ??
+      raw.PatientId ??
+      "—"
+    );
+  };
+
+  const resolveAppointmentDate = (value?: string) => {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString();
+    }
+    const datePart = value.split("T")[0];
+    return datePart || value;
+  };
+
+  const formatTimeValue = (value?: string) => {
+    if (!value) return "--:--";
+    if (value.includes("T")) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+    }
+    return value.slice(0, 5);
+  };
+
+  const renderTimeRange = (appointment: Appointment) => {
+    const start = formatTimeValue(appointment.startTime);
+    const end = formatTimeValue(appointment.endTime);
+    if (start === "--:--" && end === "--:--") {
+      return "No time set";
+    }
+    return `${start} – ${end}`;
+  };
+
+  const normalizedStatusFilter = statusFilter
+    ? ensureAppointmentStatus(statusFilter)
+    : undefined;
 
   const { data, isFetching } = useQuery({
     queryKey: [
       "receptionist",
       "appointments",
       {
-        Page: page,
-        Size: pageSize,
-        Status: filters.statusFilter || undefined,
-        From: filters.dateFrom || undefined,
-        To: filters.dateTo || undefined,
-        Search: filters.searchTerm || undefined,
+        page,
+        size: pageSize,
+        status: normalizedStatusFilter,
+        fromDate: dateFrom || undefined,
+        toDate: dateTo || undefined,
+        searchTerm: searchTerm || undefined,
       },
     ],
     queryFn: () =>
       api.appointment.getAppointments({
-        Page: page,
-        Size: pageSize,
-        Status: filters.statusFilter || (undefined as any),
-        AppointmentDateFrom: filters.dateFrom || undefined,
-        AppointmentDateTo: filters.dateTo || undefined,
-        SearchTerm: filters.searchTerm || undefined,
-        Sort: "appointmentDate",
-        Order: "asc",
+        page,
+        size: pageSize,
+        status: normalizedStatusFilter,
+        fromDate: dateFrom || undefined,
+        toDate: dateTo || undefined,
+        searchTerm: searchTerm || undefined,
+        sort: "appointmentDate",
+        order: "asc",
       }),
   });
 
   const appointments = data?.data ?? [];
   const total = data?.metaData?.total ?? 0;
-  const totalPages = data?.metaData?.totalPages ?? 1;
+  const totalPages =
+    data?.metaData?.totalPage ?? data?.metaData?.totalPages ?? 1;
 
   const statusBadgeClass = (status?: string) => {
-    switch ((status || "").toLowerCase()) {
-      case "scheduled":
-      case "confirmed":
+    const normalized = normalizeAppointmentStatus(status);
+    switch (normalized) {
+      case "Scheduled":
         return "bg-blue-100 text-blue-700";
-      case "in-progress":
+      case "CheckedIn":
+        return "bg-cyan-100 text-cyan-700";
+      case "InProgress":
         return "bg-amber-100 text-amber-700";
-      case "completed":
+      case "Completed":
         return "bg-emerald-100 text-emerald-700";
-      case "cancelled":
-      case "no-show":
+      case "Cancelled":
         return "bg-rose-100 text-rose-700";
+      case "NoShow":
+        return "bg-gray-200 text-gray-700";
       default:
-        return "bg-gray-100 text-gray-700";
+        return "bg-slate-100 text-slate-700";
     }
   };
 
   const formatStatusLabel = (status?: string) => {
-    if (!status) return "Scheduled";
-    return status
-      .split("-")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
+    const normalized = normalizeAppointmentStatus(status);
+    if (!normalized) return "Scheduled";
+    return APPOINTMENT_STATUS_LABELS[normalized];
   };
 
-  const statusOptions = [
+  const statusOptions: { value: AppointmentStatus | ""; label: string }[] = [
     { value: "", label: "All statuses" },
-    { value: "scheduled", label: "Scheduled" },
-    { value: "confirmed", label: "Confirmed" },
-    { value: "in-progress", label: "In progress" },
-    { value: "completed", label: "Completed" },
-    { value: "cancelled", label: "Cancelled" },
-    { value: "no-show", label: "No-show" },
+    { value: "Scheduled", label: APPOINTMENT_STATUS_LABELS.Scheduled },
+    { value: "CheckedIn", label: APPOINTMENT_STATUS_LABELS.CheckedIn },
+    { value: "InProgress", label: APPOINTMENT_STATUS_LABELS.InProgress },
+    { value: "Completed", label: APPOINTMENT_STATUS_LABELS.Completed },
+    { value: "Cancelled", label: APPOINTMENT_STATUS_LABELS.Cancelled },
+    { value: "NoShow", label: APPOINTMENT_STATUS_LABELS.NoShow },
   ];
 
   const resetFilters = () => {
@@ -110,7 +170,7 @@ function ReceptionistAppointmentsComponent() {
     mutationFn: (payload: { appointmentId: string; status: string }) =>
       api.appointment.updateAppointmentStatus(
         payload.appointmentId,
-        payload.status as any
+        ensureAppointmentStatus(payload.status)
       ),
     onSuccess: () => {
       toast.success("Appointment status updated");
@@ -129,12 +189,24 @@ function ReceptionistAppointmentsComponent() {
     },
   });
 
-  const handleStatusChange = (appointmentId: string, status: string) => {
-    updateStatusMutation.mutate({ appointmentId, status });
+  const handleStatusChange = (
+    appointmentId: string,
+    status: AppointmentStatus
+  ) => {
+    updateStatusMutation.mutate({
+      appointmentId,
+      status,
+    });
   };
 
-  const openCreateModal = () => setIsCreateModalOpen(true);
-  const closeCreateModal = () => setIsCreateModalOpen(false);
+  const openDetailModal = (appointment: Appointment) => {
+    setDetailAppointmentId(appointment.id);
+    setDetailAppointment(appointment);
+  };
+  const closeDetailModal = () => {
+    setDetailAppointmentId(null);
+    setDetailAppointment(null);
+  };
 
   return (
     <ProtectedRoute allowedRoles={["Receptionist"]}>
@@ -143,7 +215,6 @@ function ReceptionistAppointmentsComponent() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h1 className="text-3xl font-bold">Appointment management</h1>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={openCreateModal}>Create appointment</Button>
               <Button
                 variant="outline"
                 onClick={() => navigate({ to: "/receptionist/dashboard" })}
@@ -176,7 +247,9 @@ function ReceptionistAppointmentsComponent() {
                   <select
                     value={statusFilter}
                     onChange={(event) => {
-                      setStatusFilter(event.target.value);
+                      setStatusFilter(
+                        event.target.value as AppointmentStatus | ""
+                      );
                       setPage(1);
                     }}
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -255,14 +328,17 @@ function ReceptionistAppointmentsComponent() {
                                   {appointment.title || "Untitled appointment"}
                                 </div>
                                 <div className="text-xs text-gray-500">
-                                  Patient ID: {appointment.patientId || "—"}
+                                  Patient: {resolvePatientLabel(appointment)}
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-gray-600">
-                                <div>{appointment.appointmentDate || "—"}</div>
+                                <div>
+                                  {resolveAppointmentDate(
+                                    appointment.appointmentDate
+                                  )}
+                                </div>
                                 <div className="text-xs">
-                                  {appointment.startTime || "--"} -{" "}
-                                  {appointment.endTime || "--"}
+                                  {renderTimeRange(appointment)}
                                 </div>
                               </td>
                               <td className="px-4 py-3">
@@ -280,23 +356,20 @@ function ReceptionistAppointmentsComponent() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() =>
-                                      navigate({
-                                        to: "/receptionist/appointments/$appointmentId",
-                                        params: {
-                                          appointmentId: appointment.id,
-                                        },
-                                      })
-                                    }
+                                    onClick={() => openDetailModal(appointment)}
                                   >
                                     Details
                                   </Button>
                                   <select
-                                    value={appointment.status || ""}
+                                    value={
+                                      normalizeAppointmentStatus(
+                                        appointment.status
+                                      ) || ""
+                                    }
                                     onChange={(event) =>
                                       handleStatusChange(
                                         appointment.id,
-                                        event.target.value
+                                        event.target.value as AppointmentStatus
                                       )
                                     }
                                     className="rounded-md border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
@@ -359,23 +432,27 @@ function ReceptionistAppointmentsComponent() {
         </div>
       </DashboardLayout>
       <Modal
-        isOpen={isCreateModalOpen}
-        onClose={closeCreateModal}
-        title="Create appointment"
-        description="Convert a confirmed service request or schedule a visit directly."
+        isOpen={isDetailModalOpen}
+        onClose={closeDetailModal}
+        title="Appointment detail"
+        description="Review and update scheduling, participants, and status."
         size="xl"
       >
-        <CreateAppointmentForm
-          layout="modal"
-          onClose={closeCreateModal}
-          onCreated={(appointmentId) => {
-            closeCreateModal();
-            navigate({
-              to: "/receptionist/appointments/$appointmentId",
-              params: { appointmentId },
-            });
-          }}
-        />
+        {detailAppointmentId ? (
+          <AppointmentDetailForm
+            appointmentId={detailAppointmentId}
+            layout="modal"
+            initialAppointment={detailAppointment}
+            onClose={closeDetailModal}
+            onOpenPatientProfile={(patientId) => {
+              closeDetailModal();
+              navigate({
+                to: "/receptionist/patients/$patientId",
+                params: { patientId },
+              });
+            }}
+          />
+        ) : null}
       </Modal>
     </ProtectedRoute>
   );

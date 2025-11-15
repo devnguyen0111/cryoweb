@@ -1,16 +1,26 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
+import { isAxiosError } from "axios";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/utils/cn";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
-import type { AppointmentStatus, AppointmentType } from "@/api/types";
+import type { AppointmentStatus, AppointmentType, Patient } from "@/api/types";
+import { DoctorAppointmentDetailModal } from "@/features/doctor/appointments/DoctorAppointmentDetailModal";
+import { Modal } from "@/components/ui/modal";
+import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
 
 export const Route = createFileRoute("/doctor/appointments")({
   component: DoctorAppointmentsComponent,
@@ -19,10 +29,12 @@ export const Route = createFileRoute("/doctor/appointments")({
 function DoctorAppointmentsComponent() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
+  // AccountId IS DoctorId - use user.id directly as doctorId
+  const doctorId = user?.id ?? null;
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
     useDoctorProfile();
-  const doctorId = doctorProfile?.id;
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
@@ -31,6 +43,13 @@ function DoctorAppointmentsComponent() {
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [detailModalAppointmentId, setDetailModalAppointmentId] = useState<
+    string | null
+  >(null);
+  const [detailModalPatientId, setDetailModalPatientId] = useState<
+    string | null
+  >(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const filters = useMemo(
     () => ({ statusFilter, typeFilter, dateFrom, dateTo, searchTerm }),
@@ -42,13 +61,16 @@ function DoctorAppointmentsComponent() {
     | undefined;
   const typeParam = (typeFilter || undefined) as AppointmentType | undefined;
 
+  // Note: According to ERD, Appointment → Doctor relationship is through AppointmentDoctor table
+  // Backend API /api/appointment?doctorId=... should handle filtering via AppointmentDoctor
+  // If backend doesn't support this, consider using api.appointmentDoctor.getAssignmentsByDoctor()
   const { data, isFetching } = useQuery({
     queryKey: [
       "doctor",
       "appointments",
       {
-        DoctorId: doctorId,
-        page,
+        doctorId,
+        pageNumber: page,
         pageSize,
         ...filters,
       },
@@ -57,18 +79,66 @@ function DoctorAppointmentsComponent() {
     retry: false,
     queryFn: () =>
       api.appointment.getAppointments({
-        DoctorId: doctorId!,
-        Page: page,
-        Size: pageSize,
-        Status: statusParam,
-        Type: typeParam,
-        AppointmentDateFrom: dateFrom || undefined,
-        AppointmentDateTo: dateTo || undefined,
-        SearchTerm: searchTerm || undefined,
-        Sort: "appointmentDate",
-        Order: "asc",
+        doctorId: doctorId!,
+        pageNumber: page,
+        pageSize,
+        status: statusParam,
+        appointmentType: typeParam,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
       }),
   });
+
+  // Extract unique patient IDs from appointments
+  const patientIds = useMemo(() => {
+    if (!data?.data) return [];
+    const ids = data.data
+      .map((apt) => apt.patientId)
+      .filter((id): id is string => Boolean(id));
+    // Remove duplicates
+    return Array.from(new Set(ids));
+  }, [data?.data]);
+
+  // Fetch patient data for all appointments
+  const patientQueries = useQueries({
+    queries: patientIds.map((patientId) => ({
+      queryKey: ["doctor", "patient", patientId, "appointment-list"],
+      queryFn: async (): Promise<Patient | null> => {
+        try {
+          const response = await api.patient.getPatientById(patientId);
+          return response.data ?? null;
+        } catch (error) {
+          if (isAxiosError(error)) {
+            if (error.response?.status === 403) {
+              try {
+                const fallback = await api.patient.getPatientDetails(patientId);
+                return fallback.data ?? null;
+              } catch {
+                return null;
+              }
+            }
+            if (error.response?.status === 404) {
+              return null;
+            }
+          }
+          return null;
+        }
+      },
+      retry: false,
+      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    })),
+  });
+
+  // Create a map of patientId -> Patient for quick lookup
+  const patientsMap = useMemo(() => {
+    const map = new Map<string, Patient>();
+    patientQueries.forEach((query, index) => {
+      if (query.data && patientIds[index]) {
+        map.set(patientIds[index], query.data);
+      }
+    });
+    return map;
+  }, [patientQueries, patientIds]);
 
   const updateStatusMutation = useMutation({
     mutationFn: ({
@@ -77,7 +147,10 @@ function DoctorAppointmentsComponent() {
     }: {
       appointmentId: string;
       status: string;
-    }) => api.appointment.updateAppointmentStatus(appointmentId, status as any),
+    }) =>
+      api.appointment.updateAppointmentStatus(appointmentId, {
+        status: status as any,
+      }),
     onSuccess: (_, variables) => {
       toast.success("Appointment status updated successfully");
       queryClient.invalidateQueries({ queryKey: ["doctor", "appointments"] });
@@ -99,7 +172,7 @@ function DoctorAppointmentsComponent() {
     },
   });
 
-  const total = data?.metaData?.total ?? 0;
+  const total = data?.metaData?.totalCount ?? 0;
   const totalPages = data?.metaData?.totalPages ?? 1;
 
   const resetFilters = () => {
@@ -132,6 +205,24 @@ function DoctorAppointmentsComponent() {
     }
   };
 
+  const formatAppointmentType = (
+    type?: AppointmentType | string | null
+  ): string => {
+    if (!type) return "-";
+    // Handle the enum values
+    if (type === "FollowUp") return "Follow Up";
+    if (type === "Treatment") return "Treatment";
+    if (type === "Consultation") return "Consultation";
+    // Handle lowercase or other variations
+    const normalized = type.toLowerCase();
+    if (normalized === "followup" || normalized === "follow-up")
+      return "Follow Up";
+    if (normalized === "treatment") return "Treatment";
+    if (normalized === "consultation") return "Consultation";
+    // Return capitalized version for any other value
+    return type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+  };
+
   const appointmentTypes = [
     { value: "", label: "All" },
     { value: "consultation", label: "Consultation" },
@@ -155,10 +246,10 @@ function DoctorAppointmentsComponent() {
     <ProtectedRoute allowedRoles={["Doctor"]}>
       <DashboardLayout>
         <div className="space-y-8">
-          {!doctorProfileLoading && !doctorId ? (
+          {!doctorProfileLoading && !doctorProfile && doctorId ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              No doctor profile found for this account. Please contact the
-              administrator for access.
+              Doctor profile information is being loaded. If this message
+              persists, please contact the administrator.
             </div>
           ) : null}
 
@@ -181,6 +272,12 @@ function DoctorAppointmentsComponent() {
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={resetFilters}>
                     Clear filters
+                  </Button>
+                  <Button
+                    onClick={() => setIsCreateModalOpen(true)}
+                    disabled={!doctorId}
+                  >
+                    Create appointment
                   </Button>
                   <Button onClick={() => navigate({ to: "/doctor/schedule" })}>
                     View personal schedule
@@ -277,86 +374,151 @@ function DoctorAppointmentsComponent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {data.data.map((appointment) => (
-                        <tr key={appointment.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 font-medium text-gray-900">
-                            {appointment.title || "Not updated"}
-                            <p className="text-xs text-gray-500">
-                              ID: {appointment.id}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3 capitalize text-gray-600">
-                            {appointment.type || "-"}
-                          </td>
-                          <td className="px-4 py-3 text-gray-600">
-                            <div>{appointment.appointmentDate}</div>
-                            <div className="text-xs">
-                              {appointment.startTime} - {appointment.endTime}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={cn(
-                                "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                                statusBadgeClass(appointment.status)
+                      {data.data.map((appointment) => {
+                        const patient = appointment.patientId
+                          ? patientsMap.get(appointment.patientId)
+                          : null;
+                        const patientName =
+                          patient?.fullName || patient?.patientCode || null;
+                        const patientIndex = appointment.patientId
+                          ? patientIds.findIndex(
+                              (id) => id === appointment.patientId
+                            )
+                          : -1;
+                        const isPatientLoading =
+                          patientIndex >= 0
+                            ? patientQueries[patientIndex]?.isLoading
+                            : false;
+
+                        return (
+                          <tr key={appointment.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 font-medium text-gray-900">
+                              {patientName && patient ? (
+                                <>
+                                  <div className="font-semibold">
+                                    {patientName}
+                                  </div>
+                                  <p className="text-xs text-gray-500">
+                                    {patient.patientCode && (
+                                      <>Code: {patient.patientCode}</>
+                                    )}
+                                    {patient.patientCode &&
+                                      appointment.patientId &&
+                                      " • "}
+                                    {appointment.patientId && (
+                                      <>
+                                        ID: {appointment.patientId.slice(0, 8)}
+                                      </>
+                                    )}
+                                  </p>
+                                </>
+                              ) : isPatientLoading ? (
+                                <>
+                                  <div className="font-semibold">
+                                    Loading...
+                                  </div>
+                                  <p className="text-xs text-gray-500">
+                                    {appointment.patientId && (
+                                      <>
+                                        ID: {appointment.patientId.slice(0, 8)}
+                                      </>
+                                    )}
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  {appointment.appointmentCode ||
+                                    `Appt ${appointment.id?.slice(0, 8) || "N/A"}`}
+                                  <p className="text-xs text-gray-500">
+                                    Patient ID:{" "}
+                                    {appointment.patientId
+                                      ? appointment.patientId.slice(0, 8)
+                                      : "N/A"}
+                                  </p>
+                                </>
                               )}
-                            >
-                              {appointment.status || "pending"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  navigate({
-                                    to: "/doctor/appointments/$appointmentId",
-                                    params: { appointmentId: appointment.id },
-                                  })
-                                }
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {formatAppointmentType(
+                                appointment.appointmentType
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              <div>
+                                {appointment.appointmentDate
+                                  ? new Date(
+                                      appointment.appointmentDate
+                                    ).toLocaleString("en-US", {
+                                      dateStyle: "short",
+                                      timeStyle: "short",
+                                    })
+                                  : "-"}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={cn(
+                                  "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+                                  statusBadgeClass(appointment.status)
+                                )}
                               >
-                                Details
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  navigate({
-                                    to: "/doctor/encounters/create",
-                                    search: {
-                                      appointmentId: appointment.id,
-                                      patientId: appointment.patientId,
-                                    },
-                                  })
-                                }
-                              >
-                                Start encounter
-                              </Button>
-                              <select
-                                value={appointment.status || ""}
-                                onChange={(event) =>
-                                  handleStatusChange(
-                                    appointment.id,
-                                    event.target.value
-                                  )
-                                }
-                                className="rounded-md border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                              >
-                                {appointmentStatuses
-                                  .filter((option) => option.value)
-                                  .map((option) => (
-                                    <option
-                                      key={option.value}
-                                      value={option.value}
-                                    >
-                                      {option.label}
-                                    </option>
-                                  ))}
-                              </select>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                                {appointment.status || "pending"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setDetailModalAppointmentId(appointment.id);
+                                    setDetailModalPatientId(
+                                      appointment.patientId || null
+                                    );
+                                  }}
+                                >
+                                  Details
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    navigate({
+                                      to: "/doctor/encounters/create",
+                                      search: {
+                                        appointmentId: appointment.id,
+                                        patientId: appointment.patientId,
+                                      },
+                                    })
+                                  }
+                                >
+                                  Start encounter
+                                </Button>
+                                <select
+                                  value={appointment.status || ""}
+                                  onChange={(event) =>
+                                    handleStatusChange(
+                                      appointment.id,
+                                      event.target.value
+                                    )
+                                  }
+                                  className="rounded-md border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                >
+                                  {appointmentStatuses
+                                    .filter((option) => option.value)
+                                    .map((option) => (
+                                      <option
+                                        key={option.value}
+                                        value={option.value}
+                                      >
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -368,7 +530,7 @@ function DoctorAppointmentsComponent() {
 
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-500">
-                  Showing {data?.data?.length ?? 0} / {total} appointments
+                  Showing {data?.data?.length ?? 0} {" / "} {total} appointments
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -397,6 +559,38 @@ function DoctorAppointmentsComponent() {
             </CardContent>
           </Card>
         </div>
+        <DoctorAppointmentDetailModal
+          appointmentId={detailModalAppointmentId}
+          patientId={detailModalPatientId}
+          isOpen={Boolean(detailModalAppointmentId)}
+          onClose={() => {
+            setDetailModalAppointmentId(null);
+            setDetailModalPatientId(null);
+          }}
+        />
+        <Modal
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          title="Create appointment"
+          description="Schedule a new appointment for one of your patients."
+          size="xl"
+        >
+          {doctorId ? (
+            <DoctorCreateAppointmentForm
+              doctorId={doctorId}
+              doctorName={doctorProfile?.fullName}
+              onClose={() => setIsCreateModalOpen(false)}
+              onCreated={(appointmentId) => {
+                setIsCreateModalOpen(false);
+                setDetailModalAppointmentId(appointmentId);
+              }}
+            />
+          ) : (
+            <p className="text-sm text-gray-600">
+              Doctor profile is required before creating appointments.
+            </p>
+          )}
+        </Modal>
       </DashboardLayout>
     </ProtectedRoute>
   );

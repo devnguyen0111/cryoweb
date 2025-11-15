@@ -12,6 +12,31 @@ import type {
 export class SampleApi {
   constructor(private readonly client: AxiosInstance) {}
 
+  private mapSampleListQuery(params?: SampleListQuery) {
+    if (!params) {
+      return undefined;
+    }
+
+    const mapped: Record<string, unknown> = {
+      page: params.page ?? params.Page,
+      size: params.size ?? params.Size,
+      sort: params.sort ?? params.Sort,
+      order: params.order ?? params.Order,
+      sampleType: params.sampleType ?? params.SampleType,
+      status: params.status ?? params.Status,
+      searchTerm: params.searchTerm ?? params.SearchTerm,
+      patientId: params.patientId ?? params.PatientId,
+    };
+
+    Object.keys(mapped).forEach((key) => {
+      if (mapped[key] === undefined || mapped[key] === null) {
+        delete mapped[key];
+      }
+    });
+
+    return mapped;
+  }
+
   /**
    * Get list of samples
    * GET /api/sample
@@ -20,8 +45,8 @@ export class SampleApi {
     params?: SampleListQuery
   ): Promise<DynamicResponse<LabSample>> {
     const response = await this.client.get<DynamicResponse<LabSample>>(
-      "/labsample",
-      { params }
+      "/LabSample",
+      { params: this.mapSampleListQuery(params) }
     );
     return response.data;
   }
@@ -32,7 +57,7 @@ export class SampleApi {
    */
   async getSampleById(id: string): Promise<BaseResponse<LabSample>> {
     const response = await this.client.get<BaseResponse<LabSample>>(
-      `/labsample/${id}`
+      `/LabSample/${id}`
     );
     return response.data;
   }
@@ -45,7 +70,7 @@ export class SampleApi {
     data: Partial<LabSample>
   ): Promise<BaseResponse<LabSample>> {
     const response = await this.client.post<BaseResponse<LabSample>>(
-      "/labsample",
+      "/LabSample",
       data
     );
     return response.data;
@@ -60,7 +85,7 @@ export class SampleApi {
     data: Partial<LabSample>
   ): Promise<BaseResponse<LabSample>> {
     const response = await this.client.put<BaseResponse<LabSample>>(
-      `/labsample/${id}`,
+      `/LabSample/${id}`,
       data
     );
     return response.data;
@@ -71,7 +96,7 @@ export class SampleApi {
    * DELETE /api/sample/{id}
    */
   async deleteSample(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(`/labsample/${id}`);
+    const response = await this.client.delete<BaseResponse>(`/LabSample/${id}`);
     return response.data;
   }
 }

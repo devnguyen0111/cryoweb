@@ -80,7 +80,8 @@ function ReceptionistServiceRequestsRoute() {
   });
 
   const total = data?.metaData?.total ?? 0;
-  const totalPages = data?.metaData?.totalPages ?? 1;
+  const totalPages =
+    data?.metaData?.totalPage ?? data?.metaData?.totalPages ?? 1;
   const requests = data?.data ?? [];
 
   const filteredRequests = useMemo(() => {

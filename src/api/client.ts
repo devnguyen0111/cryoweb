@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
-import type { BaseResponse, AuthResponse } from "./types";
+import type { BaseResponse, TokenModel } from "./types";
 import {
   AuthApi,
   UserApi,
@@ -15,8 +15,10 @@ import {
   SlotApi,
   TreatmentCycleApi,
   TreatmentApi,
+  TreatmentWorkflowApi,
   CycleDocumentApi,
   RelationshipApi,
+  AppointmentDoctorApi,
 } from "./modules";
 
 const API_BASE_URL =
@@ -59,18 +61,18 @@ const createAxiosInstance = (): AxiosInstance => {
         try {
           const refreshToken = localStorage.getItem("refreshToken");
           if (refreshToken) {
-            const response = await axios.post<BaseResponse<AuthResponse>>(
+            const response = await axios.post<BaseResponse<TokenModel>>(
               `${API_BASE_URL}/auth/refresh-token`,
               { refreshToken }
             );
 
-            if (response.data.data?.token) {
-              localStorage.setItem("authToken", response.data.data.token);
-              localStorage.setItem(
-                "refreshToken",
-                response.data.data.refreshToken || ""
-              );
-              originalRequest.headers.Authorization = `Bearer ${response.data.data.token}`;
+            const nextToken = response.data.data?.token;
+            const nextRefreshToken = response.data.data?.refreshToken;
+
+            if (nextToken && nextRefreshToken) {
+              localStorage.setItem("authToken", nextToken);
+              localStorage.setItem("refreshToken", nextRefreshToken);
+              originalRequest.headers.Authorization = `Bearer ${nextToken}`;
               return instance(originalRequest);
             }
           }
@@ -112,8 +114,10 @@ export class ApiClient {
   slot: SlotApi;
   treatmentCycle: TreatmentCycleApi;
   treatment: TreatmentApi;
+  treatmentWorkflow: TreatmentWorkflowApi;
   cycleDocument: CycleDocumentApi;
   relationship: RelationshipApi;
+  appointmentDoctor: AppointmentDoctorApi;
 
   constructor() {
     this.auth = new AuthApi(client);
@@ -130,8 +134,10 @@ export class ApiClient {
     this.slot = new SlotApi(client);
     this.treatmentCycle = new TreatmentCycleApi(client);
     this.treatment = new TreatmentApi(client);
+    this.treatmentWorkflow = new TreatmentWorkflowApi(client);
     this.cycleDocument = new CycleDocumentApi(client);
     this.relationship = new RelationshipApi(client);
+    this.appointmentDoctor = new AppointmentDoctorApi(client);
   }
 }
 

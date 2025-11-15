@@ -30,25 +30,6 @@ export interface PaginatedResponse<T> {
 
 export interface BaseResponseForLogin<T> extends BaseResponse<T> {
   isBanned: boolean;
-  requiresVerification?: boolean;
-  bannedAccountId?: number;
-}
-
-// Legacy compatibility types for existing code
-export interface DynamicResponse<T = any> extends PaginatedResponse<T> {}
-export interface PagingMetaData {
-  pageNumber: number;
-  pageSize: number;
-  totalCount: number;
-  totalPages: number;
-  hasPrevious: boolean;
-  hasNext: boolean;
-}
-export interface PagingModel {
-  pageNumber?: number;
-  pageSize?: number;
-  sort?: string;
-  order?: "asc" | "desc";
 }
 
 // ============================================================================
@@ -72,9 +53,8 @@ export interface RegisterRequest {
 export interface LoginResponse {
   token: string;
   refreshToken: string;
-  expiresIn?: number;
+  expiresIn: number;
   user: User;
-  emailVerified?: boolean;
 }
 
 export interface TokenModel {
@@ -105,46 +85,22 @@ export interface EmailRequest {
   email: string;
 }
 
-// Legacy compatibility
-export interface AuthResponse {
-  token: string;
-  refreshToken: string;
-  user: User;
-  emailVerified: boolean;
-}
-
 // ============================================================================
 // User Types
 // ============================================================================
 
-export type UserRole =
-  | "Patient"
-  | "Doctor"
-  | "Admin"
-  | "Receptionist"
-  | "LaboratoryTechnician";
+export type UserRole = 'Patient' | 'Doctor' | 'Admin' | 'Receptionist' | 'LaboratoryTechnician';
 
 export interface User {
   id: string;
   email: string;
   fullName: string;
   phoneNumber?: string;
-  phone?: string;
-  userName?: string;
   role: UserRole;
-  roleName?: string;
-  roleId?: string;
   isEmailVerified: boolean;
-  emailVerified?: boolean;
   isActive: boolean;
-  status?: boolean;
   createdAt?: string;
   updatedAt?: string;
-  age?: number | null;
-  location?: string | null;
-  country?: string | null;
-  image?: string | null;
-  doctorSpecialization?: string | null;
 }
 
 export interface UserDetailResponse extends User {
@@ -177,7 +133,7 @@ export interface GetUsersRequest {
 // Patient Types
 // ============================================================================
 
-export type Gender = "Male" | "Female" | "Other";
+export type Gender = 'Male' | 'Female' | 'Other';
 
 export interface Patient {
   id: string;
@@ -196,48 +152,10 @@ export interface Patient {
   updatedAt?: string;
 }
 
-export interface PatientDetailResponse {
-  id: string;
-  patientCode: string;
-  nationalId: string;
-  // These fields may not be in details API, but in Patient object from appointment
-  fullName?: string;
-  dateOfBirth?: string;
-  gender?: Gender;
-  phoneNumber?: string;
-  email?: string;
-  address?: string;
-  bloodType?: string;
-  isActive?: boolean;
-  accountId?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  // Additional fields from details API
-  emergencyContact?: string | null;
-  emergencyPhone?: string | null;
-  insurance?: string | null;
-  occupation?: string | null;
-  medicalHistory?: string | null;
-  allergies?: string | null;
-  height?: number | null;
-  weight?: number | null;
-  bmi?: number | null;
-  notes?: string | null;
+export interface PatientDetailResponse extends Patient {
   relationships?: Relationship[];
   treatments?: Treatment[];
-  labSamples?: any[];
   appointments?: Appointment[];
-  accountInfo?: {
-    username: string;
-    email: string;
-    phone: string;
-    address?: string | null;
-    isVerified: boolean;
-    isActive: boolean;
-  };
-  treatmentCount?: number;
-  labSampleCount?: number;
-  relationshipCount?: number;
 }
 
 export interface CreatePatientRequest {
@@ -275,7 +193,7 @@ export interface GetPatientsRequest {
   isActive?: boolean;
   gender?: Gender;
   sortBy?: string;
-  sortOrder?: "asc" | "desc";
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface PatientSearchResult {
@@ -298,14 +216,6 @@ export interface RelatedPatientInfo {
   patientCode: string;
   fullName: string;
   relationshipType: RelationshipType;
-}
-
-// Legacy compatibility
-export interface PatientListQuery extends GetPatientsRequest {
-  patientCode?: string;
-  nationalId?: string;
-  fromDate?: string;
-  toDate?: string;
 }
 
 // ============================================================================
@@ -371,21 +281,12 @@ export interface DoctorStatisticsResponse {
   doctorsBySpecialty: Record<string, number>;
 }
 
-// Legacy compatibility
-export interface DoctorListQuery extends GetDoctorsRequest {}
-export interface DoctorStatistics extends DoctorStatisticsResponse {}
-export interface DoctorDetail extends DoctorDetailResponse {}
-
 // ============================================================================
 // Appointment Types
 // ============================================================================
 
-export type AppointmentStatus =
-  | "Pending"
-  | "Confirmed"
-  | "Completed"
-  | "Cancelled";
-export type AppointmentType = "Consultation" | "Treatment" | "FollowUp";
+export type AppointmentStatus = 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
+export type AppointmentType = 'Consultation' | 'Treatment' | 'FollowUp';
 
 export interface Appointment {
   id: string;
@@ -409,7 +310,6 @@ export interface AppointmentDetailResponse extends Appointment {
 // Extended appointment detail from /api/appointment/{id}/details endpoint
 export interface AppointmentExtendedDetailResponse {
   id: string;
-  patientId?: string; // Added: patient ID reference
   treatmentCycleId?: string | null;
   slotId: string;
   type: AppointmentType;
@@ -461,17 +361,8 @@ export interface AppointmentExtendedDetailResponse {
 export interface CreateAppointmentRequest {
   patientId: string;
   slotId: string;
-  type: AppointmentType; // Backend uses "type" not "appointmentType"
-  appointmentDate: string; // DateOnly format: YYYY-MM-DD (not ISO datetime)
-  status?: AppointmentStatus; // Default: "Scheduled"
-  reason?: string;
-  instructions?: string;
+  appointmentType: AppointmentType;
   notes?: string;
-  treatmentCycleId?: string;
-  doctorIds?: string[]; // Array of doctor IDs
-  doctorRoles?: string[]; // Array of roles corresponding to doctorIds
-  checkInTime?: string; // ISO datetime
-  checkOutTime?: string; // ISO datetime
 }
 
 export interface UpdateAppointmentRequest {
@@ -506,13 +397,6 @@ export interface AppointmentSummary {
   status: AppointmentStatus;
 }
 
-// Legacy compatibility
-export interface AppointmentListQuery extends GetAppointmentsRequest {
-  searchTerm?: string;
-  priority?: string;
-  treatmentCycleId?: string;
-}
-
 // ============================================================================
 // Appointment Doctor Types
 // ============================================================================
@@ -544,9 +428,6 @@ export interface GetAppointmentDoctorsRequest {
   appointmentId?: string;
   doctorId?: string;
 }
-
-// Legacy compatibility
-export interface AppointmentDoctorAssignment extends AppointmentDoctor {}
 
 // ============================================================================
 // Doctor Schedule Types
@@ -645,26 +526,17 @@ export interface GetSlotsRequest {
   dateTo?: string;
 }
 
-// Legacy compatibility
-export interface TimeSlot extends Slot {}
-export interface SlotListQuery extends GetSlotsRequest {}
-
 // ============================================================================
 // Treatment Types
 // ============================================================================
 
-export type TreatmentType = "IVF" | "IUI" | "Other";
-export type TreatmentStatus =
-  | "Planning"
-  | "InProgress"
-  | "Completed"
-  | "Cancelled";
+export type TreatmentType = 'IVF' | 'IUI' | 'Other';
+export type TreatmentStatus = 'Planning' | 'InProgress' | 'Completed' | 'Cancelled';
 
 export interface Treatment {
   id: string;
   treatmentCode: string;
   patientId: string;
-  doctorId: string; // Doctor managing this treatment (ERD: 1 Doctor → 0..* Treatment)
   treatmentType: TreatmentType;
   status: TreatmentStatus;
   startDate?: string; // ISO date
@@ -681,7 +553,6 @@ export interface TreatmentDetailResponseModel extends Treatment {
 
 export interface TreatmentCreateUpdateRequest {
   patientId: string;
-  doctorId: string; // Doctor managing this treatment (ERD: 1 Doctor → 0..* Treatment)
   treatmentType: TreatmentType;
   startDate?: string;
   notes?: string;
@@ -693,33 +564,21 @@ export interface GetTreatmentsRequest {
   treatmentType?: TreatmentType;
   status?: TreatmentStatus;
   patientId?: string;
-  doctorId?: string; // Filter treatments by managing doctor
 }
-
-// Legacy compatibility
-export interface TreatmentListQuery extends GetTreatmentsRequest {}
 
 // ============================================================================
 // Treatment Cycle Types
 // ============================================================================
 
-export type TreatmentCycleStatus =
-  | "Planning"
-  | "InProgress"
-  | "Completed"
-  | "Cancelled";
+export type TreatmentCycleStatus = 'Planning' | 'InProgress' | 'Completed' | 'Cancelled';
 
 export interface TreatmentCycle {
   id: string;
   treatmentId: string;
-  patientId?: string; // Backend supports patientId
-  doctorId?: string; // Backend supports doctorId - Doctor managing this cycle
   cycleNumber: number;
-  treatmentType?: string; // Treatment type (IVF, IUI, etc.)
   startDate?: string; // ISO date
   expectedEndDate?: string; // ISO date
   actualEndDate?: string; // ISO date
-  endDate?: string; // Alias for actualEndDate
   status: TreatmentCycleStatus;
   notes?: string;
   createdAt?: string;
@@ -766,11 +625,8 @@ export interface GetTreatmentCyclesRequest {
   pageNumber?: number;
   pageSize?: number;
   treatmentId?: string;
-  patientId?: string; // Filter by patient
-  doctorId?: string; // Filter by doctor (Backend supports this)
+  patientId?: string;
   status?: TreatmentCycleStatus;
-  startDateFrom?: string; // Filter by start date range
-  startDateTo?: string;
 }
 
 export interface AddCycleSampleRequest {
@@ -807,14 +663,7 @@ export interface UploadCycleDocumentRequest {
 // Treatment IVF Types
 // ============================================================================
 
-export type IVFCycleStatus =
-  | "Planning"
-  | "Stimulation"
-  | "Retrieval"
-  | "Fertilization"
-  | "Transfer"
-  | "Completed"
-  | "Cancelled";
+export type IVFCycleStatus = 'Planning' | 'Stimulation' | 'Retrieval' | 'Fertilization' | 'Transfer' | 'Completed' | 'Cancelled';
 
 export interface TreatmentIVF {
   id: string;
@@ -841,12 +690,7 @@ export interface TreatmentIVFCreateUpdateRequest {
 // Treatment IUI Types
 // ============================================================================
 
-export type IUICycleStatus =
-  | "Planning"
-  | "Monitoring"
-  | "Insemination"
-  | "Completed"
-  | "Cancelled";
+export type IUICycleStatus = 'Planning' | 'Monitoring' | 'Insemination' | 'Completed' | 'Cancelled';
 
 export interface TreatmentIUI {
   id: string;
@@ -918,19 +762,11 @@ export interface GetServiceCategoriesRequest {
   isActive?: boolean;
 }
 
-// Legacy compatibility
-export interface ServiceListQuery extends GetServicesRequest {}
-
 // ============================================================================
 // Service Request Types
 // ============================================================================
 
-export type ServiceRequestStatus =
-  | "Pending"
-  | "Approved"
-  | "Rejected"
-  | "Completed"
-  | "Cancelled";
+export type ServiceRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Completed' | 'Cancelled';
 
 export interface ServiceRequest {
   id: string;
@@ -993,17 +829,13 @@ export interface GetServiceRequestsRequest {
   patientId?: string;
 }
 
-// Legacy compatibility
-export interface ServiceRequestDetails extends ServiceRequestDetail {}
-export interface ServiceRequestListQuery extends GetServiceRequestsRequest {}
-
 // ============================================================================
 // Cryobank Types
 // ============================================================================
 
-export type SampleType = "Sperm" | "Oocyte" | "Embryo";
-export type CryoLocationType = "Tank" | "Canister" | "Goblet" | "Slot";
-export type ContractStatus = "Active" | "Expired" | "Terminated";
+export type SampleType = 'Sperm' | 'Oocyte' | 'Embryo';
+export type CryoLocationType = 'Tank' | 'Canister' | 'Goblet' | 'Slot';
+export type ContractStatus = 'Active' | 'Expired' | 'Terminated';
 
 export interface CryoStorageContract {
   id: string;
@@ -1187,12 +1019,7 @@ export interface GetCryoPackagesRequest {
 // Lab Sample Types
 // ============================================================================
 
-export type SpecimenStatus =
-  | "Collected"
-  | "Processing"
-  | "Stored"
-  | "Used"
-  | "Discarded";
+export type SpecimenStatus = 'Collected' | 'Processing' | 'Stored' | 'Used' | 'Discarded';
 
 export interface LabSample {
   id: string;
@@ -1295,21 +1122,12 @@ export interface GetLabSamplesRequest {
   status?: SpecimenStatus;
 }
 
-// Legacy compatibility
-export interface SampleListQuery extends GetLabSamplesRequest {
-  searchTerm?: string;
-}
-
 // ============================================================================
 // Transaction Types
 // ============================================================================
 
-export type TransactionStatus =
-  | "Pending"
-  | "Completed"
-  | "Failed"
-  | "Cancelled";
-export type TransactionType = "Payment" | "Refund";
+export type TransactionStatus = 'Pending' | 'Completed' | 'Failed' | 'Cancelled';
+export type TransactionType = 'Payment' | 'Refund';
 
 export interface Transaction {
   id: string;
@@ -1348,8 +1166,8 @@ export interface GetTransactionsRequest {
 // Relationship Types
 // ============================================================================
 
-export type RelationshipType = "Spouse" | "Partner" | "Other";
-export type RelationshipStatus = "Pending" | "Approved" | "Rejected";
+export type RelationshipType = 'Spouse' | 'Partner' | 'Other';
+export type RelationshipStatus = 'Pending' | 'Approved' | 'Rejected';
 
 export interface Relationship {
   id: string;
@@ -1433,6 +1251,11 @@ export interface UpdateMedicineRequest {
   notes?: string;
 }
 
+export interface PagingModel {
+  pageNumber?: number;
+  pageSize?: number;
+}
+
 // ============================================================================
 // Media Types
 // ============================================================================
@@ -1474,8 +1297,8 @@ export interface GetMediasRequest {
 // Notification Types
 // ============================================================================
 
-export type NotificationType = "Info" | "Warning" | "Error" | "Success";
-export type NotificationStatus = "Unread" | "Read";
+export type NotificationType = 'Info' | 'Warning' | 'Error' | 'Success';
+export type NotificationStatus = 'Unread' | 'Read';
 
 export interface Notification {
   id: string;
@@ -1516,38 +1339,3 @@ export interface GetNotificationsRequest {
   isActive?: boolean;
 }
 
-// ============================================================================
-// Cycle Document Types (Legacy)
-// ============================================================================
-
-export interface CycleDocument {
-  id: string;
-  treatmentCycleId?: string;
-  fileName?: string;
-  filePath?: string;
-  fileType?: string;
-  fileSize?: number;
-  title?: string;
-  description?: string;
-  category?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface UploadCycleDocumentRequest {
-  fileId: string;
-  description?: string;
-}
-
-// Legacy compatibility types
-export interface ResetPasswordRequest {
-  email: string;
-  verificationCode: string;
-  newPassword: string;
-  confirmPassword: string;
-}
-
-export interface VerifyEmailRequest {
-  email: string;
-  verificationCode: string;
-}

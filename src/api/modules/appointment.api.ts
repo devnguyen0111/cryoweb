@@ -1,29 +1,60 @@
 import { AxiosInstance } from "axios";
 import type {
   BaseResponse,
-  DynamicResponse,
+  PaginatedResponse,
   Appointment,
+  AppointmentDetailResponse,
+  AppointmentExtendedDetailResponse,
   CreateAppointmentRequest,
   UpdateAppointmentRequest,
-  AppointmentListQuery,
+  UpdateAppointmentStatusRequest,
+  CancelAppointmentRequest,
+  GetAppointmentsRequest,
+  AppointmentSummary,
 } from "../types";
 
 /**
  * Appointment API
+ * Matches Back-End API endpoints from /api/appointment/*
  */
 export class AppointmentApi {
   constructor(private readonly client: AxiosInstance) {}
+
+  private mapQueryParams(params?: GetAppointmentsRequest) {
+    if (!params) {
+      return undefined;
+    }
+
+    const mapped: Record<string, unknown> = {
+      pageNumber: params.pageNumber,
+      pageSize: params.pageSize,
+      status: params.status,
+      appointmentType: params.appointmentType,
+      patientId: params.patientId,
+      doctorId: params.doctorId,
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
+    };
+
+    Object.keys(mapped).forEach((key) => {
+      if (mapped[key] === undefined || mapped[key] === null) {
+        delete mapped[key];
+      }
+    });
+
+    return mapped;
+  }
 
   /**
    * Get list of appointments
    * GET /api/appointment
    */
   async getAppointments(
-    params?: AppointmentListQuery
-  ): Promise<DynamicResponse<Appointment>> {
-    const response = await this.client.get<DynamicResponse<Appointment>>(
+    params?: GetAppointmentsRequest
+  ): Promise<PaginatedResponse<Appointment>> {
+    const response = await this.client.get<PaginatedResponse<Appointment>>(
       "/appointment",
-      { params }
+      { params: this.mapQueryParams(params) }
     );
     return response.data;
   }
@@ -32,21 +63,26 @@ export class AppointmentApi {
    * Get appointment by ID
    * GET /api/appointment/{id}
    */
-  async getAppointmentById(id: string): Promise<BaseResponse<Appointment>> {
-    const response = await this.client.get<BaseResponse<Appointment>>(
-      `/appointment/${id}`
-    );
+  async getAppointmentById(
+    id: string
+  ): Promise<BaseResponse<AppointmentDetailResponse>> {
+    const response = await this.client.get<
+      BaseResponse<AppointmentDetailResponse>
+    >(`/appointment/${id}`);
     return response.data;
   }
 
   /**
-   * Get appointment details
+   * Get extended appointment details
    * GET /api/appointment/{id}/details
+   * Returns more detailed information including medical records, service requests, and nested doctor/schedule info
    */
-  async getAppointmentDetails(id: string): Promise<BaseResponse<Appointment>> {
-    const response = await this.client.get<BaseResponse<Appointment>>(
-      `/appointment/${id}/details`
-    );
+  async getAppointmentDetails(
+    id: string
+  ): Promise<BaseResponse<AppointmentExtendedDetailResponse>> {
+    const response = await this.client.get<
+      BaseResponse<AppointmentExtendedDetailResponse>
+    >(`/appointment/${id}/details`);
     return response.data;
   }
 
@@ -80,27 +116,16 @@ export class AppointmentApi {
   }
 
   /**
-   * Delete appointment
-   * DELETE /api/appointment/{id}
-   */
-  async deleteAppointment(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(
-      `/appointment/${id}`
-    );
-    return response.data;
-  }
-
-  /**
    * Update appointment status
-   * PATCH /api/appointment/{id}/status
+   * PUT /api/appointment/{id}/status
    */
   async updateAppointmentStatus(
     id: string,
-    status: Appointment["status"]
+    data: UpdateAppointmentStatusRequest
   ): Promise<BaseResponse<Appointment>> {
-    const response = await this.client.patch<BaseResponse<Appointment>>(
+    const response = await this.client.put<BaseResponse<Appointment>>(
       `/appointment/${id}/status`,
-      { status }
+      data
     );
     return response.data;
   }
@@ -111,42 +136,135 @@ export class AppointmentApi {
    */
   async cancelAppointment(
     id: string,
-    reason?: string
+    data: CancelAppointmentRequest
   ): Promise<BaseResponse<Appointment>> {
     const response = await this.client.post<BaseResponse<Appointment>>(
       `/appointment/${id}/cancel`,
-      { reason }
+      data
+    );
+    return response.data;
+  }
+
+  /**
+   * Check in appointment
+   * POST /api/appointment/{id}/check-in
+   */
+  async checkIn(id: string): Promise<BaseResponse<void>> {
+    const response = await this.client.post<BaseResponse<void>>(
+      `/appointment/${id}/check-in`
+    );
+    return response.data;
+  }
+
+  /**
+   * Check out appointment
+   * POST /api/appointment/{id}/check-out
+   */
+  async checkOut(id: string): Promise<BaseResponse<void>> {
+    const response = await this.client.post<BaseResponse<void>>(
+      `/appointment/${id}/check-out`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get appointments by treatment cycle
+   * GET /api/appointment/treatment-cycle/{treatmentCycleId}
+   */
+  async getAppointmentsByTreatmentCycle(
+    treatmentCycleId: string
+  ): Promise<PaginatedResponse<AppointmentSummary>> {
+    const response = await this.client.get<
+      PaginatedResponse<AppointmentSummary>
+    >(`/appointment/treatment-cycle/${treatmentCycleId}`);
+    return response.data;
+  }
+
+  /**
+   * Get appointments by doctor (dedicated endpoint)
+   * GET /api/appointment/doctor/{doctorId}
+   *
+   * Note: You can also use getAppointments({ doctorId }) which uses /api/appointment?DoctorId=...
+   * Both approaches work. This is a dedicated endpoint for convenience.
+   */
+  async getAppointmentsByDoctor(
+    doctorId: string,
+    params?: GetAppointmentsRequest
+  ): Promise<PaginatedResponse<Appointment>> {
+    const response = await this.client.get<PaginatedResponse<Appointment>>(
+      `/appointment/doctor/${doctorId}`,
+      { params: this.mapQueryParams(params) }
+    );
+    return response.data;
+  }
+
+  /**
+   * Get appointment by slot
+   * GET /api/appointment/slot/{slotId}
+   */
+  async getAppointmentBySlot(
+    slotId: string
+  ): Promise<PaginatedResponse<Appointment>> {
+    const response = await this.client.get<PaginatedResponse<Appointment>>(
+      `/appointment/slot/${slotId}`
     );
     return response.data;
   }
 
   /**
    * Add doctor to appointment
-   * POST /api/appointment/{id}/add-doctor
+   * POST /api/appointment/{id}/doctors
    */
   async addDoctorToAppointment(
-    id: string,
-    doctorId: string
-  ): Promise<BaseResponse<Appointment>> {
-    const response = await this.client.post<BaseResponse<Appointment>>(
-      `/appointment/${id}/add-doctor`,
-      { doctorId }
+    appointmentId: string,
+    data: { doctorId: string; role?: string; notes?: string }
+  ): Promise<BaseResponse<any>> {
+    const response = await this.client.post<BaseResponse<any>>(
+      `/appointment/${appointmentId}/doctors`,
+      data
     );
     return response.data;
   }
 
   /**
-   * Update doctor role in appointment
-   * PUT /api/appointment/{id}/doctor-role
+   * Update doctor assignment in appointment
+   * PUT /api/appointment/{id}/doctors/{doctorId}
    */
-  async updateDoctorRole(
-    id: string,
+  async updateDoctorInAppointment(
+    appointmentId: string,
     doctorId: string,
-    role?: string
-  ): Promise<BaseResponse<Appointment>> {
-    const response = await this.client.put<BaseResponse<Appointment>>(
-      `/appointment/${id}/doctor-role`,
-      { doctorId, role }
+    data: { role?: string; notes?: string }
+  ): Promise<BaseResponse<any>> {
+    const response = await this.client.put<BaseResponse<any>>(
+      `/appointment/${appointmentId}/doctors/${doctorId}`,
+      data
+    );
+    return response.data;
+  }
+
+  /**
+   * Remove doctor from appointment
+   * DELETE /api/appointment/{id}/doctors/{doctorId}
+   */
+  async removeDoctorFromAppointment(
+    appointmentId: string,
+    doctorId: string
+  ): Promise<BaseResponse<void>> {
+    const response = await this.client.delete<BaseResponse<void>>(
+      `/appointment/${appointmentId}/doctors/${doctorId}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get booking appointments by patient
+   * GET /api/appointment/patient/{patientId}/booking
+   */
+  async getBookingAppointmentsByPatient(
+    patientId: string
+  ): Promise<PaginatedResponse<Appointment>> {
+    const response = await this.client.get<PaginatedResponse<Appointment>>(
+      `/appointment/patient/${patientId}/booking`
     );
     return response.data;
   }

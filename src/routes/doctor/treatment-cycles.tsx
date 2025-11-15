@@ -9,8 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 import { cn } from "@/utils/cn";
-import type { DynamicResponse, TreatmentCycle } from "@/api/types";
+import type {
+  PaginatedResponse,
+  TreatmentCycle,
+  TreatmentCycleStatus,
+} from "@/api/types";
 
 export const Route = createFileRoute("/doctor/treatment-cycles")({
   component: DoctorTreatmentCyclesComponent,
@@ -29,36 +35,54 @@ const STATUS_COLORS: Record<string, string> = {
 
 function DoctorTreatmentCyclesComponent() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const search = Route.useSearch();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>(search.patientId || "");
 
+  // AccountId IS DoctorId - use user.id directly as doctorId
+  const doctorId = user?.id ?? null;
+  const { data: doctorProfile, isLoading: doctorProfileLoading } =
+    useDoctorProfile();
+
   const filters = useMemo(
-    () => ({ page, statusFilter, searchTerm }),
-    [page, statusFilter, searchTerm]
+    () => ({ page, statusFilter, searchTerm, doctorId }),
+    [page, statusFilter, searchTerm, doctorId]
   );
 
-  const emptyResponse: DynamicResponse<TreatmentCycle> = useMemo(
+  const emptyResponse: PaginatedResponse<TreatmentCycle> = useMemo(
     () => ({
+      code: 200,
+      message: "",
       data: [],
-      metaData: { total: 0, page: 1, size: 0, totalPages: 0 },
+      metaData: {
+        pageNumber: 1,
+        pageSize: 8,
+        totalCount: 0,
+        totalPages: 0,
+        hasPrevious: false,
+        hasNext: false,
+      },
     }),
     []
   );
 
-  const { data, isFetching } = useQuery<DynamicResponse<TreatmentCycle>>({
+  // Get treatment cycles, filtered by doctorId directly (Backend supports this)
+  const { data, isFetching } = useQuery<PaginatedResponse<TreatmentCycle>>({
     queryKey: ["doctor", "treatment-cycles", filters],
+    enabled: !!doctorId,
     retry: false,
-    queryFn: async (): Promise<DynamicResponse<TreatmentCycle>> => {
+    queryFn: async (): Promise<PaginatedResponse<TreatmentCycle>> => {
       try {
+        // Backend API supports filtering by doctorId directly
         return await api.treatmentCycle.getTreatmentCycles({
-          Page: page,
-          Size: 8,
-          Status: statusFilter || undefined,
-          SearchTerm: searchTerm || undefined,
-          PatientId: search.patientId,
-        } as any);
+          doctorId: doctorId!, // Filter by doctor
+          pageNumber: page,
+          pageSize: 8,
+          status: (statusFilter as TreatmentCycleStatus) || undefined,
+          patientId: search.patientId,
+        });
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
           return emptyResponse;
@@ -85,11 +109,18 @@ function DoctorTreatmentCyclesComponent() {
     <ProtectedRoute allowedRoles={["Doctor"]}>
       <DashboardLayout>
         <div className="space-y-8">
+          {!doctorProfileLoading && !doctorProfile && doctorId ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              Doctor profile information is being loaded. If this message
+              persists, please contact the administrator.
+            </div>
+          ) : null}
+
           <section className="flex flex-col gap-2">
             <h1 className="text-3xl font-bold">Treatment cycles</h1>
             <p className="text-gray-600">
               Monitor IUI/IVF progress, update statuses, and coordinate with the
-              cryobank.
+              cryobank. Showing cycles for treatments you manage.
             </p>
           </section>
 
@@ -99,11 +130,18 @@ function DoctorTreatmentCyclesComponent() {
                 <div>
                   <CardTitle>Cycle filters</CardTitle>
                   <p className="text-sm text-gray-500">
-                    Page {page}/{totalPages} - {data?.metaData?.total ?? 0}{" "}
+                    Page {page}/{totalPages} - {data?.metaData?.totalCount ?? 0}{" "}
                     cycles
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  <Button
+                    onClick={() =>
+                      navigate({ to: "/doctor/treatment-cycles/create" })
+                    }
+                  >
+                    + Create Treatment Cycle
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={() => navigate({ to: "/doctor/cryobank" })}
@@ -111,6 +149,7 @@ function DoctorTreatmentCyclesComponent() {
                     View cryobank
                   </Button>
                   <Button
+                    variant="outline"
                     onClick={() => navigate({ to: "/doctor/encounters" })}
                   >
                     Back to encounters

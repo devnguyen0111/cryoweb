@@ -19,9 +19,11 @@ export const Route = createFileRoute("/doctor/reports")({
 
 function DoctorReportsComponent() {
   const { user } = useAuth();
+  
+  // AccountId IS DoctorId - use user.id directly as doctorId
+  const doctorId = user?.id ?? null;
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
     useDoctorProfile();
-  const doctorId = doctorProfile?.id;
   const [range, setRange] = useState<"30" | "90" | "365">("90");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -36,7 +38,7 @@ function DoctorReportsComponent() {
       }
 
       try {
-        const response = await api.doctor.getDoctorStatistics(doctorId);
+        const response = await api.doctor.getDoctorStatistics();
         return response.data ?? null;
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
@@ -56,13 +58,14 @@ function DoctorReportsComponent() {
     retry: false,
     queryFn: async () => {
       try {
-        return await api.treatmentCycle.getTreatmentCycles({
-          Page: 1,
-          Size: 1,
+        const response = await api.treatmentCycle.getTreatmentCycles({
+          pageNumber: 1,
+          pageSize: 1,
         });
+        return { data: response.data, metaData: { totalCount: response.metaData.totalCount } };
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
-          return { data: [], metaData: { total: 0 } } as any;
+          return { data: [], metaData: { totalCount: 0 } } as any;
         }
         throw error;
       }
@@ -74,14 +77,15 @@ function DoctorReportsComponent() {
     retry: false,
     queryFn: async () => {
       try {
-        return await api.treatmentCycle.getTreatmentCycles({
-          Status: "InProgress",
-          Page: 1,
-          Size: 1,
+        const response = await api.treatmentCycle.getTreatmentCycles({
+          status: "InProgress",
+          pageNumber: 1,
+          pageSize: 1,
         });
+        return { data: response.data, metaData: { totalCount: response.metaData.totalCount } };
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
-          return { data: [], metaData: { total: 0 } } as any;
+          return { data: [], metaData: { totalCount: 0 } } as any;
         }
         throw error;
       }
@@ -93,14 +97,15 @@ function DoctorReportsComponent() {
     retry: false,
     queryFn: async () => {
       try {
-        return await api.treatmentCycle.getTreatmentCycles({
-          Status: "Completed",
-          Page: 1,
-          Size: 1,
+        const response = await api.treatmentCycle.getTreatmentCycles({
+          status: "Completed",
+          pageNumber: 1,
+          pageSize: 1,
         });
+        return { data: response.data, metaData: { totalCount: response.metaData.totalCount } };
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
-          return { data: [], metaData: { total: 0 } } as any;
+          return { data: [], metaData: { totalCount: 0 } } as any;
         }
         throw error;
       }
@@ -212,10 +217,9 @@ function DoctorReportsComponent() {
     <ProtectedRoute allowedRoles={["Doctor"]}>
       <DashboardLayout>
         <div className="space-y-8">
-          {!doctorProfileLoading && !doctorId ? (
+          {!doctorProfileLoading && !doctorProfile && doctorId ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              No doctor profile found for this account. Please contact the
-              administrator for access.
+              Doctor profile information is being loaded. If this message persists, please contact the administrator.
             </div>
           ) : null}
 

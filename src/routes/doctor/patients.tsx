@@ -8,12 +8,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
-import type { DynamicResponse, TreatmentCycle } from "@/api/types";
+import type { PaginatedResponse, TreatmentCycle } from "@/api/types";
 import { cn } from "@/utils/cn";
+import { DoctorPatientDetailModal } from "@/features/doctor/patients/DoctorPatientDetailModal";
 
-const emptyCycleResponse: DynamicResponse<TreatmentCycle> = {
+const emptyCycleResponse: PaginatedResponse<TreatmentCycle> = {
+  code: 200,
+  message: "No treatment cycles available",
   data: [],
-  metaData: { page: 1, size: 0, total: 0, totalPages: 0 },
+  metaData: {
+    pageNumber: 1,
+    pageSize: 10,
+    totalCount: 0,
+    totalPages: 0,
+    hasPrevious: false,
+    hasNext: false,
+  },
 };
 
 const bloodTypeOptions = [
@@ -60,6 +70,9 @@ function DoctorPatientsComponent() {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
     null
   );
+  const [detailModalPatientId, setDetailModalPatientId] = useState<
+    string | null
+  >(null);
 
   const filters = useMemo(
     () => ({ searchTerm, bloodTypeFilter, statusFilter, page }),
@@ -70,16 +83,16 @@ function DoctorPatientsComponent() {
     queryKey: ["doctor", "patients", filters],
     queryFn: async () => {
       const response = await api.patient.getPatients({
-        SearchTerm: searchTerm || undefined,
-        BloodType: bloodTypeFilter || undefined,
-        IsActive:
+        searchTerm: searchTerm || undefined,
+        bloodType: bloodTypeFilter || undefined,
+        isActive:
           statusFilter === ""
             ? undefined
             : statusFilter === "active"
               ? true
               : false,
-        Page: page,
-        Size: pageSize,
+        pageNumber: page,
+        pageSize,
       });
 
       if (!response?.data) {
@@ -94,7 +107,7 @@ function DoctorPatientsComponent() {
   });
 
   const patients = data?.data ?? [];
-  const total = data?.metaData?.total ?? patients.length;
+  const total = data?.metaData?.totalCount ?? patients.length;
   const totalPages = data?.metaData?.totalPages ?? 1;
 
   useEffect(() => {
@@ -122,7 +135,7 @@ function DoctorPatientsComponent() {
         try {
           return (
             (await api.treatmentCycle.getTreatmentCycles({
-              PatientId: patient.id,
+              patientId: patient.id,
             })) ?? emptyCycleResponse
           );
         } catch (error) {
@@ -185,7 +198,7 @@ function DoctorPatientsComponent() {
       try {
         return (
           (await api.treatmentCycle.getTreatmentCycles({
-            PatientId: selectedPatientId,
+            patientId: selectedPatientId,
           })) ?? emptyCycleResponse
         );
       } catch (error) {
@@ -273,11 +286,18 @@ function DoctorPatientsComponent() {
     };
   };
 
-  const handleOpenPatientDetail = (patientId?: string | null) => {
+  const handleOpenPatientDetailModal = (patientId?: string | null) => {
     if (!patientId) {
-      console.warn("[DoctorPatients] Cannot open profile without patientId");
+      console.warn(
+        "[DoctorPatients] Cannot open detail modal without patientId"
+      );
       return;
     }
+    console.log("[DoctorPatients] Open patient detail modal", patientId);
+    setDetailModalPatientId(patientId);
+  };
+
+  const handleNavigateToPatientProfile = (patientId: string) => {
     console.log("[DoctorPatients] Navigate to patient profile", patientId);
     navigate({
       to: "/doctor/patients/$patientId",
@@ -644,7 +664,7 @@ function DoctorPatientsComponent() {
                           variant="outline"
                           type="button"
                           onClick={() =>
-                            handleOpenPatientDetail(selectedPatient.id)
+                            handleOpenPatientDetailModal(selectedPatient.id)
                           }
                         >
                           View full patient record
@@ -719,6 +739,12 @@ function DoctorPatientsComponent() {
           </div>
         </div>
       </DashboardLayout>
+      <DoctorPatientDetailModal
+        patientId={detailModalPatientId}
+        isOpen={Boolean(detailModalPatientId)}
+        onClose={() => setDetailModalPatientId(null)}
+        onOpenFullProfile={handleNavigateToPatientProfile}
+      />
     </ProtectedRoute>
   );
 }

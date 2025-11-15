@@ -1,19 +1,20 @@
-import { AxiosInstance, AxiosError } from "axios";
+import { AxiosInstance } from "axios";
 import type {
   BaseResponse,
+  BaseResponseForLogin,
   LoginRequest,
-  AuthResponse,
   LoginResponse,
-  User,
   RegisterRequest,
   ForgotPasswordRequest,
-  ResetPasswordRequest,
   ChangePasswordRequest,
-  VerifyEmailRequest,
+  EmailVerificationModel,
+  EmailRequest,
+  TokenModel,
 } from "../types";
 
 /**
  * Authentication API
+ * Matches Back-End API endpoints from /api/auth/*
  */
 export class AuthApi {
   constructor(private readonly client: AxiosInstance) {}
@@ -23,93 +24,37 @@ export class AuthApi {
    * POST /api/auth/login
    *
    * @param data - Login credentials including email, password, and optional mobile flag
-   * @returns LoginResponse with token, user data, and status flags (isBanned, requiresVerification)
+   * @returns BaseResponseForLogin<LoginResponse> with token, user data, and isBanned flag
    */
-  async login(data: LoginRequest): Promise<LoginResponse> {
-    const response = await this.client.post<LoginResponse>("/auth/login", data);
+  async login(
+    data: LoginRequest
+  ): Promise<BaseResponseForLogin<LoginResponse>> {
+    const response = await this.client.post<
+      BaseResponseForLogin<LoginResponse>
+    >("/auth/login", data);
     return response.data;
-  }
-
-  /**
-   * Logout
-   * POST /api/auth/logout
-   */
-  async logout(): Promise<BaseResponse> {
-    const response = await this.client.post<BaseResponse>("/auth/logout");
-    return response.data;
-  }
-
-  /**
-   * Get current user profile
-   * GET /api/user/profile
-   */
-  async getCurrentUser(): Promise<User> {
-    const endpoints = ["/user/profile", "/auth/me", "/auth/profile"] as const;
-    let lastError: unknown;
-
-    for (const endpoint of endpoints) {
-      try {
-        const response = await this.client.get<BaseResponse<User>>(endpoint);
-        const payload = response.data as BaseResponse<User> | User;
-
-        if (typeof payload === "object" && "data" in payload && payload.data) {
-          return payload.data;
-        }
-
-        if ((payload as User)?.id) {
-          return payload as User;
-        }
-      } catch (error) {
-        lastError = error;
-        if (error instanceof AxiosError && error.response?.status === 404) {
-          continue;
-        }
-        throw error;
-      }
-    }
-
-    throw (lastError as Error) ?? new Error("User data not found");
-  }
-
-  /**
-   * Refresh token
-   * POST /api/auth/refresh-token
-   */
-  async refreshToken(
-    refreshToken: string
-  ): Promise<BaseResponse<AuthResponse>> {
-    const response = await this.client.post<BaseResponse<AuthResponse>>(
-      "/auth/refresh-token",
-      {
-        refreshToken,
-      }
-    );
-    return response.data;
-  }
-
-  /**
-   * Update profile
-   * PUT /api/user/profile
-   */
-  async updateProfile(data: Partial<User>): Promise<User> {
-    const response = await this.client.put<BaseResponse<User>>(
-      "/user/profile",
-      data
-    );
-    if (!response.data.data) {
-      throw new Error("User data not found");
-    }
-    return response.data.data;
   }
 
   /**
    * Register new account
    * POST /api/auth/register
    */
-  async register(data: RegisterRequest): Promise<BaseResponse<AuthResponse>> {
-    const response = await this.client.post<BaseResponse<AuthResponse>>(
+  async register(data: RegisterRequest): Promise<BaseResponse<TokenModel>> {
+    const response = await this.client.post<BaseResponse<TokenModel>>(
       "/auth/register",
       data
+    );
+    return response.data;
+  }
+
+  /**
+   * Refresh token
+   * POST /api/auth/refresh-token
+   */
+  async refreshToken(refreshToken: string): Promise<BaseResponse<TokenModel>> {
+    const response = await this.client.post<BaseResponse<TokenModel>>(
+      "/auth/refresh-token",
+      { refreshToken }
     );
     return response.data;
   }
@@ -118,21 +63,11 @@ export class AuthApi {
    * Forgot password
    * POST /api/auth/forgot-password
    */
-  async forgotPassword(data: ForgotPasswordRequest): Promise<BaseResponse> {
-    const response = await this.client.post<BaseResponse>(
+  async forgotPassword(
+    data: ForgotPasswordRequest
+  ): Promise<BaseResponse<void>> {
+    const response = await this.client.post<BaseResponse<void>>(
       "/auth/forgot-password",
-      data
-    );
-    return response.data;
-  }
-
-  /**
-   * Reset password
-   * POST /api/auth/reset-password
-   */
-  async resetPassword(data: ResetPasswordRequest): Promise<BaseResponse> {
-    const response = await this.client.post<BaseResponse>(
-      "/auth/reset-password",
       data
     );
     return response.data;
@@ -142,9 +77,32 @@ export class AuthApi {
    * Change password
    * POST /api/auth/change-password
    */
-  async changePassword(data: ChangePasswordRequest): Promise<BaseResponse> {
-    const response = await this.client.post<BaseResponse>(
+  async changePassword(
+    data: ChangePasswordRequest
+  ): Promise<BaseResponse<void>> {
+    const response = await this.client.post<BaseResponse<void>>(
       "/auth/change-password",
+      data
+    );
+    return response.data;
+  }
+
+  /**
+   * Logout
+   * POST /api/auth/logout
+   */
+  async logout(): Promise<BaseResponse<void>> {
+    const response = await this.client.post<BaseResponse<void>>("/auth/logout");
+    return response.data;
+  }
+
+  /**
+   * Send verification email
+   * POST /api/auth/send-verification-email
+   */
+  async sendVerificationEmail(data: EmailRequest): Promise<BaseResponse<void>> {
+    const response = await this.client.post<BaseResponse<void>>(
+      "/auth/send-verification-email",
       data
     );
     return response.data;
@@ -154,21 +112,10 @@ export class AuthApi {
    * Verify email
    * POST /api/auth/verify-email
    */
-  async verifyEmail(data: VerifyEmailRequest): Promise<BaseResponse> {
-    const response = await this.client.post<BaseResponse>(
+  async verifyEmail(data: EmailVerificationModel): Promise<BaseResponse<void>> {
+    const response = await this.client.post<BaseResponse<void>>(
       "/auth/verify-email",
       data
-    );
-    return response.data;
-  }
-
-  /**
-   * Send verification email
-   * POST /api/auth/send-verification-email
-   */
-  async sendVerificationEmail(): Promise<BaseResponse> {
-    const response = await this.client.post<BaseResponse>(
-      "/auth/send-verification-email"
     );
     return response.data;
   }

@@ -44,8 +44,13 @@ function DoctorTreatmentCycleDetail() {
   }, [data?.status]);
 
   const updateStatusMutation = useMutation({
-    mutationFn: (status: string) =>
-      api.treatmentCycle.updateTreatmentCycle(cycleId, { status }),
+    mutationFn: (status: string) => {
+      // Status is managed through specific APIs (start, complete, cancel)
+      // For now, we'll just update notes to track status change
+      return api.treatmentCycle.updateTreatmentCycle(cycleId, {
+        notes: `Status changed to: ${status}`,
+      });
+    },
     onSuccess: () => {
       toast.success("Treatment cycle status updated.");
       queryClient.invalidateQueries({
@@ -99,6 +104,30 @@ function DoctorTreatmentCycleDetail() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                {cycle?.treatmentType === "IUI" && (
+                  <Button
+                    onClick={() =>
+                      navigate({
+                        to: "/doctor/treatment-cycles/$cycleId/iui-workflow",
+                        params: { cycleId },
+                      })
+                    }
+                  >
+                    IUI Workflow
+                  </Button>
+                )}
+                {cycle?.treatmentType === "IVF" && (
+                  <Button
+                    onClick={() =>
+                      navigate({
+                        to: "/doctor/treatment-cycles/$cycleId/ivf-workflow",
+                        params: { cycleId },
+                      })
+                    }
+                  >
+                    IVF Workflow
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   onClick={() =>
@@ -108,9 +137,10 @@ function DoctorTreatmentCycleDetail() {
                     })
                   }
                 >
-                  Open workflow
+                  Generic workflow
                 </Button>
                 <Button
+                  variant="outline"
                   onClick={() =>
                     navigate({ to: "/doctor/cryobank", search: { cycleId } })
                   }

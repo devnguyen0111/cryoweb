@@ -14,22 +14,31 @@ import { cn } from "@/utils/cn";
 import type {
   Appointment,
   DoctorSchedule,
-  DoctorStatistics,
-  DynamicResponse,
+  DoctorStatisticsResponse,
+  PaginatedResponse,
   Patient,
   ServiceRequest,
   TreatmentCycle,
 } from "@/api/types";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 
-const createEmptyResponse = <T,>(): DynamicResponse<T> => ({
+const createEmptyResponse = <T,>(): PaginatedResponse<T> => ({
+  code: 200,
+  message: "",
   data: [],
-  metaData: { total: 0, page: 1, size: 0, totalPages: 0 },
+  metaData: {
+    pageNumber: 1,
+    pageSize: 10,
+    totalCount: 0,
+    totalPages: 0,
+    hasPrevious: false,
+    hasNext: false,
+  },
 });
 
 const fetchWith404Fallback = async <T,>(
-  request: () => Promise<DynamicResponse<T>>
-): Promise<DynamicResponse<T>> => {
+  request: () => Promise<PaginatedResponse<T>>
+): Promise<PaginatedResponse<T>> => {
   try {
     return await request();
   } catch (error) {
@@ -49,23 +58,24 @@ function DoctorDashboardComponent() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
 
+  // AccountId IS DoctorId - use user.id directly as doctorId
+  const doctorId = user?.id ?? null;
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
     useDoctorProfile();
-  const doctorId = doctorProfile?.id;
 
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
-  const { data: doctorStatistics } = useQuery<DoctorStatistics | null>({
+  const { data: doctorStatistics } = useQuery<DoctorStatisticsResponse | null>({
     queryKey: ["doctor", "statistics", doctorId],
     enabled: !!doctorId,
     retry: false,
-    queryFn: async (): Promise<DoctorStatistics | null> => {
+    queryFn: async (): Promise<DoctorStatisticsResponse | null> => {
       if (!doctorId) {
         return null;
       }
 
       try {
-        const response = await api.doctor.getDoctorStatistics(doctorId);
+        const response = await api.doctor.getDoctorStatistics();
         return response.data ?? null;
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
@@ -80,31 +90,28 @@ function DoctorDashboardComponent() {
   });
 
   const { data: upcomingAppointments, isFetching: appointmentsLoading } =
-    useQuery<DynamicResponse<Appointment>>({
+    useQuery<PaginatedResponse<Appointment>>({
       queryKey: [
         "doctor",
         "appointments",
         {
-          DoctorId: doctorId,
-          AppointmentDateFrom: today,
+          doctorId: doctorId,
+          dateFrom: today,
         },
       ],
       enabled: !!doctorId,
       retry: false,
-      queryFn: async (): Promise<DynamicResponse<Appointment>> => {
+      queryFn: async (): Promise<PaginatedResponse<Appointment>> => {
         if (!doctorId) {
           return createEmptyResponse<Appointment>();
         }
 
         try {
           return await api.appointment.getAppointments({
-            DoctorId: doctorId,
-            AppointmentDateFrom: today,
-            AppointmentDateTo: today,
-            Size: 5,
-            Page: 1,
-            Sort: "appointmentDate",
-            Order: "asc",
+            doctorId,
+            dateFrom: today,
+            pageNumber: 1,
+            pageSize: 5,
           });
         } catch (error: any) {
           if (isAxiosError(error) && error.response?.status === 404) {
@@ -119,13 +126,13 @@ function DoctorDashboardComponent() {
       },
     });
 
-  const { data: activePatients } = useQuery<DynamicResponse<Patient>>({
+  const { data: activePatients } = useQuery<PaginatedResponse<Patient>>({
     queryKey: ["patients", "doctor-dashboard"],
     retry: false,
-    queryFn: async (): Promise<DynamicResponse<Patient>> => {
+    queryFn: async (): Promise<PaginatedResponse<Patient>> => {
       try {
         return await fetchWith404Fallback(() =>
-          api.patient.getPatients({ Page: 1, Size: 5 })
+          api.patient.getPatients({ pageNumber: 1, pageSize: 5 })
         );
       } catch (error: any) {
         const message =
@@ -136,28 +143,38 @@ function DoctorDashboardComponent() {
     },
   });
 
-  const { data: treatmentCycles } = useQuery<DynamicResponse<TreatmentCycle>>({
-    queryKey: ["treatment-cycles", "doctor-dashboard"],
-    retry: false,
-    queryFn: async (): Promise<DynamicResponse<TreatmentCycle>> => {
-      try {
-        return await fetchWith404Fallback(() =>
-          api.treatmentCycle.getTreatmentCycles({ Page: 1, Size: 5 })
-        );
-      } catch (error: any) {
-        const message =
-          error?.response?.data?.message || "Unable to load treatment cycles.";
-        toast.error(message);
-        return createEmptyResponse<TreatmentCycle>();
-      }
-    },
-  });
+  // Get treatment cycles filtered by doctorId directly (Backend supports this)
+  const { data: treatmentCycles } = useQuery<PaginatedResponse<TreatmentCycle>>(
+    {
+      queryKey: ["treatment-cycles", "doctor-dashboard", doctorId],
+      enabled: !!doctorId,
+      retry: false,
+      queryFn: async (): Promise<PaginatedResponse<TreatmentCycle>> => {
+        try {
+          // Backend API supports filtering by doctorId directly
+          return await fetchWith404Fallback(() =>
+            api.treatmentCycle.getTreatmentCycles({
+              doctorId: doctorId!,
+              pageNumber: 1,
+              pageSize: 5,
+            })
+          );
+        } catch (error: any) {
+          const message =
+            error?.response?.data?.message ||
+            "Unable to load treatment cycles.";
+          toast.error(message);
+          return createEmptyResponse<TreatmentCycle>();
+        }
+      },
+    }
+  );
 
-  const { data: scheduleData } = useQuery<DynamicResponse<DoctorSchedule>>({
+  const { data: scheduleData } = useQuery<PaginatedResponse<DoctorSchedule>>({
     queryKey: ["schedule", doctorId, today],
     enabled: !!doctorId,
     retry: false,
-    queryFn: async (): Promise<DynamicResponse<DoctorSchedule>> => {
+    queryFn: async (): Promise<PaginatedResponse<DoctorSchedule>> => {
       if (!doctorId) {
         return createEmptyResponse<DoctorSchedule>();
       }
@@ -165,9 +182,8 @@ function DoctorDashboardComponent() {
       try {
         return await fetchWith404Fallback(() =>
           api.doctorSchedule.getSchedulesByDoctor(doctorId, {
-            WorkDate: today,
-            Page: 1,
-            Size: 25,
+            pageNumber: 1,
+            pageSize: 25,
           })
         );
       } catch (error: any) {
@@ -180,12 +196,12 @@ function DoctorDashboardComponent() {
   });
 
   const { data: pendingServiceRequests } = useQuery<
-    DynamicResponse<ServiceRequest>
+    PaginatedResponse<ServiceRequest>
   >({
     queryKey: ["service-requests", "doctor-dashboard", doctorId],
     enabled: !!doctorId,
     retry: false,
-    queryFn: async (): Promise<DynamicResponse<ServiceRequest>> => {
+    queryFn: async (): Promise<PaginatedResponse<ServiceRequest>> => {
       if (!doctorId) {
         return createEmptyResponse<ServiceRequest>();
       }
@@ -193,9 +209,9 @@ function DoctorDashboardComponent() {
       try {
         return await fetchWith404Fallback(() =>
           api.serviceRequest.getServiceRequests({
-            Status: "Pending",
-            Page: 1,
-            Size: 5,
+            status: "Pending",
+            pageNumber: 1,
+            pageSize: 5,
           })
         );
       } catch (error: any) {
@@ -211,22 +227,22 @@ function DoctorDashboardComponent() {
   const quickStats = [
     {
       title: "Today's appointments",
-      value: upcomingAppointments?.metaData?.total ?? 0,
+      value: upcomingAppointments?.metaData?.totalCount ?? 0,
       description: "Includes follow-ups and procedures",
     },
     {
       title: "Active patients",
-      value: activePatients?.metaData?.total ?? 0,
+      value: activePatients?.metaData?.totalCount ?? 0,
       description: "Patients with active treatment cycles",
     },
     {
       title: "Treatment cycles",
-      value: treatmentCycles?.metaData?.total ?? 0,
+      value: treatmentCycles?.metaData?.totalCount ?? 0,
       description: "Active IUI/IVF cases",
     },
     {
       title: "Prescriptions issued",
-      value: pendingServiceRequests?.metaData?.total ?? 0,
+      value: pendingServiceRequests?.metaData?.totalCount ?? 0,
       description: "Awaiting confirmation or digital signature",
     },
   ];
@@ -238,31 +254,33 @@ function DoctorDashboardComponent() {
       tone: "info" | "warning" | "success";
     }> = [];
 
-    if (doctorStatistics) {
-      if (
-        doctorStatistics.totalSlotsToday !== undefined &&
-        doctorStatistics.bookedSlotsToday !== undefined
-      ) {
-        items.push({
-          id: "slots",
-          tone: "info",
-          message: `There are ${doctorStatistics.totalSlotsToday} slots today with ${doctorStatistics.bookedSlotsToday} already booked.`,
-        });
-      }
+    // Note: doctorStatistics from backend may have different structure
+    // Commenting out for now until we verify the backend response structure
+    // if (doctorStatistics) {
+    //   if (
+    //     doctorStatistics.totalSlotsToday !== undefined &&
+    //     doctorStatistics.bookedSlotsToday !== undefined
+    //   ) {
+    //     items.push({
+    //       id: "slots",
+    //       tone: "info",
+    //       message: `There are ${doctorStatistics.totalSlotsToday} slots today with ${doctorStatistics.bookedSlotsToday} already booked.`,
+    //     });
+    //   }
+    //
+    //   if (
+    //     doctorStatistics.availableSlotsToday !== undefined &&
+    //     doctorStatistics.availableSlotsToday > 0
+    //   ) {
+    //     items.push({
+    //       id: "availability",
+    //       tone: "success",
+    //       message: `${doctorStatistics.availableSlotsToday} slots remain available; you can accept additional appointments.`,
+    //     });
+    //   }
+    // }
 
-      if (
-        doctorStatistics.availableSlotsToday !== undefined &&
-        doctorStatistics.availableSlotsToday > 0
-      ) {
-        items.push({
-          id: "availability",
-          tone: "success",
-          message: `${doctorStatistics.availableSlotsToday} slots remain available; you can accept additional appointments.`,
-        });
-      }
-    }
-
-    const pendingCount = pendingServiceRequests?.metaData?.total ?? 0;
+    const pendingCount = pendingServiceRequests?.metaData?.totalCount ?? 0;
     if (pendingCount > 0) {
       items.push({
         id: "prescription",
@@ -272,7 +290,7 @@ function DoctorDashboardComponent() {
     }
 
     return items;
-  }, [doctorStatistics, pendingServiceRequests?.metaData?.total]);
+  }, [doctorStatistics, pendingServiceRequests?.metaData?.totalCount]);
 
   const toneStyles = useMemo(
     () => ({
@@ -321,10 +339,10 @@ function DoctorDashboardComponent() {
     <ProtectedRoute allowedRoles={["Doctor"]}>
       <DashboardLayout>
         <div className="space-y-8">
-          {!doctorProfileLoading && !doctorId ? (
+          {!doctorProfileLoading && !doctorProfile && doctorId ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              No doctor profile found for this account. Please contact the
-              administrator for access.
+              Doctor profile information is being loaded. If this message
+              persists, please contact the administrator.
             </div>
           ) : null}
 
@@ -398,11 +416,12 @@ function DoctorDashboardComponent() {
                       >
                         <div>
                           <p className="font-medium text-gray-900">
-                            {appointment.title || "Unnamed"}
+                            {appointment.appointmentCode || "Unnamed"}
                           </p>
                           <p className="text-sm text-gray-500">
-                            {appointment.appointmentDate} at{" "}
-                            {appointment.startTime}
+                            {new Date(
+                              appointment.appointmentDate
+                            ).toLocaleString()}
                           </p>
                         </div>
                         <div className="flex flex-col items-start gap-2 md:items-end">
@@ -488,7 +507,7 @@ function DoctorDashboardComponent() {
                       <tbody className="divide-y divide-gray-100">
                         {activePatients.data.map((patient) => {
                           const displayName =
-                            patient.accountInfo?.username ||
+                            patient.fullName ||
                             patient.patientCode ||
                             "Unknown";
                           return (
@@ -497,10 +516,10 @@ function DoctorDashboardComponent() {
                                 {displayName}
                               </td>
                               <td className="px-4 py-3 text-gray-600">
-                                {patient.accountInfo?.email || "-"}
+                                {patient.email || "-"}
                               </td>
                               <td className="px-4 py-3 text-gray-600">
-                                {patient.accountInfo?.phone || "-"}
+                                {patient.phoneNumber || "-"}
                               </td>
                               <td className="px-4 py-3">
                                 <Button
@@ -553,7 +572,7 @@ function DoctorDashboardComponent() {
                         {slot.workDate} - {slot.startTime} - {slot.endTime}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {slot.location || "Main clinic"}
+                        {slot.notes || "Scheduled"}
                       </p>
                       {slot.notes && (
                         <p className="mt-2 text-xs text-gray-500">
@@ -602,7 +621,7 @@ function DoctorDashboardComponent() {
                             "mt-3 inline-flex rounded-full px-3 py-1 text-xs font-medium",
                             cycle.status === "Completed"
                               ? "bg-green-100 text-green-700"
-                              : cycle.status === "In Progress"
+                              : cycle.status === "InProgress"
                                 ? "bg-blue-100 text-blue-700"
                                 : "bg-gray-100 text-gray-700"
                           )}

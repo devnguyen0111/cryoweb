@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 
 type EncounterFormValues = {
@@ -38,13 +39,15 @@ export const Route = createFileRoute("/doctor/encounters/create")({
 
 function DoctorEncounterCreateComponent() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const search = Route.useSearch() as EncounterSearchState;
   const patientId = search.patientId;
   const appointmentId = search.appointmentId;
 
+  // AccountId IS DoctorId - use user.id directly as doctorId
+  const doctorId = user?.id ?? null;
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
     useDoctorProfile();
-  const doctorId = doctorProfile?.id;
 
   const form = useForm<EncounterFormValues>({
     defaultValues: {
@@ -70,15 +73,26 @@ function DoctorEncounterCreateComponent() {
       values: EncounterFormValues;
       doctorId: string;
     }) => {
+      // Combine all encounter data into structured format
+      const encounterData = {
+        visitDate: values.visitDate,
+        chiefComplaint: values.chiefComplaint,
+        history: values.history,
+        vitals: values.vitals,
+        physicalExam: values.physicalExam,
+        notes: values.notes,
+      };
+
+      // Store as JSON in notes field (temporary solution until backend has dedicated encounter table)
+      const notes = `Encounter Data:\n${JSON.stringify(encounterData, null, 2)}`;
+
       const response = await api.treatment.createTreatment({
         patientId,
         doctorId: targetDoctorId,
-        treatmentName: values.chiefComplaint || "Clinical assessment",
-        treatmentType: "Consultation",
+        treatmentType: "Other", // Use "Other" type for encounters
         startDate: new Date(`${values.visitDate}T00:00:00`).toISOString(),
         status: "InProgress",
-        diagnosis: values.history,
-        notes: values.notes,
+        notes,
       });
       return response.data;
     },
@@ -124,10 +138,9 @@ function DoctorEncounterCreateComponent() {
     <ProtectedRoute allowedRoles={["Doctor"]}>
       <DashboardLayout>
         <div className="space-y-8">
-          {!doctorProfileLoading && !doctorId ? (
+          {!doctorProfileLoading && !doctorProfile && doctorId ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              No doctor profile found for this account. Please contact the
-              administrator for access.
+              Doctor profile information is being loaded. If this message persists, please contact the administrator.
             </div>
           ) : null}
 

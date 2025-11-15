@@ -1,26 +1,57 @@
-import { AxiosInstance, AxiosError } from "axios";
+import { AxiosInstance } from "axios";
 import type {
   BaseResponse,
-  DynamicResponse,
+  PaginatedResponse,
   Doctor,
-  DoctorListQuery,
-  DoctorStatistics,
+  CreateDoctorRequest,
+  UpdateDoctorRequest,
+  GetDoctorsRequest,
+  GetAvailableDoctorsRequest,
+  DoctorStatisticsResponse,
 } from "../types";
 
 /**
  * Doctor API
+ * Matches Back-End API endpoints from /api/doctor/*
  */
 export class DoctorApi {
   constructor(private readonly client: AxiosInstance) {}
+
+  private mapQueryParams(params?: GetDoctorsRequest) {
+    if (!params) {
+      return undefined;
+    }
+
+    const mapped: Record<string, unknown> = {
+      pageNumber: params.pageNumber,
+      pageSize: params.pageSize,
+      searchTerm: params.searchTerm,
+      specialty: params.specialty,
+      isActive: params.isActive,
+    };
+
+    Object.keys(mapped).forEach((key) => {
+      if (mapped[key] === undefined || mapped[key] === null) {
+        delete mapped[key];
+      }
+    });
+
+    return mapped;
+  }
 
   /**
    * Get list of doctors
    * GET /api/doctor
    */
-  async getDoctors(params?: DoctorListQuery): Promise<DynamicResponse<Doctor>> {
-    const response = await this.client.get<DynamicResponse<Doctor>>("/doctor", {
-      params,
-    });
+  async getDoctors(
+    params?: GetDoctorsRequest
+  ): Promise<PaginatedResponse<Doctor>> {
+    const response = await this.client.get<PaginatedResponse<Doctor>>(
+      "/doctor",
+      {
+        params: this.mapQueryParams(params),
+      }
+    );
     return response.data;
   }
 
@@ -36,39 +67,24 @@ export class DoctorApi {
   }
 
   /**
-   * Get doctor statistics overview
-   * GET /api/doctor/statistics
+   * Get available doctors
+   * GET /api/doctor/available
    */
-  async getDoctorStatistics(
-    doctorId?: string
-  ): Promise<BaseResponse<DoctorStatistics>> {
-    const endpoints = doctorId
-      ? [`/doctor/${doctorId}/statistics`, "/doctor/statistics"]
-      : ["/doctor/statistics"];
-    let lastError: unknown;
-
-    for (const endpoint of endpoints) {
-      try {
-        const response =
-          await this.client.get<BaseResponse<DoctorStatistics>>(endpoint);
-        return response.data;
-      } catch (error) {
-        lastError = error;
-        if (error instanceof AxiosError && error.response?.status === 404) {
-          continue;
-        }
-        throw error;
-      }
-    }
-
-    throw (lastError as Error) ?? new Error("Doctor statistics not found");
+  async getAvailableDoctors(
+    params?: GetAvailableDoctorsRequest
+  ): Promise<PaginatedResponse<Doctor>> {
+    const response = await this.client.get<PaginatedResponse<Doctor>>(
+      "/doctor/available",
+      { params }
+    );
+    return response.data;
   }
 
   /**
    * Create new doctor
    * POST /api/doctor
    */
-  async createDoctor(data: Partial<Doctor>): Promise<BaseResponse<Doctor>> {
+  async createDoctor(data: CreateDoctorRequest): Promise<BaseResponse<Doctor>> {
     const response = await this.client.post<BaseResponse<Doctor>>(
       "/doctor",
       data
@@ -82,7 +98,7 @@ export class DoctorApi {
    */
   async updateDoctor(
     id: string,
-    data: Partial<Doctor>
+    data: UpdateDoctorRequest
   ): Promise<BaseResponse<Doctor>> {
     const response = await this.client.put<BaseResponse<Doctor>>(
       `/doctor/${id}`,
@@ -92,11 +108,25 @@ export class DoctorApi {
   }
 
   /**
-   * Delete doctor
-   * DELETE /api/doctor/{id}
+   * Get doctor statistics
+   * GET /api/doctor/statistics
    */
-  async deleteDoctor(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(`/doctor/${id}`);
+  async getDoctorStatistics(): Promise<BaseResponse<DoctorStatisticsResponse>> {
+    const response =
+      await this.client.get<BaseResponse<DoctorStatisticsResponse>>(
+        "/doctor/statistics"
+      );
+    return response.data;
+  }
+
+  /**
+   * Get available specialties
+   * GET /api/doctor/specialties
+   */
+  async getDoctorSpecialties(): Promise<BaseResponse<string[]>> {
+    const response = await this.client.get<BaseResponse<string[]>>(
+      "/doctor/specialties"
+    );
     return response.data;
   }
 }

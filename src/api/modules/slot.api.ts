@@ -1,63 +1,91 @@
 import { AxiosInstance } from "axios";
 import type {
   BaseResponse,
-  DynamicResponse,
-  TimeSlot,
-  SlotListQuery,
+  PaginatedResponse,
+  Slot,
+  SlotDetailResponse,
+  CreateSlotRequest,
+  UpdateSlotRequest,
+  GetSlotsRequest,
 } from "../types";
 
 /**
  * Slot API
+ * Matches Back-End API endpoints from /api/slots/*
  */
 export class SlotApi {
   constructor(private readonly client: AxiosInstance) {}
 
   /**
    * Get list of slots
-   * GET /api/slot
+   * GET /api/slots
    */
-  async getSlots(params?: SlotListQuery): Promise<DynamicResponse<TimeSlot>> {
-    const response = await this.client.get<DynamicResponse<TimeSlot>>(
-      "/slots",
-      {
-        params,
-      }
-    );
+  async getSlots(params?: GetSlotsRequest): Promise<PaginatedResponse<Slot>> {
+    const response = await this.client.get<PaginatedResponse<Slot>>("/slots", {
+      params,
+    });
     return response.data;
   }
 
   /**
    * Get slot by ID
-   * GET /api/slot/{id}
+   * GET /api/slots/{id}
    */
-  async getSlotById(id: string): Promise<BaseResponse<TimeSlot>> {
-    const response = await this.client.get<BaseResponse<TimeSlot>>(
+  async getSlotById(id: string): Promise<BaseResponse<SlotDetailResponse>> {
+    const response = await this.client.get<BaseResponse<SlotDetailResponse>>(
       `/slots/${id}`
     );
     return response.data;
   }
 
   /**
-   * Create new slot
-   * POST /api/slot
+   * Get slots by schedule
+   * GET /api/slots/schedule/{scheduleId}
    */
-  async createSlot(data: Partial<TimeSlot>): Promise<BaseResponse<TimeSlot>> {
-    const response = await this.client.post<BaseResponse<TimeSlot>>(
-      "/slots",
-      data
+  async getSlotsBySchedule(
+    scheduleId: string,
+    params?: { pageNumber?: number; pageSize?: number; isBooked?: boolean }
+  ): Promise<PaginatedResponse<Slot>> {
+    const response = await this.client.get<PaginatedResponse<Slot>>(
+      `/slots/schedule/${scheduleId}`,
+      { params }
     );
     return response.data;
   }
 
   /**
+   * Get available slots for a doctor
+   * GET /api/slots/available/doctor/{doctorId}
+   */
+  async getAvailableSlots(
+    doctorId: string,
+    params: { dateFrom: string; dateTo: string }
+  ): Promise<BaseResponse<Slot[]>> {
+    const response = await this.client.get<BaseResponse<Slot[]>>(
+      `/slots/available/doctor/${doctorId}`,
+      { params }
+    );
+    return response.data;
+  }
+
+  /**
+   * Create new slot
+   * POST /api/slots
+   */
+  async createSlot(data: CreateSlotRequest): Promise<BaseResponse<Slot>> {
+    const response = await this.client.post<BaseResponse<Slot>>("/slots", data);
+    return response.data;
+  }
+
+  /**
    * Update slot
-   * PUT /api/slot/{id}
+   * PUT /api/slots/{id}
    */
   async updateSlot(
     id: string,
-    data: Partial<TimeSlot>
-  ): Promise<BaseResponse<TimeSlot>> {
-    const response = await this.client.put<BaseResponse<TimeSlot>>(
+    data: UpdateSlotRequest
+  ): Promise<BaseResponse<Slot>> {
+    const response = await this.client.put<BaseResponse<Slot>>(
       `/slots/${id}`,
       data
     );
@@ -65,27 +93,16 @@ export class SlotApi {
   }
 
   /**
-   * Delete slot
-   * DELETE /api/slot/{id}
-   */
-  async deleteSlot(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(`/slots/${id}`);
-    return response.data;
-  }
-
-  /**
-   * Generate multiple slots automatically
-   * POST /api/slot/generate
+   * Generate slots for a schedule
+   * POST /api/slots/schedule/{scheduleId}/generate
    */
   async generateSlots(
     scheduleId: string,
-    startDate: string,
-    endDate: string,
     slotDuration = 30
-  ): Promise<BaseResponse<TimeSlot[]>> {
-    const response = await this.client.post<BaseResponse<TimeSlot[]>>(
+  ): Promise<BaseResponse<number>> {
+    const response = await this.client.post<BaseResponse<number>>(
       `/slots/schedule/${scheduleId}/generate`,
-      { startDate, endDate },
+      {},
       {
         params: {
           slotDuration,

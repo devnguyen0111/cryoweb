@@ -12,6 +12,7 @@ export interface User {
   fullName?: string;
   userName?: string | null;
   phone?: string | null;
+  phoneNumber?: string | null;
   role?: UserRole | string;
   roleName?: string;
   roleId?: string;
@@ -20,10 +21,12 @@ export interface User {
   country?: string | null;
   image?: string | null;
   status?: boolean;
+  isActive?: boolean;
   isEmailVerified?: boolean;
   emailVerified?: boolean;
   createdAt?: string;
   updatedAt?: string | null;
+  doctorSpecialization?: string | null;
 }
 
 /**

@@ -18,21 +18,12 @@ export function useDoctorProfile() {
       }
 
       try {
-        const response = await api.doctor.getDoctors({
-          AccountId: user.id,
-          Page: 1,
-          Size: 1,
-        });
-        const doctor = response.data?.[0] ?? null;
-
-        if (!doctor) {
-          toast.warning("No doctor profile found for the current account.");
-        }
-
-        return doctor;
+        // AccountId IS DoctorId - use user.id directly as doctorId
+        const response = await api.doctor.getDoctorById(user.id);
+        return response.data ?? null;
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
-          toast.warning("No doctor profile found for the current account.");
+          // Don't show warning toast - 404 is expected if account is not a doctor
           return null;
         }
 

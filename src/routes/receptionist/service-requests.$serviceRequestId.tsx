@@ -13,8 +13,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
-import { CreateAppointmentForm } from "@/features/receptionist/appointments/CreateAppointmentForm";
 import { api } from "@/api/client";
 
 type DecisionMode = "reject" | "cancel" | null;
@@ -33,7 +31,6 @@ function ReceptionistServiceRequestDetailRoute() {
   const [notesDraft, setNotesDraft] = useState("");
   const [decisionMode, setDecisionMode] = useState<DecisionMode>(null);
   const [decisionNotes, setDecisionNotes] = useState("");
-  const [isCreateAppointmentOpen, setIsCreateAppointmentOpen] = useState(false);
 
   const { data: request, isLoading } = useQuery({
     queryKey: ["receptionist", "service-request", { serviceRequestId }],
@@ -165,10 +162,6 @@ function ReceptionistServiceRequestDetailRoute() {
     });
   };
 
-  const handleOpenAppointmentCreate = () => {
-    setIsCreateAppointmentOpen(true);
-  };
-
   return (
     <ProtectedRoute allowedRoles={["Receptionist"]}>
       <DashboardLayout>
@@ -296,14 +289,11 @@ function ReceptionistServiceRequestDetailRoute() {
                   >
                     Confirm without scheduling
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleOpenAppointmentCreate}
-                    disabled={!patientId}
-                  >
-                    Confirm & schedule appointment
-                  </Button>
+                  <div className="text-xs text-gray-500">
+                    Appointment creation is managed by doctors. After
+                    confirming, please coordinate with the responsible doctor to
+                    schedule the visit.
+                  </div>
                   <Button
                     size="sm"
                     variant="outline"
@@ -446,29 +436,6 @@ function ReceptionistServiceRequestDetailRoute() {
           </div>
         </div>
       </DashboardLayout>
-
-      <Modal
-        isOpen={isCreateAppointmentOpen}
-        onClose={() => setIsCreateAppointmentOpen(false)}
-        title="Create appointment"
-        description="Schedule an appointment linked to this service request."
-        size="xl"
-      >
-        <CreateAppointmentForm
-          layout="modal"
-          defaultPatientId={patientId}
-          defaultServiceRequestId={serviceRequestId}
-          defaultServiceId={serviceId}
-          onClose={() => setIsCreateAppointmentOpen(false)}
-          onCreated={(appointmentId) => {
-            setIsCreateAppointmentOpen(false);
-            navigate({
-              to: "/receptionist/appointments/$appointmentId",
-              params: { appointmentId },
-            });
-          }}
-        />
-      </Modal>
     </ProtectedRoute>
   );
 }

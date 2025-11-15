@@ -40,7 +40,8 @@ function ReceptionistPatientsComponent() {
 
   const patients = data?.data ?? [];
   const total = data?.metaData?.total ?? 0;
-  const totalPages = data?.metaData?.totalPages ?? 1;
+  const totalPages =
+    data?.metaData?.totalPage ?? data?.metaData?.totalPages ?? 1;
   const isDetailOpen = Boolean(viewId);
 
   useEffect(() => {

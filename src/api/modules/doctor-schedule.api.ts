@@ -1,188 +1,97 @@
 import { AxiosInstance } from "axios";
 import type {
   BaseResponse,
-  DynamicResponse,
+  PaginatedResponse,
   DoctorSchedule,
-  DoctorScheduleListQuery,
+  DoctorScheduleDetailResponse,
+  CreateDoctorScheduleRequest,
+  UpdateDoctorScheduleRequest,
+  GetDoctorSchedulesRequest,
+  GetBusyScheduleDateRequest,
+  BusyScheduleDateResponse,
 } from "../types";
 
-const COLLECTION_ENDPOINTS = [
-  "/doctor-schedules",
-  "/doctor-schedule",
-  "/DoctorSchedules",
-  "/DoctorSchedule",
-];
-
-const BY_DOCTOR_ENDPOINT_TEMPLATES = [
-  "/doctor-schedules/doctor/",
-  "/doctor-schedule/doctor/",
-  "/DoctorSchedules/doctor/",
-  "/DoctorSchedule/doctor/",
-];
-
+/**
+ * Doctor Schedule API
+ * Matches Back-End API endpoints from /api/doctor-schedules/*
+ */
 export class DoctorScheduleApi {
   constructor(private readonly client: AxiosInstance) {}
 
-  private async tryGetCollection(
-    params?: DoctorScheduleListQuery
-  ): Promise<DynamicResponse<DoctorSchedule>> {
-    let lastError: unknown;
-    for (const endpoint of COLLECTION_ENDPOINTS) {
-      try {
-        const response = await this.client.get<DynamicResponse<DoctorSchedule>>(
-          endpoint,
-          { params }
-        );
-        return response.data;
-      } catch (error: any) {
-        lastError = error;
-        if (error?.response?.status === 404) {
-          continue;
-        }
-        throw error;
-      }
-    }
-    throw lastError ?? new Error("Doctor schedule endpoint not found.");
-  }
-
-  private async tryGetByDoctor(
-    doctorId: string,
-    params?: DoctorScheduleListQuery
-  ): Promise<DynamicResponse<DoctorSchedule>> {
-    let lastError: unknown;
-    for (const template of BY_DOCTOR_ENDPOINT_TEMPLATES) {
-      const endpoint = `${template}${doctorId}`;
-      try {
-        const response = await this.client.get<DynamicResponse<DoctorSchedule>>(
-          endpoint,
-          { params }
-        );
-        return response.data;
-      } catch (error: any) {
-        lastError = error;
-        if (error?.response?.status === 404) {
-          continue;
-        }
-        throw error;
-      }
-    }
-    throw (
-      lastError ?? new Error("Doctor schedule endpoint not found for doctorId.")
-    );
-  }
-
-  private async tryPostCollection(
-    payload: Partial<DoctorSchedule>
-  ): Promise<BaseResponse<DoctorSchedule>> {
-    let lastError: unknown;
-    for (const endpoint of COLLECTION_ENDPOINTS) {
-      try {
-        const response = await this.client.post<BaseResponse<DoctorSchedule>>(
-          endpoint,
-          payload
-        );
-        return response.data;
-      } catch (error: any) {
-        lastError = error;
-        if (error?.response?.status === 404) {
-          continue;
-        }
-        throw error;
-      }
-    }
-    throw lastError ?? new Error("Unable to create doctor schedule.");
-  }
-
-  private async tryPut(
-    id: string,
-    payload: Partial<DoctorSchedule>
-  ): Promise<BaseResponse<DoctorSchedule>> {
-    let lastError: unknown;
-    for (const endpoint of COLLECTION_ENDPOINTS) {
-      try {
-        const response = await this.client.put<BaseResponse<DoctorSchedule>>(
-          `${endpoint}/${id}`,
-          payload
-        );
-        return response.data;
-      } catch (error: any) {
-        lastError = error;
-        if (error?.response?.status === 404) {
-          continue;
-        }
-        throw error;
-      }
-    }
-    throw lastError ?? new Error("Unable to update doctor schedule.");
-  }
-
-  private async tryDelete(id: string): Promise<BaseResponse> {
-    let lastError: unknown;
-    for (const endpoint of COLLECTION_ENDPOINTS) {
-      try {
-        const response = await this.client.delete<BaseResponse>(
-          `${endpoint}/${id}`
-        );
-        return response.data;
-      } catch (error: any) {
-        lastError = error;
-        if (error?.response?.status === 404) {
-          continue;
-        }
-        throw error;
-      }
-    }
-    throw lastError ?? new Error("Unable to delete doctor schedule.");
-  }
-
+  /**
+   * Get all doctor schedules
+   * GET /api/doctor-schedules
+   */
   async getDoctorSchedules(
-    params?: DoctorScheduleListQuery
-  ): Promise<DynamicResponse<DoctorSchedule>> {
-    return this.tryGetCollection(params);
+    params?: GetDoctorSchedulesRequest
+  ): Promise<PaginatedResponse<DoctorSchedule>> {
+    const response = await this.client.get<PaginatedResponse<DoctorSchedule>>(
+      "/doctor-schedules",
+      { params }
+    );
+    return response.data;
   }
 
+  /**
+   * Get doctor schedule by ID
+   * GET /api/doctor-schedules/{id}
+   */
   async getDoctorScheduleById(
     id: string
-  ): Promise<BaseResponse<DoctorSchedule>> {
-    let lastError: unknown;
-    for (const endpoint of COLLECTION_ENDPOINTS) {
-      try {
-        const response = await this.client.get<BaseResponse<DoctorSchedule>>(
-          `${endpoint}/${id}`
-        );
-        return response.data;
-      } catch (error: any) {
-        lastError = error;
-        if (error?.response?.status === 404) {
-          continue;
-        }
-        throw error;
-      }
-    }
-    throw lastError ?? new Error("Doctor schedule not found by ID.");
+  ): Promise<BaseResponse<DoctorScheduleDetailResponse>> {
+    const response = await this.client.get<
+      BaseResponse<DoctorScheduleDetailResponse>
+    >(`/doctor-schedules/${id}`);
+    return response.data;
   }
 
-  async getSchedulesByDoctor(
-    doctorId: string,
-    params?: DoctorScheduleListQuery
-  ): Promise<DynamicResponse<DoctorSchedule>> {
-    return this.tryGetByDoctor(doctorId, params);
-  }
-
+  /**
+   * Create doctor schedule
+   * POST /api/doctor-schedules
+   */
   async createDoctorSchedule(
-    data: Partial<DoctorSchedule>
+    data: CreateDoctorScheduleRequest
   ): Promise<BaseResponse<DoctorSchedule>> {
-    return this.tryPostCollection(data);
+    const response = await this.client.post<BaseResponse<DoctorSchedule>>(
+      "/doctor-schedules",
+      data
+    );
+    return response.data;
   }
 
+  /**
+   * Update doctor schedule
+   * PUT /api/doctor-schedules/{id}
+   */
   async updateDoctorSchedule(
     id: string,
-    data: Partial<DoctorSchedule>
+    data: UpdateDoctorScheduleRequest
   ): Promise<BaseResponse<DoctorSchedule>> {
-    return this.tryPut(id, data);
+    const response = await this.client.put<BaseResponse<DoctorSchedule>>(
+      `/doctor-schedules/${id}`,
+      data
+    );
+    return response.data;
   }
 
-  async deleteDoctorSchedule(id: string): Promise<BaseResponse> {
-    return this.tryDelete(id);
+  /**
+   * Get busy schedule dates for a doctor
+   * GET /api/doctor-schedules/busy-dates
+   */
+  async getBusyScheduleDates(
+    params: GetBusyScheduleDateRequest
+  ): Promise<BaseResponse<BusyScheduleDateResponse>> {
+    const response = await this.client.get<
+      BaseResponse<BusyScheduleDateResponse>
+    >("/doctor-schedules/busy-dates", { params });
+    return response.data;
+  }
+
+  // Legacy compatibility method
+  async getSchedulesByDoctor(
+    doctorId: string,
+    params?: GetDoctorSchedulesRequest
+  ): Promise<PaginatedResponse<DoctorSchedule>> {
+    return this.getDoctorSchedules({ ...params, doctorId });
   }
 }

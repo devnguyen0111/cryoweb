@@ -1,28 +1,35 @@
 import { AxiosInstance } from "axios";
 import type {
   BaseResponse,
-  DynamicResponse,
+  PaginatedResponse,
   TreatmentCycle,
-  TreatmentCycleListQuery,
+  TreatmentCycleDetailResponseModel,
+  CreateTreatmentCycleRequest,
+  UpdateTreatmentCycleRequest,
   StartTreatmentCycleRequest,
   CompleteTreatmentCycleRequest,
   CancelTreatmentCycleRequest,
+  GetTreatmentCyclesRequest,
+  LabSample,
+  AppointmentSummary,
+  TreatmentCycleBillingResponse,
 } from "../types";
 
 /**
  * Treatment Cycle API
+ * Matches Back-End API endpoints from /api/treatment-cycles/*
  */
 export class TreatmentCycleApi {
   constructor(private readonly client: AxiosInstance) {}
 
   /**
    * Get list of treatment cycles
-   * GET /api/treatment-cycle
+   * GET /api/treatment-cycles
    */
   async getTreatmentCycles(
-    params?: TreatmentCycleListQuery
-  ): Promise<DynamicResponse<TreatmentCycle>> {
-    const response = await this.client.get<DynamicResponse<TreatmentCycle>>(
+    params?: GetTreatmentCyclesRequest
+  ): Promise<PaginatedResponse<TreatmentCycle>> {
+    const response = await this.client.get<PaginatedResponse<TreatmentCycle>>(
       "/treatment-cycles",
       { params }
     );
@@ -31,23 +38,23 @@ export class TreatmentCycleApi {
 
   /**
    * Get treatment cycle by ID
-   * GET /api/treatment-cycle/{id}
+   * GET /api/treatment-cycles/{id}
    */
   async getTreatmentCycleById(
     id: string
-  ): Promise<BaseResponse<TreatmentCycle>> {
-    const response = await this.client.get<BaseResponse<TreatmentCycle>>(
-      `/treatment-cycles/${id}`
-    );
+  ): Promise<BaseResponse<TreatmentCycleDetailResponseModel>> {
+    const response = await this.client.get<
+      BaseResponse<TreatmentCycleDetailResponseModel>
+    >(`/treatment-cycles/${id}`);
     return response.data;
   }
 
   /**
    * Create new treatment cycle
-   * POST /api/treatment-cycle
+   * POST /api/treatment-cycles
    */
   async createTreatmentCycle(
-    data: Partial<TreatmentCycle>
+    data: CreateTreatmentCycleRequest
   ): Promise<BaseResponse<TreatmentCycle>> {
     const response = await this.client.post<BaseResponse<TreatmentCycle>>(
       "/treatment-cycles",
@@ -58,26 +65,15 @@ export class TreatmentCycleApi {
 
   /**
    * Update treatment cycle
-   * PUT /api/treatment-cycle/{id}
+   * PUT /api/treatment-cycles/{id}
    */
   async updateTreatmentCycle(
     id: string,
-    data: Partial<TreatmentCycle>
+    data: UpdateTreatmentCycleRequest
   ): Promise<BaseResponse<TreatmentCycle>> {
     const response = await this.client.put<BaseResponse<TreatmentCycle>>(
       `/treatment-cycles/${id}`,
       data
-    );
-    return response.data;
-  }
-
-  /**
-   * Delete treatment cycle
-   * DELETE /api/treatment-cycle/{id}
-   */
-  async deleteTreatmentCycle(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(
-      `/treatment-cycles/${id}`
     );
     return response.data;
   }
@@ -88,7 +84,7 @@ export class TreatmentCycleApi {
    */
   async startTreatmentCycle(
     id: string,
-    data?: StartTreatmentCycleRequest
+    data: StartTreatmentCycleRequest
   ): Promise<BaseResponse<TreatmentCycle>> {
     const response = await this.client.post<BaseResponse<TreatmentCycle>>(
       `/treatment-cycles/${id}/start`,
@@ -124,6 +120,43 @@ export class TreatmentCycleApi {
       `/treatment-cycles/${id}/cancel`,
       data
     );
+    return response.data;
+  }
+
+  /**
+   * Get cycle samples
+   * GET /api/treatment-cycles/{id}/samples
+   */
+  async getCycleSamples(id: string): Promise<PaginatedResponse<LabSample>> {
+    const response = await this.client.get<PaginatedResponse<LabSample>>(
+      `/treatment-cycles/${id}/samples`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get cycle appointments
+   * GET /api/treatment-cycles/{id}/appointments
+   */
+  async getCycleAppointments(
+    id: string
+  ): Promise<PaginatedResponse<AppointmentSummary>> {
+    const response = await this.client.get<
+      PaginatedResponse<AppointmentSummary>
+    >(`/treatment-cycles/${id}/appointments`);
+    return response.data;
+  }
+
+  /**
+   * Get cycle billing
+   * GET /api/treatment-cycles/{id}/billing
+   */
+  async getCycleBilling(
+    id: string
+  ): Promise<BaseResponse<TreatmentCycleBillingResponse>> {
+    const response = await this.client.get<
+      BaseResponse<TreatmentCycleBillingResponse>
+    >(`/treatment-cycles/${id}/billing`);
     return response.data;
   }
 }

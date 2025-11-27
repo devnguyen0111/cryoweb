@@ -1,8 +1,5 @@
-import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import type { ServiceRequest } from "@/api/types";
 
 interface ServiceRequestActionModalProps {
@@ -10,7 +7,7 @@ interface ServiceRequestActionModalProps {
   onClose: () => void;
   request: ServiceRequest | null;
   action: "approve" | "reject" | "complete" | "cancel" | null;
-  onConfirm: (notes?: string) => void;
+  onConfirm: () => void;
   isLoading?: boolean;
 }
 
@@ -22,16 +19,12 @@ export function ServiceRequestActionModal({
   onConfirm,
   isLoading = false,
 }: ServiceRequestActionModalProps) {
-  const [notes, setNotes] = useState("");
-
   const handleClose = () => {
-    setNotes("");
     onClose();
   };
 
   const handleSubmit = () => {
-    onConfirm(notes || undefined);
-    setNotes("");
+    onConfirm();
   };
 
   if (!action || !request) return null;
@@ -41,34 +34,30 @@ export function ServiceRequestActionModal({
       case "approve":
         return {
           title: "Approve Service Request",
-          description: "Approve this service request. You can add optional notes.",
+          description: "Are you sure you want to approve this service request?",
           buttonText: "Approve",
           buttonVariant: "default" as const,
-          placeholder: "Optional notes for approval...",
         };
       case "reject":
         return {
           title: "Reject Service Request",
-          description: "Reject this service request. Please provide a reason.",
+          description: "Are you sure you want to reject this service request?",
           buttonText: "Reject",
           buttonVariant: "destructive" as const,
-          placeholder: "Please provide a reason for rejection...",
         };
       case "complete":
         return {
           title: "Complete Service Request",
-          description: "Mark this service request as completed. You can add optional notes.",
+          description: "Are you sure you want to mark this service request as completed?",
           buttonText: "Complete",
           buttonVariant: "default" as const,
-          placeholder: "Optional notes for completion...",
         };
       case "cancel":
         return {
           title: "Cancel Service Request",
-          description: "Cancel this service request. Please provide a reason.",
+          description: "Are you sure you want to cancel this service request?",
           buttonText: "Cancel",
           buttonVariant: "outline" as const,
-          placeholder: "Please provide a reason for cancellation...",
         };
       default:
         return null;
@@ -77,8 +66,6 @@ export function ServiceRequestActionModal({
 
   const actionInfo = getActionInfo();
   if (!actionInfo) return null;
-
-  const isRequired = action === "reject" || action === "cancel";
 
   return (
     <Modal
@@ -116,25 +103,6 @@ export function ServiceRequestActionModal({
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="notes">
-            {isRequired ? "Reason" : "Notes"} {isRequired && <span className="text-red-500">*</span>}
-          </Label>
-          <Textarea
-            id="notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder={actionInfo.placeholder}
-            rows={4}
-            required={isRequired}
-          />
-          {isRequired && !notes.trim() && (
-            <p className="text-sm text-red-500">
-              Please provide a reason for {action === "reject" ? "rejection" : "cancellation"}.
-            </p>
-          )}
-        </div>
-
         <div className="flex justify-end gap-2 pt-4">
           <Button variant="outline" onClick={handleClose} disabled={isLoading}>
             Cancel
@@ -142,7 +110,7 @@ export function ServiceRequestActionModal({
           <Button
             variant={actionInfo.buttonVariant}
             onClick={handleSubmit}
-            disabled={isLoading || (isRequired && !notes.trim())}
+            disabled={isLoading}
           >
             {isLoading ? "Processing..." : actionInfo.buttonText}
           </Button>

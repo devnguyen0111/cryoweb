@@ -2,15 +2,17 @@ import { useState, useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { isAxiosError } from "axios";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { Badge } from "@/components/ui/badge";
 import { AppointmentDetailForm } from "@/features/receptionist/appointments/AppointmentDetailForm";
 import { api } from "@/api/client";
-import type { TransactionStatus, TransactionType } from "@/api/types";
+import type { TransactionStatus, TransactionType, ServiceRequest, ServiceRequestDetail, Service, Patient } from "@/api/types";
 import { cn } from "@/utils/cn";
 
 export const Route = createFileRoute("/receptionist/transactions")({
@@ -38,6 +40,8 @@ function ReceptionistTransactionsComponent() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTransactionDetailId, setSelectedTransactionDetailId] =
     useState<string | null>(null);
+  const [showServiceRequestInTransaction, setShowServiceRequestInTransaction] =
+    useState(false);
   const [createFormData, setCreateFormData] = useState({
     patientId: "", // Used only for UI filtering, not sent to API
     relatedEntityType: "ServiceRequest" as "ServiceRequest" | "Appointment" | "CryoStorageContract",
@@ -256,6 +260,106 @@ function ReceptionistTransactionsComponent() {
       api.transaction.getTransactionById(selectedTransactionDetailId!),
     enabled: Boolean(selectedTransactionDetailId),
   });
+
+  // Get service request ID from transaction
+  const serviceRequestId = useMemo(() => {
+    if (!transactionDetail?.data) return null;
+    return transactionDetail.data.relatedEntityType === "ServiceRequest"
+      ? transactionDetail.data.relatedEntityId
+      : transactionDetail.data.serviceRequestId || null;
+  }, [transactionDetail?.data]);
+
+  // Query service request detail when showing in transaction modal
+  const { data: serviceRequest, isLoading: serviceRequestLoading } = useQuery<ServiceRequest | null>({
+    enabled: Boolean(showServiceRequestInTransaction && serviceRequestId),
+    queryKey: ["receptionist", "service-request", "detail", serviceRequestId],
+    retry: false,
+    queryFn: async () => {
+      if (!serviceRequestId) return null;
+      try {
+        const response = await api.serviceRequest.getServiceRequestById(serviceRequestId);
+        return response.data ?? null;
+      } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
+  });
+
+  // Query service request details
+  const { data: requestDetails, isLoading: detailsLoading } = useQuery<ServiceRequestDetail[]>({
+    enabled: Boolean(showServiceRequestInTransaction && serviceRequestId && !serviceRequest?.serviceDetails),
+    queryKey: ["receptionist", "service-request-details", serviceRequestId],
+    retry: false,
+    queryFn: async () => {
+      if (!serviceRequestId) return [];
+      try {
+        const response = await api.serviceRequestDetails.getServiceRequestDetailsByServiceRequest(serviceRequestId);
+        return response.data ?? [];
+      } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return [];
+        }
+        throw error;
+      }
+    },
+  });
+
+  const serviceDetails = serviceRequest?.serviceDetails ?? requestDetails ?? [];
+  const serviceIds = serviceDetails
+    .map((detail) => detail.serviceId)
+    .filter((id): id is string => Boolean(id));
+
+  const { data: services } = useQuery<Record<string, Service>>({
+    enabled: showServiceRequestInTransaction && serviceIds.length > 0,
+    queryKey: ["services", "by-ids", serviceIds],
+    queryFn: async () => {
+      const results: Record<string, Service> = {};
+      await Promise.all(
+        serviceIds.map(async (id) => {
+          try {
+            const response = await api.service.getServiceById(id);
+            if (response.data) {
+              results[id] = response.data;
+            }
+          } catch (error) {
+            // Ignore errors for individual services
+          }
+        })
+      );
+      return results;
+    },
+  });
+
+  // Get patient from service request
+  const serviceRequestPatientId = useMemo(() => {
+    return serviceRequest?.patientId ?? null;
+  }, [serviceRequest?.patientId]);
+
+  const { data: serviceRequestPatient } = useQuery<Patient | null>({
+    enabled: showServiceRequestInTransaction && Boolean(serviceRequestPatientId),
+    queryKey: ["patient", serviceRequestPatientId],
+    retry: false,
+    queryFn: async () => {
+      if (!serviceRequestPatientId) return null;
+      try {
+        const response = await api.patient.getPatientById(serviceRequestPatientId);
+        return response.data ?? null;
+      } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
+  });
+
+  const totalAmount = serviceRequest?.totalAmount ?? serviceDetails.reduce(
+    (sum, detail) => sum + (detail.totalPrice ?? (detail.unitPrice ?? detail.price ?? 0) * (detail.quantity ?? 0)),
+    0
+  );
 
   const statusOptions: { value: TransactionStatus | ""; label: string }[] = [
     { value: "", label: "All statuses" },
@@ -667,12 +771,216 @@ function ReceptionistTransactionsComponent() {
           isOpen={Boolean(selectedTransactionDetailId)}
           onClose={() => {
             setSelectedTransactionDetailId(null);
+            setShowServiceRequestInTransaction(false);
           }}
-          title="Transaction Details"
-          description="View complete transaction information"
-          size="lg"
+          title={showServiceRequestInTransaction ? "Service Request Details" : "Transaction Details"}
+          description={showServiceRequestInTransaction ? "View detailed information about the service request" : "View complete transaction information"}
+          size="xl"
         >
-          {transactionDetail?.data ? (
+          {showServiceRequestInTransaction && serviceRequestId ? (
+            // Service Request Detail View
+            serviceRequestLoading || detailsLoading ? (
+              <div className="py-12 text-center text-gray-500">
+                Loading service request details...
+              </div>
+            ) : !serviceRequest ? (
+              <div className="space-y-4 py-6 text-center text-sm text-red-600">
+                <p>Service request not found.</p>
+                <Button variant="outline" onClick={() => setShowServiceRequestInTransaction(false)}>
+                  Back to Transaction
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowServiceRequestInTransaction(false)}
+                  >
+                    ← Back to Transaction
+                  </Button>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">Request Information</CardTitle>
+                      <Badge variant={serviceRequest.status === "Approved" ? "default" : serviceRequest.status === "Rejected" ? "destructive" : "secondary"}>
+                        {serviceRequest.status}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Request Code
+                        </label>
+                        <p className="text-sm text-gray-900">{serviceRequest.requestCode}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Status
+                        </label>
+                        <p className="text-sm text-gray-900">{serviceRequest.status}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Requested Date
+                        </label>
+                        <p className="text-sm text-gray-900">
+                          {formatDate(serviceRequest.requestDate ?? serviceRequest.requestedDate)}
+                        </p>
+                      </div>
+                      {serviceRequest.approvedDate && (
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Approved Date
+                          </label>
+                          <p className="text-sm text-gray-900">
+                            {formatDate(serviceRequest.approvedDate)}
+                          </p>
+                        </div>
+                      )}
+                      {serviceRequest.approvedBy && (
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Approved By
+                          </label>
+                          <p className="text-sm text-gray-900">{serviceRequest.approvedBy}</p>
+                        </div>
+                      )}
+                    </div>
+                    {serviceRequest.notes && (
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Notes
+                        </label>
+                        <p className="text-sm text-gray-900 whitespace-pre-wrap">{serviceRequest.notes}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {serviceRequestPatient && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Patient Information</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Name
+                          </label>
+                          <p className="text-sm text-gray-900">{serviceRequestPatient.fullName}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Patient Code
+                          </label>
+                          <p className="text-sm text-gray-900">{serviceRequestPatient.patientCode}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Phone
+                          </label>
+                          <p className="text-sm text-gray-900">{serviceRequestPatient.phoneNumber}</p>
+                        </div>
+                        {serviceRequestPatient.email && (
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                              Email
+                            </label>
+                            <p className="text-sm text-gray-900">{serviceRequestPatient.email}</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Service Details</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {serviceDetails && serviceDetails.length > 0 ? (
+                      <div className="space-y-4">
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                                  Service
+                                </th>
+                                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                                  Quantity
+                                </th>
+                                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                                  Unit Price
+                                </th>
+                                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                                  Total
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {serviceDetails.map((detail) => {
+                                const service = services?.[detail.serviceId ?? ""];
+                                const unitPrice = detail.unitPrice ?? detail.price ?? 0;
+                                const total = detail.totalPrice ?? unitPrice * (detail.quantity ?? 0);
+                                return (
+                                  <tr key={detail.id} className="border-b">
+                                    <td className="px-4 py-2 text-sm">
+                                      {detail.serviceName ?? service?.name ?? service?.serviceName ?? "—"}
+                                    </td>
+                                    <td className="px-4 py-2 text-sm">
+                                      {detail.quantity ?? 0}
+                                    </td>
+                                    <td className="px-4 py-2 text-sm">
+                                      {formatCurrency(unitPrice)}
+                                    </td>
+                                    <td className="px-4 py-2 text-sm">
+                                      {formatCurrency(total)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="flex justify-end border-t pt-4">
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-gray-500">
+                              Total Amount
+                            </p>
+                            <p className="mt-1 text-lg font-bold">
+                              {formatCurrency(totalAmount)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No service details found</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowServiceRequestInTransaction(false);
+                    }}
+                  >
+                    Back to Transaction
+                  </Button>
+                </div>
+              </div>
+            )
+          ) : transactionDetail?.data ? (
             <div className="space-y-6">
               {/* Basic Information */}
               <Card>
@@ -912,14 +1220,7 @@ function ReceptionistTransactionsComponent() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => {
-                                  setSelectedTransactionDetailId(null);
-                                  navigate({
-                                    to: "/receptionist/service-requests/$serviceRequestId",
-                                    params: {
-                                      serviceRequestId:
-                                        transactionDetail.data!.relatedEntityId!,
-                                    },
-                                  });
+                                  setShowServiceRequestInTransaction(true);
                                 }}
                               >
                                 View Request

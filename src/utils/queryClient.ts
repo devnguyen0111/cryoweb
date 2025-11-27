@@ -50,53 +50,6 @@ export const STALE_TIMES = {
 } as const;
 
 /**
- * Get cache time based on query key
- */
-function getCacheTimeForQueryKey(queryKey: readonly unknown[]): number {
-  const key = queryKey[0];
-  const subKey = queryKey[1];
-
-  // Patient queries
-  if (key === "patient" || key === "patients") {
-    if (subKey === "details" || typeof subKey === "string") {
-      return CACHE_TIMES.PATIENT_DETAILS;
-    }
-    return CACHE_TIMES.PATIENT_LIST;
-  }
-
-  // Doctor queries
-  if (key === "doctor" || key === "doctors") {
-    if (subKey === "profile") {
-      return CACHE_TIMES.DOCTOR_PROFILE;
-    }
-    if (subKey === "details" || typeof subKey === "string") {
-      return CACHE_TIMES.DOCTOR_DETAILS;
-    }
-    return CACHE_TIMES.DOCTOR_LIST;
-  }
-
-  // Treatment queries
-  if (key === "treatment-cycle" || key === "treatment-cycles") {
-    return CACHE_TIMES.TREATMENT_CYCLES;
-  }
-  if (key === "treatment" || key === "treatments" || key === "doctor-treatments") {
-    return CACHE_TIMES.TREATMENTS;
-  }
-
-  // Appointment queries
-  if (key === "appointment" || key === "appointments") {
-    return CACHE_TIMES.APPOINTMENTS;
-  }
-
-  // Statistics queries
-  if (key === "statistics" || key === "stats") {
-    return CACHE_TIMES.STATISTICS;
-  }
-
-  return CACHE_TIMES.DEFAULT;
-}
-
-/**
  * Get stale time based on query key
  */
 function getStaleTimeForQueryKey(queryKey: readonly unknown[]): number {
@@ -126,7 +79,11 @@ function getStaleTimeForQueryKey(queryKey: readonly unknown[]): number {
   if (key === "treatment-cycle" || key === "treatment-cycles") {
     return STALE_TIMES.TREATMENT_CYCLES;
   }
-  if (key === "treatment" || key === "treatments" || key === "doctor-treatments") {
+  if (
+    key === "treatment" ||
+    key === "treatments" ||
+    key === "doctor-treatments"
+  ) {
     return STALE_TIMES.TREATMENTS;
   }
 
@@ -167,10 +124,10 @@ export function createQueryClient(): QueryClient {
           return getStaleTimeForQueryKey(query.queryKey);
         },
 
-        // Custom cache time based on query key - keep unused data in memory
-        gcTime: (query) => {
-          return getCacheTimeForQueryKey(query.queryKey);
-        },
+        // Default cache time - keep unused data in memory
+        // Note: gcTime doesn't support functions, so we use a default value
+        // Individual queries can override this if needed
+        gcTime: CACHE_TIMES.DEFAULT,
 
         // Retry delay increases exponentially
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),

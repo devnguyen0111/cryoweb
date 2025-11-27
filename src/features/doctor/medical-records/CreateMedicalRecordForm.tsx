@@ -14,7 +14,6 @@ import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
 import type {
   Patient,
-  Appointment,
   Treatment,
   TreatmentCycle,
   Service,
@@ -132,7 +131,7 @@ export function CreateMedicalRecordForm({
   });
 
   // Get appointments for selected patient using history endpoint
-  const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
+  const { data: appointmentsData } = useQuery({
     queryKey: [
       "appointments",
       "patient-history",
@@ -217,14 +216,34 @@ export function CreateMedicalRecordForm({
       try {
         return await api.service.getServices({ pageSize: 1000 });
       } catch {
-        return { data: [] };
+        return { 
+          code: 200,
+          message: "Success",
+          data: [],
+          metaData: {
+            pageNumber: 1,
+            pageSize: 1000,
+            totalCount: 0,
+            totalPages: 0,
+            hasPrevious: false,
+            hasNext: false,
+          }
+        };
       }
     },
   });
 
   const services = servicesData?.data ?? [];
-  const serviceOptions = useMemo(() => {
-    return services.map((service) => ({
+  
+  type ServiceOption = {
+    id: string;
+    name: string;
+    code: string;
+    price: number;
+  };
+  
+  const serviceOptions = useMemo<ServiceOption[]>(() => {
+    return services.map((service: Service) => ({
       id: service.id,
       name: service.serviceName || service.name || "",
       code: service.serviceCode || "",
@@ -345,7 +364,7 @@ export function CreateMedicalRecordForm({
         if (medicationsWithService.length > 0) {
           const serviceDetails = medicationsWithService.map((med) => {
             const serviceInfo = serviceOptions.find(
-              (s) => s.id === med.serviceId
+              (s: ServiceOption) => s.id === med.serviceId
             );
 
             const noteParts = [
@@ -372,7 +391,7 @@ export function CreateMedicalRecordForm({
             requestDate: new Date().toISOString(),
             notes:
               values.diagnosis ||
-              `Prescription for medical record ${medicalRecord.id}`,
+              `Prescription for medical record ${medicalRecord.data?.id || "new"}`,
             serviceDetails: serviceDetails,
           };
 
@@ -404,7 +423,7 @@ export function CreateMedicalRecordForm({
   };
 
   const handleServiceChange = (index: number, serviceId: string) => {
-    const service = serviceOptions.find((s) => s.id === serviceId);
+    const service = serviceOptions.find((s: ServiceOption) => s.id === serviceId);
     if (service) {
       form.setValue(`medications.${index}.serviceId`, serviceId);
       form.setValue(`medications.${index}.name`, service.name);
@@ -486,9 +505,9 @@ export function CreateMedicalRecordForm({
                     {...form.register("appointmentId", { required: true })}
                   >
                     <option value="">Select an appointment</option>
-                    {appointments.map((appointment: Appointment) => (
+                    {appointments.map((appointment) => (
                       <option key={appointment.id} value={appointment.id}>
-                        {appointment.appointmentCode || appointment.id.slice(-4)} -{" "}
+                        {(appointment as any).appointmentCode || appointment.id.slice(-4)} -{" "}
                         {new Date(appointment.appointmentDate).toLocaleDateString(
                           "en-GB",
                           {
@@ -728,7 +747,7 @@ export function CreateMedicalRecordForm({
                       onChange={(e) => handleServiceChange(index, e.target.value)}
                     >
                       <option value="">Select medication</option>
-                      {serviceOptions.map((service) => (
+                      {serviceOptions.map((service: ServiceOption) => (
                         <option key={service.id} value={service.id}>
                           {service.name} ({service.code})
                         </option>

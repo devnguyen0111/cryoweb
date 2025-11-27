@@ -15,14 +15,12 @@ import type {
   PaginatedResponse,
   Appointment,
   Slot,
-  AppointmentStatus,
   Doctor,
 } from "@/api/types";
 import { cn } from "@/utils/cn";
 import {
   APPOINTMENT_STATUS_LABELS,
   normalizeAppointmentStatus,
-  ensureAppointmentStatus,
 } from "@/utils/appointments";
 import { AppointmentDetailForm } from "@/features/receptionist/appointments/AppointmentDetailForm";
 

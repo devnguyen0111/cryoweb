@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
 import type { PaginatedResponse, TreatmentCycle } from "@/api/types";
+import { normalizeTreatmentCycleStatus } from "@/api/types";
 import { cn } from "@/utils/cn";
 import { DoctorPatientDetailModal } from "@/features/doctor/patients/DoctorPatientDetailModal";
 import {
@@ -169,11 +170,12 @@ function DoctorPatientsComponent() {
     }
     const cycles = (query.data?.data ?? []) as TreatmentCycle[];
     const activeCycle =
-      cycles.find((cycle) =>
-        (cycle.status ?? "")
-          .toLowerCase()
-          .match(/active|in-progress|ongoing|processing/)
-      ) ?? cycles[0];
+      cycles.find((cycle) => {
+        const normalizedStatus = normalizeTreatmentCycleStatus(cycle.status);
+        return normalizedStatus
+          ?.toLowerCase()
+          .match(/active|in-progress|ongoing|processing/);
+      }) ?? cycles[0];
 
     if (activeCycle?.treatmentType) {
       treatmentStatusByPatient.set(patient.id, activeCycle.treatmentType);
@@ -238,11 +240,12 @@ function DoctorPatientsComponent() {
   }, [selectedPatientCycles.data]);
 
   const activeCycle =
-    orderedCycles.find((cycle) =>
-      (cycle.status ?? "")
-        .toLowerCase()
-        .match(/active|in-progress|ongoing|processing/)
-    ) ?? orderedCycles[0];
+    orderedCycles.find((cycle) => {
+      const normalizedStatus = normalizeTreatmentCycleStatus(cycle.status);
+      return normalizedStatus
+        ?.toLowerCase()
+        .match(/active|in-progress|ongoing|processing/);
+    }) ?? orderedCycles[0];
 
   const careStatus = selectedPatient
     ? activeCycle?.treatmentType
@@ -252,9 +255,10 @@ function DoctorPatientsComponent() {
         : "Not started"
     : "No patient selected";
 
-  const completedCycles = orderedCycles.filter((cycle) =>
-    (cycle.status ?? "").toLowerCase().match(/completed|done|success/)
-  ).length;
+  const completedCycles = orderedCycles.filter((cycle) => {
+    const normalizedStatus = normalizeTreatmentCycleStatus(cycle.status);
+    return normalizedStatus?.toLowerCase().match(/completed|done|success/);
+  }).length;
 
   const quickStats = selectedPatient
     ? [

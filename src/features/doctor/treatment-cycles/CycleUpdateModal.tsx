@@ -28,7 +28,9 @@ export function CycleUpdateModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Update Treatment Record</h2>
+            <h2 className="text-2xl font-bold text-gray-900">
+              Update Treatment Record
+            </h2>
             <p className="text-sm text-gray-600">
               Cycle: {cycle.cycleName || `Cycle ${cycle.cycleNumber}`} | Type:{" "}
               {cycle.treatmentType || "N/A"}
@@ -45,11 +47,15 @@ export function CycleUpdateModal({
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto p-6" style={{ maxHeight: "calc(90vh - 100px)" }}>
+        <div
+          className="overflow-y-auto p-6"
+          style={{ maxHeight: "calc(90vh - 100px)" }}
+        >
           <CycleUpdateForm
             cycle={cycle}
             onStepAdvanced={() => {
-              // Close modal after advancing step
+              // Only close modal when actually advancing/completing a step
+              // Don't close when starting cycle
               onClose();
             }}
           />
@@ -58,4 +64,3 @@ export function CycleUpdateModal({
     </div>
   );
 }
-

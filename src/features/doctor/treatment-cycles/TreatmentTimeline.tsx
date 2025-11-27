@@ -141,8 +141,6 @@ export function TreatmentTimeline({
             const isCurrent = cycle.currentStep === step.id;
             const isPast = currentStepIndex > index;
 
-            const stepDate = cycle.stepDates?.[step.id];
-
             return (
               <div
                 key={step.id}

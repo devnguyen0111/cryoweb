@@ -8,6 +8,7 @@ import type {
   AppointmentExtendedDetailResponse,
   PatientDetailResponse,
   TreatmentCycle,
+  TreatmentCycleStatus,
   Treatment,
   UserDetailResponse,
 } from "@/api/types";
@@ -151,6 +152,11 @@ const IUI_TIMELINE: TimelinePhase[] = [
 ];
 
 const normalize = (value?: string | null) => value?.toLowerCase().trim() ?? "";
+
+const normalizeStatus = (status?: TreatmentCycleStatus | null): string => {
+  const normalized = normalizeTreatmentCycleStatus(status);
+  return normalized?.toLowerCase() ?? "";
+};
 
 const resolveTimelinePhases = (
   cycle?: (TreatmentCycle & { treatment?: Treatment }) | null,
@@ -813,7 +819,6 @@ export function DoctorAppointmentDetailModal({
   const {
     activeCycle,
     timelinePhases,
-    currentPhaseIndex,
     activeTreatment,
   }: {
     activeCycle: (TreatmentCycle & { treatment?: Treatment }) | null;
@@ -949,7 +954,7 @@ export function DoctorAppointmentDetailModal({
         return false;
       }
 
-      const status = normalize(item.status);
+      const status = normalizeStatus(item.status);
       console.log(
         `[AppointmentModal] Cycle ${item.id} status: ${item.status} -> normalized: ${status}`
       );
@@ -1001,7 +1006,7 @@ export function DoctorAppointmentDetailModal({
       cycleWithTreatment,
       cycleWithTreatment?.treatment
     );
-    const status = normalize(cycle?.status);
+    const status = normalizeStatus(cycle?.status);
     const phaseIndex = phases.findIndex((phase) =>
       phase.matchStatuses.some(
         (value) => status.includes(value) || value.includes(status)
@@ -1029,7 +1034,9 @@ export function DoctorAppointmentDetailModal({
   }, [activeCycle, activeTreatment]);
 
   const treatmentIdForDetails = useMemo(() => {
-    return activeCycle?.treatmentId || activeTreatment?.data?.treatmentId || null;
+    return (
+      activeCycle?.treatmentId || activeTreatment?.data?.treatmentId || null
+    );
   }, [activeCycle, activeTreatment]);
 
   // Fetch appointments for the current cycle
@@ -1038,7 +1045,8 @@ export function DoctorAppointmentDetailModal({
     queryFn: async () => {
       if (!cycleIdForDetails) return [];
       try {
-        const response = await api.treatmentCycle.getCycleAppointments(cycleIdForDetails);
+        const response =
+          await api.treatmentCycle.getCycleAppointments(cycleIdForDetails);
         return response.data || [];
       } catch {
         return [];
@@ -1053,7 +1061,8 @@ export function DoctorAppointmentDetailModal({
     queryFn: async () => {
       if (!cycleIdForDetails) return [];
       try {
-        const response = await api.treatmentCycle.getCycleSamples(cycleIdForDetails);
+        const response =
+          await api.treatmentCycle.getCycleSamples(cycleIdForDetails);
         return response.data || [];
       } catch {
         return [];
@@ -1531,7 +1540,10 @@ export function DoctorAppointmentDetailModal({
                               {treatmentCycles.slice(0, 3).map((cycle) => {
                                 const cycleType =
                                   cycle.treatment?.treatmentType || "Unknown";
-                                const status = cycle.status || "Unknown";
+                                const normalizedStatus =
+                                  normalizeTreatmentCycleStatus(cycle.status);
+                                const status = normalizedStatus || "Unknown";
+                                const statusLower = status.toLowerCase();
                                 const startDate = cycle.startDate
                                   ? new Date(
                                       cycle.startDate
@@ -1548,13 +1560,9 @@ export function DoctorAppointmentDetailModal({
                                       </span>
                                       <span
                                         className={`rounded-full px-2 py-1 text-xs ${
-                                          status
-                                            .toLowerCase()
-                                            .includes("completed")
+                                          statusLower.includes("completed")
                                             ? "bg-green-100 text-green-700"
-                                            : status
-                                                  .toLowerCase()
-                                                  .includes("cancelled")
+                                            : statusLower.includes("cancelled")
                                               ? "bg-red-100 text-red-700"
                                               : "bg-gray-100 text-gray-700"
                                         }`}
@@ -1742,10 +1750,9 @@ export function DoctorAppointmentDetailModal({
                           id: activeTreatment.data?.id || "",
                           treatmentId: activeTreatment.data?.treatmentId || "",
                           cycleNumber: 1,
-                          status:
-                            (activeTreatment.data?.status ||
-                              activeTreatment.data?.cycleStatus ||
-                              "Planned") as any,
+                          status: (activeTreatment.data?.status ||
+                            activeTreatment.data?.cycleStatus ||
+                            "Planned") as any,
                           treatmentType: treatmentType as "IUI" | "IVF",
                           startDate: activeTreatment.data?.startDate,
                           currentStep: activeTreatment.data?.currentStep,
@@ -1754,7 +1761,9 @@ export function DoctorAppointmentDetailModal({
 
                         // Ensure treatmentType is set correctly
                         if (!cycleForTimeline.treatmentType) {
-                          cycleForTimeline.treatmentType = treatmentType as "IUI" | "IVF";
+                          cycleForTimeline.treatmentType = treatmentType as
+                            | "IUI"
+                            | "IVF";
                         }
 
                         return (
@@ -1776,8 +1785,9 @@ export function DoctorAppointmentDetailModal({
                             {activeCycle.treatment?.treatmentType ||
                               "Treatment"}{" "}
                             —{" "}
-                            {normalizeTreatmentCycleStatus(activeCycle.status) ||
-                              "In progress"}
+                            {normalizeTreatmentCycleStatus(
+                              activeCycle.status
+                            ) || "In progress"}
                           </p>
                           <p className="text-xs text-gray-500">
                             {formatDate(activeCycle.startDate)} →{" "}
@@ -1799,7 +1809,8 @@ export function DoctorAppointmentDetailModal({
                       {(() => {
                         // Ensure treatmentType is set on the cycle
                         // Try multiple sources: cycle.treatmentType, cycle.treatment?.treatmentType
-                        let treatmentType: "IUI" | "IVF" | undefined = undefined;
+                        let treatmentType: "IUI" | "IVF" | undefined =
+                          undefined;
 
                         // First, try cycle.treatmentType
                         if (
@@ -1810,7 +1821,8 @@ export function DoctorAppointmentDetailModal({
                         }
                         // Then try cycle.treatment?.treatmentType
                         else if (activeCycle.treatment?.treatmentType) {
-                          const type = activeCycle.treatment.treatmentType.toUpperCase();
+                          const type =
+                            activeCycle.treatment.treatmentType.toUpperCase();
                           if (type === "IUI") treatmentType = "IUI";
                           else if (type === "IVF") treatmentType = "IVF";
                         }
@@ -1820,14 +1832,20 @@ export function DoctorAppointmentDetailModal({
                             (c) =>
                               c.treatmentType === "IUI" ||
                               c.treatmentType === "IVF" ||
-                              c.treatment?.treatmentType?.toUpperCase() === "IUI" ||
-                              c.treatment?.treatmentType?.toUpperCase() === "IVF"
+                              c.treatment?.treatmentType?.toUpperCase() ===
+                                "IUI" ||
+                              c.treatment?.treatmentType?.toUpperCase() ===
+                                "IVF"
                           );
                           if (cycleWithType) {
-                            if (cycleWithType.treatmentType === "IUI" || cycleWithType.treatmentType === "IVF") {
+                            if (
+                              cycleWithType.treatmentType === "IUI" ||
+                              cycleWithType.treatmentType === "IVF"
+                            ) {
                               treatmentType = cycleWithType.treatmentType;
                             } else if (cycleWithType.treatment?.treatmentType) {
-                              const type = cycleWithType.treatment.treatmentType.toUpperCase();
+                              const type =
+                                cycleWithType.treatment.treatmentType.toUpperCase();
                               if (type === "IUI") treatmentType = "IUI";
                               else if (type === "IVF") treatmentType = "IVF";
                             }
@@ -2448,7 +2466,9 @@ export function DoctorAppointmentDetailModal({
                             Notes
                           </p>
                           <StructuredNote
-                            note={activeCycle?.notes || activeTreatment?.data?.notes}
+                            note={
+                              activeCycle?.notes || activeTreatment?.data?.notes
+                            }
                             className="mt-1 text-blue-900"
                           />
                         </div>
@@ -2483,7 +2503,8 @@ export function DoctorAppointmentDetailModal({
 
                         if (activeCycle) {
                           // Ensure treatmentType is set on the cycle
-                          let treatmentType: "IUI" | "IVF" | undefined = undefined;
+                          let treatmentType: "IUI" | "IVF" | undefined =
+                            undefined;
 
                           if (
                             activeCycle.treatmentType === "IUI" ||
@@ -2491,7 +2512,8 @@ export function DoctorAppointmentDetailModal({
                           ) {
                             treatmentType = activeCycle.treatmentType;
                           } else if (activeCycle.treatment?.treatmentType) {
-                            const type = activeCycle.treatment.treatmentType.toUpperCase();
+                            const type =
+                              activeCycle.treatment.treatmentType.toUpperCase();
                             if (type === "IUI") treatmentType = "IUI";
                             else if (type === "IVF") treatmentType = "IVF";
                           } else if (treatmentCycles.length > 0) {
@@ -2499,14 +2521,22 @@ export function DoctorAppointmentDetailModal({
                               (c) =>
                                 c.treatmentType === "IUI" ||
                                 c.treatmentType === "IVF" ||
-                                c.treatment?.treatmentType?.toUpperCase() === "IUI" ||
-                                c.treatment?.treatmentType?.toUpperCase() === "IVF"
+                                c.treatment?.treatmentType?.toUpperCase() ===
+                                  "IUI" ||
+                                c.treatment?.treatmentType?.toUpperCase() ===
+                                  "IVF"
                             );
                             if (cycleWithType) {
-                              if (cycleWithType.treatmentType === "IUI" || cycleWithType.treatmentType === "IVF") {
+                              if (
+                                cycleWithType.treatmentType === "IUI" ||
+                                cycleWithType.treatmentType === "IVF"
+                              ) {
                                 treatmentType = cycleWithType.treatmentType;
-                              } else if (cycleWithType.treatment?.treatmentType) {
-                                const type = cycleWithType.treatment.treatmentType.toUpperCase();
+                              } else if (
+                                cycleWithType.treatment?.treatmentType
+                              ) {
+                                const type =
+                                  cycleWithType.treatment.treatmentType.toUpperCase();
                                 if (type === "IUI") treatmentType = "IUI";
                                 else if (type === "IVF") treatmentType = "IVF";
                               }
@@ -2522,16 +2552,17 @@ export function DoctorAppointmentDetailModal({
                             activeTreatment.type === "IUI" ? "IUI" : "IVF";
                           cycleForTimeline = {
                             id: activeTreatment.data?.id || "",
-                            treatmentId: activeTreatment.data?.treatmentId || "",
+                            treatmentId:
+                              activeTreatment.data?.treatmentId || "",
                             cycleNumber: 1,
-                            status:
-                              (activeTreatment.data?.status ||
-                                activeTreatment.data?.cycleStatus ||
-                                "Planned") as any,
+                            status: (activeTreatment.data?.status ||
+                              activeTreatment.data?.cycleStatus ||
+                              "Planned") as any,
                             treatmentType: treatmentType as "IUI" | "IVF",
                             startDate: activeTreatment.data?.startDate,
                             currentStep: activeTreatment.data?.currentStep,
-                            completedSteps: activeTreatment.data?.completedSteps,
+                            completedSteps:
+                              activeTreatment.data?.completedSteps,
                           };
                         }
 
@@ -2555,12 +2586,21 @@ export function DoctorAppointmentDetailModal({
 
                   {/* Current Step Information */}
                   {(() => {
-                    const currentCycle = activeCycle || (activeTreatment ? {
-                      ...activeCycle,
-                      treatmentType: activeTreatment.type === "IUI" ? "IUI" : "IVF",
-                      currentStep: activeTreatment.data?.currentStep,
-                      completedSteps: activeTreatment.data?.completedSteps,
-                    } : null);
+                    const currentCycle =
+                      activeCycle ||
+                      (activeTreatment
+                        ? {
+                            id: "",
+                            treatmentId: "",
+                            cycleNumber: 0,
+                            status: "Planned" as TreatmentCycleStatus,
+                            treatmentType:
+                              activeTreatment.type === "IUI" ? "IUI" : "IVF",
+                            currentStep: activeTreatment.data?.currentStep,
+                            completedSteps:
+                              activeTreatment.data?.completedSteps,
+                          }
+                        : null);
 
                     if (!currentCycle || !currentCycle.currentStep) return null;
 
@@ -2601,15 +2641,17 @@ export function DoctorAppointmentDetailModal({
                                     Completed Steps
                                   </p>
                                   <div className="mt-1 flex flex-wrap gap-2">
-                                    {currentCycle.completedSteps.map((step, idx) => (
-                                      <Badge
-                                        key={idx}
-                                        variant="outline"
-                                        className="bg-green-50 text-green-700 border-green-200"
-                                      >
-                                        {step}
-                                      </Badge>
-                                    ))}
+                                    {currentCycle.completedSteps.map(
+                                      (step: string, idx: number) => (
+                                        <Badge
+                                          key={idx}
+                                          variant="outline"
+                                          className="bg-green-50 text-green-700 border-green-200"
+                                        >
+                                          {step}
+                                        </Badge>
+                                      )
+                                    )}
                                   </div>
                                 </div>
                               )}

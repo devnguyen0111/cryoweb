@@ -1,12 +1,7 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { isAxiosError } from "axios";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,10 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/api/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { cn } from "@/utils/cn";
 import type {
-  ServiceRequest,
   ServiceRequestStatus,
   Appointment,
   Patient,
@@ -32,8 +24,6 @@ export const Route = createFileRoute("/doctor/service-requests")({
 
 function DoctorServiceRequestsComponent() {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const { user } = useAuth();
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
@@ -101,13 +91,15 @@ function DoctorServiceRequestsComponent() {
             const response = await api.appointment.getAppointmentById(id);
             if (response.data) {
               // AppointmentDetailResponse extends Appointment and may have nested patient
-              const aptDetail = response.data as Appointment & { patient?: Patient };
-              
+              const aptDetail = response.data as Appointment & {
+                patient?: Patient;
+              };
+
               // Ensure patientId is set if we have nested patient
               if (aptDetail.patient && !aptDetail.patientId) {
                 aptDetail.patientId = aptDetail.patient.id;
               }
-              
+
               results[id] = aptDetail;
             }
           } catch (error) {
@@ -123,7 +115,7 @@ function DoctorServiceRequestsComponent() {
   // Extract patient IDs from service requests and appointments
   const patientIds = useMemo(() => {
     const ids: string[] = [];
-    
+
     // Get patientIds directly from service requests if available
     if (data?.data) {
       data.data.forEach((req) => {
@@ -132,20 +124,18 @@ function DoctorServiceRequestsComponent() {
         }
       });
     }
-    
+
     // Get patientIds from appointments
     const appointments = appointmentsQuery.data ?? {};
     Object.values(appointments).forEach((apt) => {
       // Try multiple ways to get patientId from appointment
-      const aptPatientId = 
-        apt.patientId ?? 
-        apt.patient?.id ??
-        (apt as any)?.patientId;
-      
+      const aptPatientId =
+        apt.patientId ?? apt.patient?.id ?? (apt as any)?.patientId;
+
       if (aptPatientId) {
         ids.push(aptPatientId);
       }
-      
+
       // Also store nested patient in patients map if available
       if (apt.patient && apt.patient.id) {
         // This will be handled by patientsQuery, but we ensure it's in the list
@@ -154,7 +144,7 @@ function DoctorServiceRequestsComponent() {
         }
       }
     });
-    
+
     return Array.from(new Set(ids));
   }, [data?.data, appointmentsQuery.data]);
 
@@ -162,10 +152,12 @@ function DoctorServiceRequestsComponent() {
   // Also include nested patients from appointments
   const patientsQuery = useQuery({
     queryKey: ["patients", "by-ids", patientIds, appointmentsQuery.data],
-    enabled: patientIds.length > 0 || Object.keys(appointmentsQuery.data ?? {}).length > 0,
+    enabled:
+      patientIds.length > 0 ||
+      Object.keys(appointmentsQuery.data ?? {}).length > 0,
     queryFn: async () => {
       const results: Record<string, Patient> = {};
-      
+
       // First, extract nested patients from appointments if available
       const appointments = appointmentsQuery.data ?? {};
       Object.values(appointments).forEach((apt) => {
@@ -173,10 +165,10 @@ function DoctorServiceRequestsComponent() {
           results[apt.patient.id] = apt.patient;
         }
       });
-      
+
       // Then fetch remaining patients that weren't in appointments
       const missingPatientIds = patientIds.filter((id) => !results[id]);
-      
+
       if (missingPatientIds.length > 0) {
         await Promise.all(
           missingPatientIds.map(async (id) => {
@@ -200,7 +192,7 @@ function DoctorServiceRequestsComponent() {
           })
         );
       }
-      
+
       return results;
     },
   });
@@ -209,21 +201,19 @@ function DoctorServiceRequestsComponent() {
     mutationFn: async ({
       id,
       action,
-      notes,
     }: {
       id: string;
       action: "approve" | "reject" | "complete" | "cancel";
-      notes?: string;
     }) => {
       switch (action) {
         case "approve":
-          return api.serviceRequest.approveServiceRequest(id, notes);
+          return api.serviceRequest.approveServiceRequest(id);
         case "reject":
-          return api.serviceRequest.rejectServiceRequest(id, notes);
+          return api.serviceRequest.rejectServiceRequest(id);
         case "complete":
-          return api.serviceRequest.completeServiceRequest(id, notes);
+          return api.serviceRequest.completeServiceRequest(id);
         case "cancel":
-          return api.serviceRequest.cancelServiceRequest(id, notes);
+          return api.serviceRequest.cancelServiceRequest(id);
       }
     },
     onSuccess: (_, variables) => {
@@ -234,10 +224,10 @@ function DoctorServiceRequestsComponent() {
         variables.action === "approve"
           ? "approved"
           : variables.action === "reject"
-          ? "rejected"
-          : variables.action === "complete"
-          ? "completed"
-          : "cancelled";
+            ? "rejected"
+            : variables.action === "complete"
+              ? "completed"
+              : "cancelled";
       toast.success(`Service request ${actionText} successfully`);
       setActionModal({ isOpen: false, requestId: null, action: null });
     },
@@ -255,12 +245,11 @@ function DoctorServiceRequestsComponent() {
     setActionModal({ isOpen: true, requestId: id, action });
   };
 
-  const handleConfirmAction = (notes?: string) => {
+  const handleConfirmAction = () => {
     if (actionModal.requestId && actionModal.action) {
       statusActionMutation.mutate({
         id: actionModal.requestId,
         action: actionModal.action,
-        notes,
       });
     }
   };
@@ -380,53 +369,57 @@ function DoctorServiceRequestsComponent() {
                           const appointment = request.appointmentId
                             ? appointments[request.appointmentId]
                             : null;
-                          
+
                           // Try multiple ways to get patientId
                           // Priority: request.patientId > appointment.patientId > appointment.patient.id
-                          const patientId = 
-                            request.patientId ?? 
-                            appointment?.patientId ?? 
+                          const patientId =
+                            request.patientId ??
+                            appointment?.patientId ??
                             appointment?.patient?.id ??
                             null;
-                          
+
                           // Try to get patient from multiple sources
                           // Priority: patients map > appointment.patient (nested)
-                          const patient = 
+                          const patient =
                             (patientId ? patients[patientId] : null) ??
                             appointment?.patient ??
                             null;
-                          
+
                           return (
                             <tr
                               key={request.id}
                               className="border-b hover:bg-gray-50"
                             >
                               <td className="px-4 py-3 text-sm">
-                                {request.requestCode 
-                                  ? request.requestCode.slice(-8) 
+                                {request.requestCode
+                                  ? request.requestCode.slice(-8)
                                   : request.id.slice(-8)}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {patient 
+                                {patient
                                   ? `${patient.fullName}${patient.patientCode ? ` (${patient.patientCode})` : ""}`
                                   : "—"}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {appointment 
-                                  ? appointment.appointmentCode 
+                                {appointment
+                                  ? appointment.appointmentCode
                                     ? appointment.appointmentCode.slice(-8)
                                     : appointment.id.slice(-8)
                                   : "—"}
                               </td>
                               <td className="px-4 py-3">
                                 <Badge
-                                  variant={getStatusBadgeVariant(request.status)}
+                                  variant={getStatusBadgeVariant(
+                                    request.status
+                                  )}
                                 >
                                   {request.status}
                                 </Badge>
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {formatDate(request.requestDate ?? request.requestedDate)}
+                                {formatDate(
+                                  request.requestDate ?? request.requestedDate
+                                )}
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex gap-2">
@@ -445,9 +438,14 @@ function DoctorServiceRequestsComponent() {
                                         variant="default"
                                         size="sm"
                                         onClick={() =>
-                                          handleStatusAction(request.id, "approve")
+                                          handleStatusAction(
+                                            request.id,
+                                            "approve"
+                                          )
                                         }
-                                        disabled={statusActionMutation.isPending}
+                                        disabled={
+                                          statusActionMutation.isPending
+                                        }
                                       >
                                         Approve
                                       </Button>
@@ -455,9 +453,14 @@ function DoctorServiceRequestsComponent() {
                                         variant="destructive"
                                         size="sm"
                                         onClick={() =>
-                                          handleStatusAction(request.id, "reject")
+                                          handleStatusAction(
+                                            request.id,
+                                            "reject"
+                                          )
                                         }
-                                        disabled={statusActionMutation.isPending}
+                                        disabled={
+                                          statusActionMutation.isPending
+                                        }
                                       >
                                         Reject
                                       </Button>
@@ -468,7 +471,10 @@ function DoctorServiceRequestsComponent() {
                                       variant="default"
                                       size="sm"
                                       onClick={() =>
-                                        handleStatusAction(request.id, "complete")
+                                        handleStatusAction(
+                                          request.id,
+                                          "complete"
+                                        )
                                       }
                                       disabled={statusActionMutation.isPending}
                                     >
@@ -481,9 +487,14 @@ function DoctorServiceRequestsComponent() {
                                         variant="outline"
                                         size="sm"
                                         onClick={() =>
-                                          handleStatusAction(request.id, "cancel")
+                                          handleStatusAction(
+                                            request.id,
+                                            "cancel"
+                                          )
                                         }
-                                        disabled={statusActionMutation.isPending}
+                                        disabled={
+                                          statusActionMutation.isPending
+                                        }
                                       >
                                         Cancel
                                       </Button>
@@ -516,9 +527,7 @@ function DoctorServiceRequestsComponent() {
                           variant="outline"
                           size="sm"
                           onClick={() =>
-                            setPage((p) =>
-                              Math.min(metaData.totalPages, p + 1)
-                            )
+                            setPage((p) => Math.min(metaData.totalPages, p + 1))
                           }
                           disabled={!metaData.hasNext || isFetching}
                         >
@@ -559,7 +568,8 @@ function DoctorServiceRequestsComponent() {
               setActionModal({ isOpen: false, requestId: null, action: null })
             }
             request={
-              serviceRequests.find((r) => r.id === actionModal.requestId) ?? null
+              serviceRequests.find((r) => r.id === actionModal.requestId) ??
+              null
             }
             action={actionModal.action}
             onConfirm={handleConfirmAction}

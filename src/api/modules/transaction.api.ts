@@ -68,13 +68,27 @@ export class TransactionApi {
 
   /**
    * Get transaction by ID
-   * GET /api/transaction/{id}
+   * GET /api/transaction?TransactionId={id}
    */
   async getTransactionById(id: string): Promise<BaseResponse<Transaction>> {
-    const response = await this.client.get<BaseResponse<Transaction>>(
-      `/transaction/${id}`
+    const response = await this.client.get<PaginatedResponse<Transaction>>(
+      "/transaction",
+      { params: { TransactionId: id } }
     );
-    return response.data;
+
+    // The API returns a paginated response, extract the first transaction
+    const transaction = response.data.data?.[0];
+
+    if (!transaction) {
+      throw new Error(`Transaction with ID ${id} not found`);
+    }
+
+    // Return in BaseResponse format for consistency
+    return {
+      code: response.data.code,
+      message: response.data.message,
+      data: transaction,
+    };
   }
 
   /**

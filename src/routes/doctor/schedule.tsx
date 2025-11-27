@@ -14,7 +14,6 @@ import type {
   PaginatedResponse,
   Appointment,
   Slot,
-  DoctorSchedule,
   AppointmentStatus,
 } from "@/api/types";
 import { useAuth } from "@/contexts/AuthContext";
@@ -343,29 +342,29 @@ function DoctorScheduleComponent() {
     },
   });
 
-  // Toggle schedule availability mutation
-  const toggleAvailabilityMutation = useMutation({
-    mutationFn: ({
-      scheduleId,
-      isAvailable,
-    }: {
-      scheduleId: string;
-      isAvailable: boolean;
-    }) =>
-      api.doctorSchedule.updateScheduleAvailability(scheduleId, isAvailable),
-    onSuccess: () => {
-      toast.success("Schedule availability updated.");
-      queryClient.invalidateQueries({
-        queryKey: ["doctor", "schedules", doctorId, selectedDate],
-      });
-    },
-    onError: (error: any) => {
-      toast.error(
-        error?.response?.data?.message ||
-          "Unable to update schedule availability. Please try again."
-      );
-    },
-  });
+  // Toggle schedule availability mutation (kept for future use)
+  // const toggleAvailabilityMutation = useMutation({
+  //   mutationFn: ({
+  //     scheduleId,
+  //     isAvailable,
+  //   }: {
+  //     scheduleId: string;
+  //     isAvailable: boolean;
+  //   }) =>
+  //     api.doctorSchedule.updateScheduleAvailability(scheduleId, isAvailable),
+  //   onSuccess: () => {
+  //     toast.success("Schedule availability updated.");
+  //     queryClient.invalidateQueries({
+  //       queryKey: ["doctor", "schedules", doctorId, selectedDate],
+  //     });
+  //   },
+  //   onError: (error: any) => {
+  //     toast.error(
+  //       error?.response?.data?.message ||
+  //         "Unable to update schedule availability. Please try again."
+  //     );
+  //   },
+  // });
 
   const handleShiftDay = (offset: number) => {
     const [year, month, day] = selectedDate.split("-").map(Number);
@@ -1216,7 +1215,7 @@ function DoctorScheduleComponent() {
             doctorName={doctorProfile?.fullName}
             layout="modal"
             onClose={() => setIsCreateModalOpen(false)}
-            onCreated={(appointmentId) => {
+            onCreated={() => {
               setIsCreateModalOpen(false);
               toast.success("Appointment created successfully.");
               queryClient.invalidateQueries({

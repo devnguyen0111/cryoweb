@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
-import type { DynamicResponse, Service, ServiceRequest } from "@/api/types";
+import type { DynamicResponse, Service, ServiceRequest, ServiceRequestCreateRequestModel } from "@/api/types";
 
 type PrescriptionMedication = {
   serviceId: string;
@@ -143,7 +143,7 @@ function DoctorPrescriptionComponent() {
     return map;
   }, [serviceOptions]);
   const createServiceRequestMutation = useMutation({
-    mutationFn: (payload: Partial<ServiceRequest>) =>
+    mutationFn: (payload: ServiceRequestCreateRequestModel) =>
       api.serviceRequest.createServiceRequest(payload),
     onError: (error: any) => {
       const message =

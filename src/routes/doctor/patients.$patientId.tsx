@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 import type { DynamicResponse, Treatment, TreatmentCycle } from "@/api/types";
+import { normalizeTreatmentCycleStatus } from "@/api/types";
 import { cn } from "@/utils/cn";
 import {
   isPatientDetailResponse,
@@ -252,15 +253,17 @@ function DoctorPatientProfile() {
   const latestAppointment = appointments[0];
 
   const activeCycle =
-    treatmentCycles.find((cycle) =>
-      (cycle.status ?? "")
-        .toLowerCase()
-        .match(/active|processing|in-progress|ongoing/)
-    ) ?? treatmentCycles[0];
+    treatmentCycles.find((cycle) => {
+      const normalizedStatus = normalizeTreatmentCycleStatus(cycle.status);
+      return normalizedStatus
+        ?.toLowerCase()
+        .match(/active|processing|in-progress|ongoing/);
+    }) ?? treatmentCycles[0];
 
-  const completedCycles = treatmentCycles.filter((cycle) =>
-    (cycle.status ?? "").toLowerCase().match(/completed|success|done/)
-  ).length;
+  const completedCycles = treatmentCycles.filter((cycle) => {
+    const normalizedStatus = normalizeTreatmentCycleStatus(cycle.status);
+    return normalizedStatus?.toLowerCase().match(/completed|success|done/);
+  }).length;
 
   const careStatus = activeCycle?.treatmentType
     ? activeCycle.treatmentType

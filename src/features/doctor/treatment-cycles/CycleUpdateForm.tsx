@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { HorizontalTreatmentTimeline } from "./HorizontalTreatmentTimeline";
+import { CreateServiceRequestForCycleModal } from "./CreateServiceRequestForCycleModal";
 import {
   normalizeTreatmentCycleStatus,
   type TreatmentCycle,
@@ -80,6 +81,7 @@ export function CycleUpdateForm({
   const [isCancelling, setIsCancelling] = useState(false);
   const [completeOutcome, setCompleteOutcome] = useState("");
   const [completeNotes, setCompleteNotes] = useState("");
+  const [showServiceRequestModal, setShowServiceRequestModal] = useState(false);
 
   // Fetch cycle details to ensure we have latest data
   const { data: cycleDetails } = useQuery({
@@ -273,6 +275,25 @@ export function CycleUpdateForm({
       }
     },
     enabled: !!currentCycle.treatmentId,
+  });
+
+  // Fetch service requests for this patient
+  const { data: serviceRequestsData } = useQuery({
+    queryKey: ["service-requests", "patient", currentCycle.patientId],
+    queryFn: async () => {
+      if (!currentCycle.patientId) return [];
+      try {
+        const response = await api.serviceRequest.getServiceRequests({
+          patientId: currentCycle.patientId,
+          pageNumber: 1,
+          pageSize: 100,
+        });
+        return response.data || [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!currentCycle.patientId,
   });
 
   // Fetch all cycles for this treatment to show progress
@@ -1171,26 +1192,61 @@ export function CycleUpdateForm({
                     normalizedStatus === "Scheduled") &&
                     !currentCycle.currentStep && (
                       <Button
-                        onClick={async () => {
+                        type="button"
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+
                           try {
                             // Use POST /api/treatment-cycles/{id}/start
-                            await api.treatmentCycle.startTreatmentCycle(
-                              currentCycle.id,
-                              {
-                                startDate: new Date().toISOString(),
-                              }
-                            );
+                            const response =
+                              await api.treatmentCycle.startTreatmentCycle(
+                                currentCycle.id,
+                                {
+                                  startDate: new Date().toISOString(),
+                                }
+                              );
+
+                            // Update query data immediately with response data
+                            if (response.data) {
+                              queryClient.setQueryData(
+                                ["doctor", "treatment-cycle", currentCycle.id],
+                                response.data
+                              );
+                            }
+
                             toast.success("Cycle started successfully");
+
+                            // Invalidate queries without immediate refetch to avoid page reload
+                            // Use refetchType: 'none' to prevent automatic refetch
                             queryClient.invalidateQueries({
                               queryKey: [
                                 "doctor",
                                 "treatment-cycle",
                                 currentCycle.id,
                               ],
+                              refetchType: "none", // Don't refetch immediately
                             });
-                            queryClient.invalidateQueries({
-                              queryKey: ["doctor", "treatment-cycles"],
-                            });
+
+                            // Invalidate other queries in background (non-blocking)
+                            setTimeout(() => {
+                              queryClient.invalidateQueries({
+                                queryKey: ["doctor", "treatment-cycles"],
+                                refetchType: "none",
+                              });
+                              queryClient.invalidateQueries({
+                                queryKey: [
+                                  "treatment-cycles",
+                                  "treatment",
+                                  currentCycle.treatmentId,
+                                ],
+                                refetchType: "none",
+                              });
+                            }, 100);
+
+                            // Don't call onStepAdvanced when starting cycle
+                            // Only call it when actually advancing a step
+                            // onStepAdvanced?.();
                           } catch (error: any) {
                             toast.error(
                               error?.response?.data?.message ||
@@ -1223,18 +1279,23 @@ export function CycleUpdateForm({
                     const cycleStatus = normalizeTreatmentCycleStatus(
                       currentCycle.status
                     );
+                    // Cycle is considered started if:
+                    // 1. Status is "InProgress" (actively running)
+                    // 2. Has currentStep (cycle has progressed to a step)
+                    // 3. Has startDate (cycle has been started)
+                    // Note: "Scheduled" and "Planned" are not considered started
                     const hasStarted =
                       cycleStatus === "InProgress" ||
-                      cycleStatus === "Scheduled" ||
                       !!currentCycle.currentStep ||
                       !!currentCycle.startDate;
-                    
+
                     if (!hasStarted) {
                       return null;
                     }
-                    
+
                     return (
                       <Button
+                        type="button"
                         variant="outline"
                         onClick={() =>
                           setShowMedicalRecordForm(!showMedicalRecordForm)
@@ -1246,12 +1307,151 @@ export function CycleUpdateForm({
                       </Button>
                     );
                   })()}
+                  {/* Only show Create Service Request button if cycle has been started */}
+                  {(() => {
+                    const cycleStatus = normalizeTreatmentCycleStatus(
+                      currentCycle.status
+                    );
+                    const hasStarted =
+                      cycleStatus === "InProgress" ||
+                      !!currentCycle.currentStep ||
+                      !!currentCycle.startDate;
+
+                    if (!hasStarted) {
+                      return null;
+                    }
+
+                    return (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowServiceRequestModal(true)}
+                      >
+                        Create Service Request
+                      </Button>
+                    );
+                  })()}
                 </div>
               )
             );
           })()}
         </CardContent>
       </Card>
+
+      {/* Service Requests List */}
+      {serviceRequestsData && serviceRequestsData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Service Requests</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {serviceRequestsData.slice(0, 5).map((request) => {
+                const statusBadgeClass = (status?: string) => {
+                  switch (status) {
+                    case "Pending":
+                      return "bg-amber-100 text-amber-800";
+                    case "Approved":
+                      return "bg-blue-100 text-blue-700";
+                    case "Completed":
+                      return "bg-emerald-100 text-emerald-700";
+                    case "Cancelled":
+                    case "Rejected":
+                      return "bg-rose-100 text-rose-700";
+                    default:
+                      return "bg-gray-100 text-gray-700";
+                  }
+                };
+
+                const formatDate = (dateString?: string | null) => {
+                  if (!dateString) return "N/A";
+                  try {
+                    return new Date(dateString).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    });
+                  } catch {
+                    return dateString;
+                  }
+                };
+
+                const formatCurrency = (value?: number | null) => {
+                  if (value === null || value === undefined) return "—";
+                  return new Intl.NumberFormat("vi-VN", {
+                    style: "currency",
+                    currency: "VND",
+                  }).format(value);
+                };
+
+                return (
+                  <div
+                    key={request.id}
+                    className="rounded-md border border-gray-200 p-4 hover:bg-gray-50"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="font-medium text-sm">
+                            {request.requestCode || request.id.slice(0, 8)}
+                          </p>
+                          <span
+                            className={`rounded-full px-2 py-1 text-xs font-medium ${statusBadgeClass(request.status)}`}
+                          >
+                            {request.status || "Pending"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-1">
+                          Request Date:{" "}
+                          {formatDate(
+                            request.requestDate || request.requestedDate
+                          )}
+                        </p>
+                        {request.serviceDetails &&
+                          request.serviceDetails.length > 0 && (
+                            <p className="text-xs text-gray-500 mb-1">
+                              Services: {request.serviceDetails.length} item(s)
+                            </p>
+                          )}
+                        {request.totalAmount !== undefined && (
+                          <p className="text-sm font-semibold text-gray-900">
+                            Total: {formatCurrency(request.totalAmount)}
+                          </p>
+                        )}
+                        {request.notes && (
+                          <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                            {request.notes}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {serviceRequestsData.length > 5 && (
+                <p className="text-sm text-gray-500 text-center pt-2">
+                  Showing 5 of {serviceRequestsData.length} service requests
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Service Request Modal */}
+      {showServiceRequestModal && (
+        <CreateServiceRequestForCycleModal
+          cycle={currentCycle}
+          isOpen={showServiceRequestModal}
+          onClose={() => setShowServiceRequestModal(false)}
+          onSuccess={() => {
+            setShowServiceRequestModal(false);
+            queryClient.invalidateQueries({
+              queryKey: ["doctor", "service-requests"],
+            });
+          }}
+        />
+      )}
 
       {/* Medical Record Form */}
       {showMedicalRecordForm && (

@@ -173,11 +173,9 @@ function DoctorTreatmentCycleDetail() {
             Size: 100,
           });
           const allRecords = response.data || [];
-          // Filter by treatmentCycleId
-          const cycleRecords = allRecords.filter(
-            (record: MedicalRecord) => record.treatmentCycleId === cycleId
-          );
-          return cycleRecords;
+          // Note: MedicalRecord doesn't have treatmentCycleId, so we return all records
+          // Filtering by cycle would need to be done via appointment relationship
+          return allRecords;
         } catch (error) {
           console.error("Error fetching medical records:", error);
           return [];
@@ -414,7 +412,7 @@ function DoctorTreatmentCycleDetail() {
                             <div className="flex-1 space-y-2">
                               <div className="flex items-center gap-2">
                                 <p className="font-semibold">
-                                  Record #{record.recordNumber || record.id.slice(0, 8)}
+                                  Record #{record.id.slice(0, 8)}
                                 </p>
                                 {record.createdAt && (
                                   <span className="text-sm text-gray-500">

@@ -13,7 +13,6 @@ import { Modal } from "@/components/ui/modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/utils/cn";
 
 interface ServiceRequestDetailModalProps {
   requestId: string;
@@ -29,19 +28,6 @@ const formatDate = (value?: string | null) => {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  });
-};
-
-const formatDateTime = (value?: string | null) => {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 };
 
@@ -75,23 +61,25 @@ export function ServiceRequestDetailModal({
   isOpen,
   onClose,
 }: ServiceRequestDetailModalProps) {
-  const { data: request, isLoading: requestLoading } = useQuery<ServiceRequest | null>({
-    enabled: isOpen && Boolean(requestId),
-    queryKey: ["service-request", "detail", requestId],
-    retry: false,
-    queryFn: async () => {
-      if (!requestId) return null;
-      try {
-        const response = await api.serviceRequest.getServiceRequestById(requestId);
-        return response.data ?? null;
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
+  const { data: request, isLoading: requestLoading } =
+    useQuery<ServiceRequest | null>({
+      enabled: isOpen && Boolean(requestId),
+      queryKey: ["service-request", "detail", requestId],
+      retry: false,
+      queryFn: async () => {
+        if (!requestId) return null;
+        try {
+          const response =
+            await api.serviceRequest.getServiceRequestById(requestId);
+          return response.data ?? null;
+        } catch (error) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            return null;
+          }
+          throw error;
         }
-        throw error;
-      }
-    },
-  });
+      },
+    });
 
   // Use serviceDetails from request if available, otherwise fetch separately
   const { data: requestDetails, isLoading: detailsLoading } = useQuery<
@@ -188,12 +176,18 @@ export function ServiceRequestDetailModal({
     },
   });
 
-  const isLoading = requestLoading || (detailsLoading && !request?.serviceDetails);
+  const isLoading =
+    requestLoading || (detailsLoading && !request?.serviceDetails);
 
-  const totalAmount = request?.totalAmount ?? serviceDetails.reduce(
-    (sum, detail) => sum + (detail.totalPrice ?? (detail.unitPrice ?? detail.price ?? 0) * (detail.quantity ?? 0)),
-    0
-  );
+  const totalAmount =
+    request?.totalAmount ??
+    serviceDetails.reduce(
+      (sum, detail) =>
+        sum +
+        (detail.totalPrice ??
+          (detail.unitPrice ?? detail.price ?? 0) * (detail.quantity ?? 0)),
+      0
+    );
 
   return (
     <Modal
@@ -296,9 +290,7 @@ export function ServiceRequestDetailModal({
                   </div>
                   {patient.email && (
                     <div>
-                      <p className="text-sm font-medium text-gray-500">
-                        Email
-                      </p>
+                      <p className="text-sm font-medium text-gray-500">Email</p>
                       <p className="mt-1 text-sm">{patient.email}</p>
                     </div>
                   )}
@@ -373,12 +365,18 @@ export function ServiceRequestDetailModal({
                       <tbody>
                         {serviceDetails.map((detail) => {
                           const service = services?.[detail.serviceId ?? ""];
-                          const unitPrice = detail.unitPrice ?? detail.price ?? 0;
-                          const total = detail.totalPrice ?? unitPrice * (detail.quantity ?? 0);
+                          const unitPrice =
+                            detail.unitPrice ?? detail.price ?? 0;
+                          const total =
+                            detail.totalPrice ??
+                            unitPrice * (detail.quantity ?? 0);
                           return (
                             <tr key={detail.id} className="border-b">
                               <td className="px-4 py-2 text-sm">
-                                {detail.serviceName ?? service?.name ?? service?.serviceName ?? "—"}
+                                {detail.serviceName ??
+                                  service?.name ??
+                                  service?.serviceName ??
+                                  "—"}
                               </td>
                               <td className="px-4 py-2 text-sm">
                                 {detail.quantity ?? 0}
@@ -407,7 +405,9 @@ export function ServiceRequestDetailModal({
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-gray-500">No service details found</p>
+                <p className="text-sm text-gray-500">
+                  No service details found
+                </p>
               )}
             </CardContent>
           </Card>
@@ -422,4 +422,3 @@ export function ServiceRequestDetailModal({
     </Modal>
   );
 }
-

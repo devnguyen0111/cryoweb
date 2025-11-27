@@ -1,17 +1,14 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { isAxiosError } from "axios";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { api } from "@/api/client";
 import type {
   ServiceRequestCreateRequestModel,
-  Service,
-  ServiceCategory,
   Appointment,
-  Patient,
+  PatientDetailResponse,
 } from "@/api/types";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -109,15 +106,12 @@ export function CreateServiceRequestModal({
     queryKey: ["appointments", "for-service-request"],
     queryFn: async () => {
       // Fetch appointments with multiple statuses that can have service requests
-      const statuses: Array<"Scheduled" | "Confirmed" | "CheckedIn" | "InProgress"> = [
-        "Scheduled",
-        "Confirmed",
-        "CheckedIn",
-        "InProgress",
-      ];
-      
+      const statuses: Array<
+        "Scheduled" | "Confirmed" | "CheckedIn" | "InProgress"
+      > = ["Scheduled", "Confirmed", "CheckedIn", "InProgress"];
+
       const allAppointments: Appointment[] = [];
-      
+
       // Fetch appointments for each status
       await Promise.all(
         statuses.map(async (status) => {
@@ -132,23 +126,26 @@ export function CreateServiceRequestModal({
             }
           } catch (error) {
             // Ignore errors for individual status fetches
-            console.warn(`Failed to fetch appointments with status ${status}:`, error);
+            console.warn(
+              `Failed to fetch appointments with status ${status}:`,
+              error
+            );
           }
         })
       );
-      
+
       // Remove duplicates by id
       const uniqueAppointments = Array.from(
         new Map(allAppointments.map((apt) => [apt.id, apt])).values()
       );
-      
+
       // Sort by appointment date (most recent first)
       uniqueAppointments.sort((a, b) => {
         const dateA = new Date(a.appointmentDate).getTime();
         const dateB = new Date(b.appointmentDate).getTime();
         return dateB - dateA;
       });
-      
+
       return uniqueAppointments;
     },
   });
@@ -168,12 +165,16 @@ export function CreateServiceRequestModal({
     queryFn: async () => {
       if (!selectedAppointment?.patientId) return null;
       try {
-        const response = await api.patient.getPatientById(selectedAppointment.patientId);
+        const response = await api.patient.getPatientById(
+          selectedAppointment.patientId
+        );
         return response.data ?? null;
       } catch (error) {
         // Try patient details as fallback
         try {
-          const fallback = await api.patient.getPatientDetails(selectedAppointment.patientId);
+          const fallback = await api.patient.getPatientDetails(
+            selectedAppointment.patientId
+          );
           return fallback.data ?? null;
         } catch {
           return null;
@@ -189,7 +190,7 @@ export function CreateServiceRequestModal({
       if (selectedAppointment.patientId) {
         form.setValue("patientId", selectedAppointment.patientId);
       }
-      
+
       // Update requestedDate to match appointment date
       if (selectedAppointment.appointmentDate) {
         // Handle both DateOnly (YYYY-MM-DD) and ISO datetime formats
@@ -276,10 +277,11 @@ export function CreateServiceRequestModal({
     const requestData: ServiceRequestCreateRequestModel = {
       appointmentId: data.appointmentId || null,
       patientId: data.patientId,
-      requestDate: data.requestedDate 
+      requestDate: data.requestedDate
         ? new Date(data.requestedDate).toISOString()
         : new Date().toISOString(),
-      requestedDate: data.requestedDate || new Date().toISOString().split("T")[0],
+      requestedDate:
+        data.requestedDate || new Date().toISOString().split("T")[0],
       notes: data.notes || null,
       serviceDetails: serviceDetails.map((detail) => ({
         serviceId: detail.serviceId,
@@ -328,11 +330,13 @@ export function CreateServiceRequestModal({
               disabled={appointmentsLoading}
             >
               <option value="">
-                {appointmentsLoading ? "Loading appointments..." : "Select appointment"}
+                {appointmentsLoading
+                  ? "Loading appointments..."
+                  : "Select appointment"}
               </option>
               {appointments.map((apt) => {
-                const aptCode = apt.appointmentCode 
-                  ? apt.appointmentCode.slice(-8) 
+                const aptCode = apt.appointmentCode
+                  ? apt.appointmentCode.slice(-8)
                   : apt.id.slice(-8);
                 const aptDate = formatDate(apt.appointmentDate);
                 return (
@@ -356,7 +360,11 @@ export function CreateServiceRequestModal({
               type="date"
               {...form.register("requestedDate")}
               disabled={!!selectedAppointment}
-              title={selectedAppointment ? "Requested date is set to match appointment date" : ""}
+              title={
+                selectedAppointment
+                  ? "Requested date is set to match appointment date"
+                  : ""
+              }
             />
             {selectedAppointment && (
               <p className="text-xs text-gray-500">
@@ -371,163 +379,165 @@ export function CreateServiceRequestModal({
           </div>
         </div>
 
-          {selectedAppointment && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Appointment Information</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="font-medium text-gray-500">Patient</p>
-                    <p className="mt-1">
-                      {patient?.data?.fullName ?? "Loading..."}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-500">Date</p>
-                    <p className="mt-1">
-                      {formatDate(selectedAppointment.appointmentDate)}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
+        {selectedAppointment && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Add Services</CardTitle>
+              <CardTitle className="text-sm">Appointment Information</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <select
-                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                >
-                  <option value="">Select category</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name ?? cat.categoryName}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                  value={selectedService}
-                  onChange={(e) => setSelectedService(e.target.value)}
-                  disabled={!selectedCategory}
-                >
-                  <option value="">Select service</option>
-                  {services.map((service) => (
-                    <option key={service.id} value={service.id}>
-                      {service.name ?? service.serviceName} -{" "}
-                      {formatCurrency(service.price)}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    min="1"
-                    value={serviceQuantity}
-                    onChange={(e) =>
-                      setServiceQuantity(parseInt(e.target.value) || 1)
-                    }
-                    placeholder="Quantity"
-                    className="w-24"
-                  />
-                  <Button
-                    type="button"
-                    onClick={handleAddService}
-                    disabled={!selectedService}
-                  >
-                    Add
-                  </Button>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="font-medium text-gray-500">Patient</p>
+                  <p className="mt-1">
+                    {(patient as PatientDetailResponse)?.fullName ??
+                      (patient as any)?.data?.fullName ??
+                      "Loading..."}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-500">Date</p>
+                  <p className="mt-1">
+                    {formatDate(selectedAppointment.appointmentDate)}
+                  </p>
                 </div>
               </div>
-
-              {serviceDetails.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Selected Services:</p>
-                  <div className="space-y-2">
-                    {serviceDetails.map((detail, index) => {
-                      const service = services.find(
-                        (s) => s.id === detail.serviceId
-                      );
-                      const total = (detail.price ?? 0) * detail.quantity;
-                      return (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between rounded-md border p-3"
-                        >
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">
-                              {service?.name ?? service?.serviceName ?? "—"}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Quantity: {detail.quantity} ×{" "}
-                              {formatCurrency(detail.price)} ={" "}
-                              {formatCurrency(total)}
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveService(index)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex justify-end border-t pt-2">
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-gray-500">
-                        Total Amount
-                      </p>
-                      <p className="text-lg font-bold">
-                        {formatCurrency(totalAmount)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
+        )}
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              {...form.register("notes")}
-              placeholder="Additional notes..."
-              rows={3}
-            />
-            {form.formState.errors.notes && (
-              <p className="text-sm text-red-500">
-                {form.formState.errors.notes.message}
-              </p>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Add Services</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <select
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                <option value="">Select category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name ?? cat.categoryName}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+                value={selectedService}
+                onChange={(e) => setSelectedService(e.target.value)}
+                disabled={!selectedCategory}
+              >
+                <option value="">Select service</option>
+                {services.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.name ?? service.serviceName} -{" "}
+                    {formatCurrency(service.price)}
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min="1"
+                  value={serviceQuantity}
+                  onChange={(e) =>
+                    setServiceQuantity(parseInt(e.target.value) || 1)
+                  }
+                  placeholder="Quantity"
+                  className="w-24"
+                />
+                <Button
+                  type="button"
+                  onClick={handleAddService}
+                  disabled={!selectedService}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+
+            {serviceDetails.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Selected Services:</p>
+                <div className="space-y-2">
+                  {serviceDetails.map((detail, index) => {
+                    const service = services.find(
+                      (s) => s.id === detail.serviceId
+                    );
+                    const total = (detail.price ?? 0) * detail.quantity;
+                    return (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between rounded-md border p-3"
+                      >
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">
+                            {service?.name ?? service?.serviceName ?? "—"}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Quantity: {detail.quantity} ×{" "}
+                            {formatCurrency(detail.price)} ={" "}
+                            {formatCurrency(total)}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveService(index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-end border-t pt-2">
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-500">
+                      Total Amount
+                    </p>
+                    <p className="text-lg font-bold">
+                      {formatCurrency(totalAmount)}
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
-          </div>
+          </CardContent>
+        </Card>
 
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={handleClose}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={createMutation.isPending || serviceDetails.length === 0}
-            >
-              {createMutation.isPending ? "Creating..." : "Create Request"}
-            </Button>
-          </div>
-        </form>
+        <div className="space-y-2">
+          <Label htmlFor="notes">Notes</Label>
+          <Textarea
+            id="notes"
+            {...form.register("notes")}
+            placeholder="Additional notes..."
+            rows={3}
+          />
+          {form.formState.errors.notes && (
+            <p className="text-sm text-red-500">
+              {form.formState.errors.notes.message}
+            </p>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={createMutation.isPending || serviceDetails.length === 0}
+          >
+            {createMutation.isPending ? "Creating..." : "Create Request"}
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }
@@ -542,4 +552,3 @@ function formatDate(value?: string | null) {
     year: "numeric",
   });
 }
-

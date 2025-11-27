@@ -6,7 +6,7 @@ interface ServiceRequestActionModalProps {
   isOpen: boolean;
   onClose: () => void;
   request: ServiceRequest | null;
-  action: "approve" | "reject" | "complete" | "cancel" | null;
+  action: "approve" | "reject" | "complete" | null;
   onConfirm: () => void;
   isLoading?: boolean;
 }
@@ -51,13 +51,6 @@ export function ServiceRequestActionModal({
           description: "Are you sure you want to mark this service request as completed?",
           buttonText: "Complete",
           buttonVariant: "default" as const,
-        };
-      case "cancel":
-        return {
-          title: "Cancel Service Request",
-          description: "Are you sure you want to cancel this service request?",
-          buttonText: "Cancel",
-          buttonVariant: "outline" as const,
         };
       default:
         return null;

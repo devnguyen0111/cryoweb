@@ -143,22 +143,13 @@ export class ServiceRequestApi {
   /**
    * Approve service request
    * POST /api/servicerequest/{id}/approve
-   * Request body: application/json "string"
-   * According to Swagger, request body should be a JSON string
+   * Only requires the service request ID in the path
    */
   async approveServiceRequest(
     id: string
   ): Promise<BaseResponse<ServiceRequest>> {
-    // API expects request body as a JSON string (e.g., "string")
-    // Send empty string as JSON string to match API specification
     const response = await this.client.post<BaseResponse<ServiceRequest>>(
-      `${BASE_PATH}/${id}/approve`,
-      "", // Empty string as JSON string
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
+      `${BASE_PATH}/${id}/approve`
     );
     return response.data;
   }
@@ -166,22 +157,13 @@ export class ServiceRequestApi {
   /**
    * Reject service request
    * POST /api/servicerequest/{id}/reject
-   * Request body: application/json "string"
-   * According to Swagger, request body should be a JSON string
+   * Only requires the service request ID in the path
    */
   async rejectServiceRequest(
     id: string
   ): Promise<BaseResponse<ServiceRequest>> {
-    // API expects request body as a JSON string (e.g., "string")
-    // Send empty string as JSON string to match API specification
     const response = await this.client.post<BaseResponse<ServiceRequest>>(
-      `${BASE_PATH}/${id}/reject`,
-      "", // Empty string as JSON string
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
+      `${BASE_PATH}/${id}/reject`
     );
     return response.data;
   }
@@ -189,22 +171,13 @@ export class ServiceRequestApi {
   /**
    * Complete service request
    * POST /api/servicerequest/{id}/complete
-   * Request body: application/json "string"
-   * According to Swagger, request body should be a JSON string
+   * Only requires the service request ID in the path
    */
   async completeServiceRequest(
     id: string
   ): Promise<BaseResponse<ServiceRequest>> {
-    // API expects request body as a JSON string (e.g., "string")
-    // Send empty string as JSON string to match API specification
     const response = await this.client.post<BaseResponse<ServiceRequest>>(
-      `${BASE_PATH}/${id}/complete`,
-      "", // Empty string as JSON string
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
+      `${BASE_PATH}/${id}/complete`
     );
     return response.data;
   }
@@ -212,22 +185,13 @@ export class ServiceRequestApi {
   /**
    * Cancel service request
    * POST /api/servicerequest/{id}/cancel
-   * Request body: application/json "string"
-   * According to Swagger, request body should be a JSON string
+   * Only requires the service request ID in the path
    */
   async cancelServiceRequest(
     id: string
   ): Promise<BaseResponse<ServiceRequest>> {
-    // API expects request body as a JSON string (e.g., "string")
-    // Send empty string as JSON string to match API specification
     const response = await this.client.post<BaseResponse<ServiceRequest>>(
-      `${BASE_PATH}/${id}/cancel`,
-      "", // Empty string as JSON string
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
+      `${BASE_PATH}/${id}/cancel`
     );
     return response.data;
   }

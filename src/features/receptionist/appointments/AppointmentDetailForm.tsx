@@ -2,41 +2,31 @@ import { useEffect, useMemo, useState } from "react";
 import { isAxiosError } from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { api } from "@/api/client";
 import type {
   Appointment,
-  AppointmentStatus,
+  AppointmentExtendedDetailResponse,
   Doctor,
-  DoctorSchedule,
-  TimeSlot,
 } from "@/api/types";
 import {
   APPOINTMENT_STATUS_LABELS,
   normalizeAppointmentStatus,
-  ensureAppointmentStatus,
 } from "@/utils/appointments";
 
-const STATUS_SEQUENCE: AppointmentStatus[] = [
-  "Pending",
-  "Confirmed",
-  "Completed",
-  "Cancelled",
-];
-
-const STATUS_OPTIONS: { value: AppointmentStatus; label: string }[] =
-  STATUS_SEQUENCE.map((status) => ({
-    value: status,
-    label: APPOINTMENT_STATUS_LABELS[status],
-  }));
+// Appointment types as specified by user
+const APPOINTMENT_TYPES = [
+  { value: "consultation", label: "Consultation" },
+  { value: "procedure", label: "Procedure" },
+  { value: "following-up", label: "Following-up" },
+  { value: "testing", label: "Testing" },
+  { value: "other", label: "Other" },
+] as const;
 
 export interface AppointmentDetailFormProps {
   appointmentId: string;
@@ -46,49 +36,6 @@ export interface AppointmentDetailFormProps {
   initialAppointment?: Appointment | null;
 }
 
-const defaultFormState = {
-  title: "",
-  description: "",
-  appointmentDate: "",
-  startTime: "",
-  endTime: "",
-  type: "consultation",
-  checkInTime: "",
-  checkOutTime: "",
-};
-
-const getDateInputValue = (value?: string | null) => {
-  if (!value) return "";
-  if (value.includes("T")) {
-    return value.split("T")[0] || "";
-  }
-  return value.slice(0, 10);
-};
-
-const getTimeInputValue = (value?: string | null) => {
-  if (!value) return "";
-  if (value.includes("T")) {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().slice(11, 16);
-    }
-    const parts = value.split("T")[1];
-    if (parts) {
-      return parts.slice(0, 5);
-    }
-  }
-  return value.slice(0, 5);
-};
-
-const formatDateTimeDisplay = (value?: string | null) => {
-  if (!value) return "";
-  const parsed = new Date(value);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toLocaleString();
-  }
-  return value;
-};
-
 export function AppointmentDetailForm({
   appointmentId,
   layout = "page",
@@ -97,265 +44,150 @@ export function AppointmentDetailForm({
   initialAppointment,
 }: AppointmentDetailFormProps) {
   const queryClient = useQueryClient();
-
-  const [formState, setFormState] = useState(defaultFormState);
-  const [status, setStatus] = useState<AppointmentStatus>("Pending");
   const [cancelReason, setCancelReason] = useState("");
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
+  const [selectedSlotId, setSelectedSlotId] = useState<string>("");
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
 
-  const { data: appointmentResponse, isLoading } = useQuery({
-    queryKey: ["receptionist", "appointments", "detail", appointmentId],
-    queryFn: async () => {
-      try {
-        const detail =
-          await api.appointment.getAppointmentDetails(appointmentId);
-        return detail.data;
-      } catch (error) {
-        throw error;
-      }
-    },
-  });
+  // Fetch appointment details
+  const { data: appointmentResponse, isLoading: isLoadingAppointment } =
+    useQuery<AppointmentExtendedDetailResponse | null>({
+      queryKey: ["receptionist", "appointments", "detail", appointmentId],
+      queryFn: async () => {
+        try {
+          const response =
+            await api.appointment.getAppointmentDetails(appointmentId);
+          return response.data ?? null;
+        } catch (error) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            return null;
+          }
+          throw error;
+        }
+      },
+      enabled: Boolean(appointmentId),
+    });
 
   const appointment = useMemo(() => {
-    if (!appointmentResponse && !initialAppointment) {
-      return null;
+    if (appointmentResponse) {
+      return appointmentResponse;
     }
-    if (!appointmentResponse) {
-      return (initialAppointment ?? null) as Appointment | null;
+    if (initialAppointment) {
+      return initialAppointment as unknown as AppointmentExtendedDetailResponse;
     }
-    if (!initialAppointment) {
-      // Convert AppointmentExtendedDetailResponse to Appointment format
-      const extended = appointmentResponse as any;
-      return {
-        ...extended,
-        appointmentCode: extended.appointmentCode || extended.id,
-        appointmentType: extended.type || extended.appointmentType,
-      } as Appointment;
-    }
-    const merged: Record<string, any> = { ...(initialAppointment as any) };
-    Object.entries(appointmentResponse as Record<string, any>).forEach(
-      ([key, value]) => {
-        if (value !== undefined && value !== null) {
-          merged[key] = value;
-        }
-      }
-    );
-    return merged as Appointment;
+    return null;
   }, [appointmentResponse, initialAppointment]);
-  const isDetailsLoading =
-    isLoading && !appointmentResponse && !initialAppointment;
-  const derivedPatientId = useMemo(() => {
-    if (!appointment) return null;
-    const raw = appointment as unknown as Record<string, any>;
-    return (
-      appointment.patientId ??
-      raw.patientID ??
-      raw.PatientId ??
-      raw.PatientID ??
-      raw.patient?.id ??
-      raw.patient?.patientId ??
-      raw.patient?.accountId ??
-      raw.patientAccountId ??
-      raw.patientAccountID ??
-      raw.PatientAccountId ??
-      raw.PatientAccountID ??
-      null
-    );
-  }, [appointment]);
-  const derivedDoctorIds = useMemo(() => {
-    if (!appointment) return [];
-    const raw = appointment as unknown as Record<string, any>;
-    const source =
-      (appointment as unknown as Record<string, any>)?.doctorIds ??
-      raw.DoctorIds ??
-      raw.doctorIDs ??
-      raw.DoctorIDs ??
-      raw.doctors?.map((item: any) => item?.doctorId ?? item?.id) ??
-      raw.doctorAssignments?.map(
-        (item: any) => item?.doctorId ?? item?.doctor?.id
-      ) ??
-      [];
-    return Array.isArray(source) ? source.filter(Boolean) : [];
-  }, [appointment]);
-  const derivedDoctorId = useMemo(() => {
-    if (!appointment) return null;
-    const raw = appointment as unknown as Record<string, any>;
-    // Appointment doesn't have doctorId directly, check doctors array
-    return (
-      raw.doctorID ??
-      raw.DoctorId ??
-      raw.DoctorID ??
-      raw.doctor?.id ??
-      raw.doctor?.doctorId ??
-      raw.doctor?.accountId ??
-      raw.doctorAccountId ??
-      raw.doctorAccountID ??
-      derivedDoctorIds[0] ??
-      null
-    );
-  }, [appointment, derivedDoctorIds]);
-  const derivedSlotId = useMemo(() => {
-    if (!appointment) return null;
-    const raw = appointment as unknown as Record<string, any>;
-    return (
-      appointment.slotId ??
-      raw.slotID ??
-      raw.SlotId ??
-      raw.SlotID ??
-      raw.slot?.id ??
-      null
-    );
-  }, [appointment]);
-  const derivedCheckInTime = useMemo(() => {
-    if (!appointment) return "";
-    const raw = appointment as unknown as Record<string, any>;
-    // Check-in/out times are not stored in Appointment, they're managed via API calls
-    return (
-      raw.checkinTime ??
-      raw.CheckInTime ??
-      raw.checkIn ??
-      raw.check_in_time ??
-      ""
-    );
-  }, [appointment]);
-  const derivedCheckOutTime = useMemo(() => {
-    if (!appointment) return "";
-    const raw = appointment as unknown as Record<string, any>;
-    // Check-in/out times are not stored in Appointment, they're managed via API calls
-    return (
-      raw.checkoutTime ??
-      raw.CheckOutTime ??
-      raw.checkOut ??
-      raw.check_out_time ??
-      ""
-    );
-  }, [appointment]);
 
-  const {
-    data: slotDetail,
-    isLoading: slotLoading,
-    isFetching: slotFetching,
-  } = useQuery<TimeSlot | null>({
-    queryKey: [
-      "receptionist",
-      "slots",
-      "detail",
-      derivedSlotId ?? "unknown-slot",
-    ],
-    enabled: Boolean(derivedSlotId),
-    retry: false,
-    queryFn: async () => {
-      if (!derivedSlotId) return null;
-      try {
-        const response = await api.slot.getSlotById(derivedSlotId);
-        return response.data ?? null;
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
-        }
-        throw error;
+  // Extract appointment data
+  const appointmentDate = useMemo(() => {
+    if (!appointment) return null;
+    const date = appointment.appointmentDate;
+    if (!date) return null;
+    try {
+      // Handle both DateOnly (YYYY-MM-DD) and ISO datetime formats
+      if (date.includes("T")) {
+        return new Date(date).toISOString().split("T")[0];
       }
-    },
-  });
-  const slotScheduleId = useMemo(() => {
-    if (!slotDetail) return null;
-    const raw = slotDetail as unknown as Record<string, any>;
-    return (
-      slotDetail.doctorScheduleId ??
-      raw.doctorScheduleID ??
-      raw.scheduleId ??
-      raw.ScheduleId ??
-      raw.schedule?.id ??
-      null
-    );
-  }, [slotDetail]);
-
-  const {
-    data: scheduleDetail,
-    isLoading: scheduleLoading,
-    isFetching: scheduleFetching,
-  } = useQuery<DoctorSchedule | null>({
-    queryKey: [
-      "receptionist",
-      "doctor-schedule",
-      "detail",
-      slotScheduleId ?? "unknown-schedule",
-    ],
-    enabled: Boolean(slotScheduleId),
-    retry: false,
-    queryFn: async () => {
-      if (!slotScheduleId) return null;
-      try {
-        const response =
-          await api.doctorSchedule.getDoctorScheduleById(slotScheduleId);
-        return response.data ?? null;
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
-        }
-        throw error;
-      }
-    },
-  });
-  const recommendedDoctorId = useMemo(() => {
-    if (scheduleDetail?.doctorId) {
-      return scheduleDetail.doctorId;
+      return date.split("T")[0];
+    } catch {
+      return date.split("T")[0];
     }
-    const raw = scheduleDetail as unknown as Record<string, any> | null;
-    if (!raw) return null;
-    return (
-      raw.doctorID ??
-      raw.DoctorId ??
-      raw.DoctorID ??
-      raw.doctor?.id ??
-      raw.doctor?.doctorId ??
-      raw.doctor?.accountId ??
-      null
-    );
-  }, [scheduleDetail]);
-  useEffect(() => {
-    if (!appointment) return;
-    const normalizedDate = getDateInputValue(appointment.appointmentDate);
-    // Extract time from appointmentDate (ISO datetime)
-    const normalizedStartTime = getTimeInputValue(appointment.appointmentDate);
-    // End time not available in Appointment type, derive from slot if available
-    const normalizedEndTime = "";
+  }, [appointment]);
 
-    setFormState({
-      title: "",
-      description: appointment.notes || "",
-      appointmentDate: normalizedDate,
-      startTime: normalizedStartTime,
-      endTime: normalizedEndTime,
-      type: appointment.appointmentType || "Consultation",
-      checkInTime: derivedCheckInTime || "",
-      checkOutTime: derivedCheckOutTime || "",
-    });
-    const normalizedStatus =
-      normalizeAppointmentStatus(
-        (appointment.status as string | undefined) ?? undefined
-      ) ?? "Pending";
-    setStatus(normalizedStatus);
-  }, [
-    appointment?.id,
-    appointment?.appointmentDate,
-    appointment?.appointmentType,
-    appointment?.status,
-    appointment?.notes,
-    derivedCheckInTime,
-    derivedCheckOutTime,
-  ]);
+  // Extract appointment time from slot
+  const appointmentTime = useMemo(() => {
+    if (!appointment?.slot) return null;
+    const slot = appointment.slot;
 
-  const { data: patient } = useQuery({
-    queryKey: ["receptionist", "patient", { patientId: derivedPatientId }],
-    enabled: Boolean(derivedPatientId),
-    queryFn: async () => {
-      if (!derivedPatientId) return null;
+    const getTimeDisplay = (timeStr?: string | null): string | null => {
+      if (!timeStr) return null;
+
       try {
-        const response = await api.patient.getPatientDetails(derivedPatientId);
+        // Handle ISO datetime format
+        if (timeStr.includes("T")) {
+          const date = new Date(timeStr);
+          if (isNaN(date.getTime())) return null;
+          return date.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+        }
+
+        // Handle time string format (HH:mm:ss or HH:mm)
+        if (timeStr.match(/^\d{2}:\d{2}/)) {
+          return timeStr.slice(0, 5); // Extract HH:mm
+        }
+
+        // Try to parse as date
+        const date = new Date(timeStr);
+        if (isNaN(date.getTime())) return null;
+        return date.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+      } catch {
+        return null;
+      }
+    };
+
+    const startTime = getTimeDisplay(slot.startTime);
+    const endTime = getTimeDisplay(slot.endTime);
+
+    if (startTime && endTime) {
+      return `${startTime} - ${endTime}`;
+    }
+
+    return null;
+  }, [appointment]);
+
+  const appointmentType = useMemo(() => {
+    if (!appointment) return null;
+    const type = (
+      appointment.type ||
+      (appointment as any).appointmentType ||
+      ""
+    ).toLowerCase();
+    // Map backend types to user-specified types
+    if (type === "treatment") return "procedure";
+    if (type === "followup" || type === "follow-up") return "following-up";
+    return type || "consultation";
+  }, [appointment]);
+
+  const appointmentStatus = useMemo(() => {
+    if (!appointment) return null;
+    return normalizeAppointmentStatus(appointment.status) ?? "Pending";
+  }, [appointment]);
+
+  // Check if appointment has doctor
+  const hasDoctor = useMemo(() => {
+    if (!appointment) return false;
+    const doctors = appointment.doctors ?? [];
+    return doctors.length > 0;
+  }, [appointment]);
+
+  const assignedDoctor = useMemo(() => {
+    if (!appointment?.doctors || appointment.doctors.length === 0) return null;
+    return appointment.doctors[0];
+  }, [appointment]);
+
+  // Fetch patient details
+  const { data: patient } = useQuery({
+    queryKey: ["receptionist", "patient", appointment?.patientId],
+    enabled: Boolean(appointment?.patientId),
+    queryFn: async () => {
+      if (!appointment?.patientId) return null;
+      try {
+        const response = await api.patient.getPatientDetails(
+          appointment.patientId
+        );
         return response.data;
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 403) {
-          const fallback = await api.patient.getPatientById(derivedPatientId);
+          const fallback = await api.patient.getPatientById(
+            appointment.patientId
+          );
           return fallback.data;
         }
         throw error;
@@ -363,17 +195,9 @@ export function AppointmentDetailForm({
     },
   });
 
-  const { data: doctor } = useQuery({
-    queryKey: ["receptionist", "doctor", { doctorId: derivedDoctorId }],
-    enabled: Boolean(derivedDoctorId),
-    queryFn: async () => {
-      if (!derivedDoctorId) return null;
-      const response = await api.doctor.getDoctorById(derivedDoctorId);
-      return response.data;
-    },
-  });
-  const { data: doctorList } = useQuery({
-    queryKey: ["receptionist", "doctor-lookup"],
+  // Fetch all doctors for selection
+  const { data: doctorsData } = useQuery({
+    queryKey: ["receptionist", "doctors", "all"],
     queryFn: async () => {
       const response = await api.doctor.getDoctors({
         pageNumber: 1,
@@ -386,254 +210,255 @@ export function AppointmentDetailForm({
       return (payload?.data as Doctor[]) ?? [];
     },
   });
-  const doctorMap = useMemo(() => {
-    const map = new Map<string, Doctor>();
-    (doctorList as Doctor[] | undefined)?.forEach((item) => {
-      if (item?.id) {
-        map.set(item.id, item);
-      }
-      if (item?.accountId) {
-        map.set(item.accountId, item);
+
+  const doctors = doctorsData ?? [];
+
+  // Get schedules for selected doctor
+  const { data: doctorSchedulesData, isLoading: isLoadingSchedules } = useQuery(
+    {
+      queryKey: ["receptionist", "doctor-schedules", selectedDoctorId],
+      enabled: Boolean(selectedDoctorId),
+      queryFn: async () => {
+        if (!selectedDoctorId) return [];
+        try {
+          const response = await api.doctorSchedule.getSchedulesByDoctorId(
+            selectedDoctorId,
+            {
+              pageNumber: 1,
+              pageSize: 100,
+            }
+          );
+          return response.data ?? [];
+        } catch (error) {
+          console.error("Error fetching doctor schedules:", error);
+          return [];
+        }
+      },
+    }
+  );
+
+  // Filter schedules by appointment date
+  const schedulesForDate = useMemo(() => {
+    if (!doctorSchedulesData || !appointmentDate) return [];
+    return doctorSchedulesData.filter((schedule) => {
+      try {
+        const scheduleDate = schedule.workDate;
+        if (!scheduleDate) return false;
+        // Compare date part only (YYYY-MM-DD)
+        const scheduleDateOnly = scheduleDate.includes("T")
+          ? scheduleDate.split("T")[0]
+          : scheduleDate.split(" ")[0];
+        return scheduleDateOnly === appointmentDate;
+      } catch {
+        return false;
       }
     });
-    return map;
-  }, [doctorList]);
-  const recommendedDoctor = useMemo(() => {
-    if (!recommendedDoctorId) return null;
-    return (
-      doctorMap.get(recommendedDoctorId) ??
-      doctorList?.find((item) => item.id === recommendedDoctorId) ??
-      null
-    );
-  }, [recommendedDoctorId, doctorMap, doctorList]);
-  // Slot doesn't have patientId in the type, check from appointment instead
-  const slotPatientId = derivedPatientId;
-  const isPatientSelfBooking = useMemo(() => {
-    const raw = appointment as unknown as Record<string, any> | null;
-    const createdByRole =
-      raw?.createdByRole ??
-      raw?.CreatedByRole ??
-      raw?.createdBy?.role ??
-      raw?.CreatedBy?.Role ??
-      null;
-    const bookingChannel =
-      raw?.bookingChannel ??
-      raw?.BookingChannel ??
-      raw?.source ??
-      raw?.Source ??
-      null;
-    const createdByPatient =
-      typeof createdByRole === "string" &&
-      createdByRole.toLowerCase().includes("patient");
-    const viaPatientChannel =
-      typeof bookingChannel === "string" &&
-      bookingChannel.toLowerCase().includes("patient");
-    const slotOwnedByPatient =
-      Boolean(derivedPatientId) &&
-      Boolean(slotPatientId) &&
-      slotPatientId === derivedPatientId;
-    return createdByPatient || viaPatientChannel || slotOwnedByPatient;
-  }, [appointment, derivedPatientId, slotPatientId]);
-  const [selectedDoctorForAssignment, setSelectedDoctorForAssignment] =
-    useState<string>("");
-  useEffect(() => {
-    if (recommendedDoctorId) {
-      setSelectedDoctorForAssignment(recommendedDoctorId);
-      return;
-    }
-    if (derivedDoctorId) {
-      setSelectedDoctorForAssignment(derivedDoctorId);
-      return;
-    }
-    setSelectedDoctorForAssignment("");
-  }, [recommendedDoctorId, derivedDoctorId]);
-  const doctorSelectOptions = useMemo(() => {
-    const list = doctorList ?? [];
-    if (!list.length) return [];
-    return list
-      .map((item) => ({
-        id: item.id ?? item.accountId ?? "",
-        label: item.fullName || item.email || item.id || item.accountId || "",
-      }))
-      .filter((option) => option.id);
-  }, [doctorList]);
-  const doctorDisplayName = useMemo(() => {
-    if (!appointment) return "Unassigned";
-    const raw = appointment as unknown as Record<string, any>;
-    const primaryDoctor =
-      (derivedDoctorId && doctorMap.get(derivedDoctorId)) ||
-      (doctor &&
-        (doctorMap.get(doctor.id ?? "") ||
-          (doctor.accountId ? doctorMap.get(doctor.accountId) : null)));
-    return (
-      primaryDoctor?.fullName ||
-      doctor?.fullName ||
-      raw.doctor?.fullName ||
-      raw.doctor?.name ||
-      raw.doctorAssignments?.[0]?.doctor?.fullName ||
-      raw.doctorAssignments?.[0]?.doctorName ||
-      raw.doctorName ||
-      raw.doctorFullName ||
-      raw.doctor?.accountInfo?.username ||
-      derivedDoctorId ||
-      "Unassigned"
-    );
-  }, [appointment, doctor, derivedDoctorId]);
-  const doctorEmail = useMemo(() => {
-    if (!appointment) return null;
-    const raw = appointment as unknown as Record<string, any>;
-    const primaryDoctor =
-      (derivedDoctorId && doctorMap.get(derivedDoctorId)) ||
-      (doctor &&
-        (doctorMap.get(doctor.id ?? "") ||
-          (doctor.accountId ? doctorMap.get(doctor.accountId) : null)));
-    return (
-      primaryDoctor?.email ||
-      doctor?.email ||
-      raw.doctor?.email ||
-      raw.doctorEmail ||
-      raw.doctorAssignments?.[0]?.doctor?.email ||
-      raw.doctor?.accountInfo?.email ||
-      null
-    );
-  }, [appointment, doctor]);
-  const doctorPhone = useMemo(() => {
-    if (!appointment) return null;
-    const raw = appointment as unknown as Record<string, any>;
-    const primaryDoctor =
-      (derivedDoctorId && doctorMap.get(derivedDoctorId)) ||
-      (doctor &&
-        (doctorMap.get(doctor.id ?? "") ||
-          (doctor.accountId ? doctorMap.get(doctor.accountId) : null)));
-    return (
-      primaryDoctor?.phoneNumber ||
-      doctor?.phoneNumber ||
-      raw.doctor?.phoneNumber ||
-      raw.doctor?.phone ||
-      raw.doctorPhone ||
-      raw.doctorAssignments?.[0]?.doctor?.phoneNumber ||
-      raw.doctorAssignments?.[0]?.doctor?.phone ||
-      raw.doctor?.accountInfo?.phone ||
-      null
-    );
-  }, [appointment, doctor, derivedDoctorId, doctorMap]);
-  const doctorRole = useMemo(() => {
-    const raw = appointment as unknown as Record<string, any>;
-    const roles =
-      raw?.doctorRoles ??
-      raw?.DoctorRoles ??
-      raw?.doctorAssignments?.map((item: any) => item?.role) ??
-      [];
-    return Array.isArray(roles) ? (roles.filter(Boolean)[0] ?? null) : null;
-  }, [appointment]);
-  const additionalDoctorSummaries = useMemo(() => {
-    if (!appointment) return [];
-    const raw = appointment as unknown as Record<string, any>;
-    const assignments: any[] = Array.isArray(raw?.doctorAssignments)
-      ? raw.doctorAssignments
-      : [];
-    if (!assignments.length) {
-      const ids = derivedDoctorIds.filter((id) => id && id !== derivedDoctorId);
-      return ids.map((id) => `Doctor ID: ${id}`);
-    }
-    return assignments
-      .filter((item) => {
-        const id =
-          item?.doctorId ??
-          item?.doctor?.id ??
-          item?.doctor?.doctorId ??
-          item?.doctor?.accountId;
-        return id && id !== derivedDoctorId;
-      })
-      .map((item) => {
-        const id =
-          item?.doctorId ??
-          item?.doctor?.id ??
-          item?.doctor?.doctorId ??
-          item?.doctor?.accountId;
-        const lookupDoctor = id ? doctorMap.get(id) : undefined;
-        const name =
-          lookupDoctor?.fullName ||
-          item?.doctor?.fullName ||
-          item?.doctorName ||
-          item?.doctor?.accountInfo?.username ||
-          id;
-        const role = item?.role;
-        if (name && role) {
-          return `${name} (${role})`;
+  }, [doctorSchedulesData, appointmentDate]);
+
+  // Get slots from schedules for the date
+  const {
+    data: availableSlots,
+    isLoading: isLoadingSlots,
+    error: slotsError,
+  } = useQuery({
+    queryKey: [
+      "receptionist",
+      "available-slots",
+      selectedDoctorId,
+      appointmentDate,
+      schedulesForDate.map((s) => s.id).join(","),
+    ],
+    enabled: Boolean(
+      selectedDoctorId && appointmentDate && schedulesForDate.length > 0
+    ),
+    queryFn: async () => {
+      if (!schedulesForDate || schedulesForDate.length === 0) return [];
+
+      try {
+        // Get slots from all schedules for this date
+        const allSlots: any[] = [];
+
+        for (const schedule of schedulesForDate) {
+          try {
+            const slotsResponse = await api.slot.getSlotsBySchedule(
+              schedule.id,
+              {
+                pageNumber: 1,
+                pageSize: 100,
+                isBooked: false, // Only get unbooked slots
+              }
+            );
+            const slots = slotsResponse.data ?? [];
+            if (Array.isArray(slots)) {
+              allSlots.push(...slots);
+            }
+          } catch (error) {
+            console.error(
+              `Error fetching slots for schedule ${schedule.id}:`,
+              error
+            );
+            // Continue with other schedules
+          }
         }
-        return name || "Unknown doctor";
-      });
-  }, [appointment, derivedDoctorIds, derivedDoctorId, doctorMap]);
-  const patientDisplayName = useMemo(() => {
-    const rawPatient = patient as unknown as Record<string, any> | undefined;
-    const rawAppointment = appointment as unknown as
-      | Record<string, any>
-      | undefined;
-    return (
-      rawPatient?.accountInfo?.fullName ??
-      rawPatient?.fullName ??
-      rawPatient?.accountInfo?.username ??
-      rawPatient?.patientCode ??
-      rawPatient?.id ??
-      rawAppointment?.patient?.fullName ??
-      rawAppointment?.patient?.name ??
-      rawAppointment?.patientName ??
-      rawAppointment?.patientFullName ??
-      rawAppointment?.patient?.accountInfo?.username ??
-      derivedPatientId ??
-      "Unassigned"
-    );
-  }, [patient, appointment, derivedPatientId]);
 
-  const updateAppointmentMutation = useMutation({
-    mutationFn: () => {
-      // UpdateAppointmentRequest only allows: slotId, appointmentType, notes
-      return api.appointment.updateAppointment(appointmentId, {
-        appointmentType: formState.type as any,
-        notes: formState.description || undefined,
-        // Note: appointmentDate and times are managed via slotId
-      });
+        return allSlots;
+      } catch (error) {
+        console.error("Error fetching available slots:", error);
+        return [];
+      }
     },
-    onSuccess: () => {
-      toast.success("Appointment updated");
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "appointments"],
+  });
+
+  // Set selected doctor and slot when appointment loads
+  useEffect(() => {
+    if (assignedDoctor) {
+      setSelectedDoctorId(assignedDoctor.doctorId);
+    }
+    if (appointment?.slotId) {
+      setSelectedSlotId(appointment.slotId);
+    }
+  }, [assignedDoctor, appointment]);
+
+  // Assign random doctor if no doctor assigned
+  const assignRandomDoctorMutation = useMutation({
+    mutationFn: async () => {
+      if (!appointment || doctors.length === 0) {
+        throw new Error("No doctors available");
+      }
+
+      // Get random doctor
+      const randomDoctor = doctors[Math.floor(Math.random() * doctors.length)];
+
+      // Assign doctor with type "booking"
+      await api.appointmentDoctor.createAssignment({
+        appointmentId,
+        doctorId: randomDoctor.id,
+        role: "booking",
       });
+
+      return randomDoctor;
+    },
+    onSuccess: (doctor) => {
+      toast.success(`Assigned doctor: ${doctor.fullName}`);
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments", "detail", appointmentId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments"],
       });
     },
     onError: (error: any) => {
       const message =
         error?.response?.data?.message ||
-        "Unable to update appointment. Please try again.";
+        error?.message ||
+        "Unable to assign doctor. Please try again.";
       toast.error(message);
     },
   });
 
-  const updateStatusMutation = useMutation({
-    mutationFn: (nextStatus: AppointmentStatus | string) =>
-      api.appointment.updateAppointmentStatus(appointmentId, {
-        status: ensureAppointmentStatus(nextStatus),
-      }),
-    onSuccess: () => {
-      toast.success("Appointment status updated");
+  // Change doctor mutation
+  const changeDoctorMutation = useMutation({
+    mutationFn: async ({
+      doctorId,
+      slotId,
+    }: {
+      doctorId: string;
+      slotId?: string;
+    }) => {
+      if (!appointment || !doctorId) {
+        throw new Error("Missing appointment or doctor ID");
+      }
+
+      // Update slot if provided
+      if (slotId) {
+        await api.appointment.updateAppointment(appointmentId, {
+          slotId,
+        });
+      }
+
+      // Remove existing doctor assignments
+      if (assignedDoctor) {
+        try {
+          await api.appointmentDoctor.deleteAssignment(assignedDoctor.id);
+        } catch (error) {
+          // Ignore if assignment doesn't exist
+        }
+      }
+
+      // Create new assignment with type "booking"
+      await api.appointmentDoctor.createAssignment({
+        appointmentId,
+        doctorId,
+        role: "booking",
+      });
+
+      return { doctorId, slotId };
+    },
+    onSuccess: ({ doctorId, slotId }) => {
+      const doctor = doctors.find((d) => d.id === doctorId);
+      const message = slotId
+        ? `Changed doctor to: ${doctor?.fullName || doctorId} with new slot`
+        : `Changed doctor to: ${doctor?.fullName || doctorId}`;
+      toast.success(message);
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments", "detail", appointmentId],
+      });
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments"],
       });
+      // Reset selections
+      setSelectedSlotId("");
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Unable to change doctor. Please try again.";
+      toast.error(message);
+    },
+  });
+
+  // Check in mutation
+  const checkInMutation = useMutation({
+    mutationFn: () => api.appointment.checkIn(appointmentId),
+    onSuccess: () => {
+      toast.success("Patient checked in");
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments", "detail", appointmentId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments"],
       });
     },
     onError: (error: any) => {
       const message =
         error?.response?.data?.message ||
-        "Unable to update status. Please try again.";
+        "Unable to check in patient. Please try again.";
       toast.error(message);
     },
   });
 
+  // Check out mutation
+  const checkOutMutation = useMutation({
+    mutationFn: () => api.appointment.checkOut(appointmentId),
+    onSuccess: () => {
+      toast.success("Patient checked out");
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments", "detail", appointmentId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments"],
+      });
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message ||
+        "Unable to check out patient. Please try again.";
+      toast.error(message);
+    },
+  });
+
+  // Cancel appointment mutation
   const cancelAppointmentMutation = useMutation({
     mutationFn: () =>
       api.appointment.cancelAppointment(appointmentId, {
@@ -642,11 +467,12 @@ export function AppointmentDetailForm({
     onSuccess: () => {
       toast.success("Appointment cancelled");
       setCancelReason("");
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "appointments"],
-      });
+      setShowCancelDialog(false);
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments", "detail", appointmentId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments"],
       });
     },
     onError: (error: any) => {
@@ -657,182 +483,64 @@ export function AppointmentDetailForm({
     },
   });
 
-  const updateCheckInMutation = useMutation({
-    mutationFn: async (value: string | null) => {
-      if (value) {
-        await api.appointment.checkIn(appointmentId);
-        // Return appointment data for consistency
-        const response =
-          await api.appointment.getAppointmentById(appointmentId);
-        return response.data!;
-      } else {
-        // No API to clear check-in, so we'll just update notes
-        const response = await api.appointment.updateAppointment(
-          appointmentId,
-          {
-            notes: appointment?.notes || undefined,
-          }
-        );
-        return response.data!;
-      }
-    },
-    onSuccess: (_, value) => {
-      toast.success(value ? "Patient checked in." : "Check-in time cleared.");
-      setFormState((prev) => ({
-        ...prev,
-        checkInTime: value ?? "",
-      }));
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "appointments"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "appointments", "detail", appointmentId],
-      });
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ||
-        "Unable to update check-in time. Please try again.";
-      toast.error(message);
-    },
-  });
-
-  const updateCheckOutMutation = useMutation({
-    mutationFn: async (value: string | null) => {
-      if (value) {
-        await api.appointment.checkOut(appointmentId);
-        // Return appointment data for consistency
-        const response =
-          await api.appointment.getAppointmentById(appointmentId);
-        return response.data!;
-      } else {
-        // No API to clear check-out, so we'll just update notes
-        const response = await api.appointment.updateAppointment(
-          appointmentId,
-          {
-            notes: appointment?.notes || undefined,
-          }
-        );
-        return response.data!;
-      }
-    },
-    onSuccess: (_, value) => {
-      toast.success(value ? "Patient checked out." : "Check-out time cleared.");
-      setFormState((prev) => ({
-        ...prev,
-        checkOutTime: value ?? "",
-      }));
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "appointments"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "appointments", "detail", appointmentId],
-      });
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ||
-        "Unable to update check-out time. Please try again.";
-      toast.error(message);
-    },
-  });
-
-  const assignDoctorMutation = useMutation({
-    mutationFn: async (doctorId: string) => {
-      if (!doctorId) {
-        throw new Error("Missing doctor identifier.");
-      }
-
-      const swallowDuplicateAssignmentError = (error: unknown) => {
-        if (isAxiosError(error)) {
-          const status = error.response?.status ?? 0;
-          const rawMessage = (error.response?.data as any)?.message;
-          const message =
-            typeof rawMessage === "string" ? rawMessage.toLowerCase() : "";
-          if (
-            status === 409 ||
-            status === 208 ||
-            message.includes("already") ||
-            message.includes("exists") ||
-            message.includes("duplicate")
-          ) {
-            return;
-          }
-        }
-        throw error;
-      };
-
-      // Update appointment with slotId if available
-      if (derivedSlotId) {
-        try {
-          await api.appointment.updateAppointment(appointmentId, {
-            slotId: derivedSlotId,
-          });
-        } catch (error) {
-          swallowDuplicateAssignmentError(error);
-        }
-      }
-
-      // Assign doctor via appointmentDoctor API
-      try {
-        await api.appointmentDoctor.createAssignment({
-          appointmentId,
-          doctorId,
-          role: "Primary",
-        });
-      } catch (error) {
-        swallowDuplicateAssignmentError(error);
-      }
-
-      return doctorId;
-    },
-    onSuccess: (doctorId) => {
-      const doctorName =
-        doctorMap.get(doctorId)?.fullName ??
-        doctorList?.find((item) => item.id === doctorId)?.fullName ??
-        "Doctor";
-      toast.success(`${doctorName} assigned to appointment.`);
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "appointments"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "appointments", "detail", appointmentId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "appointment-doctors", appointmentId],
-      });
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Unable to assign doctor from schedule. Please try again.";
-      toast.error(message);
-    },
-  });
-
-  const statusLabel = useMemo(
-    () => STATUS_OPTIONS.find((item) => item.value === status)?.label || status,
-    [status]
-  );
-
-  const handleSubmit = () => {
-    updateAppointmentMutation.mutate();
-  };
-
-  const handleStatusChange = (nextStatus: AppointmentStatus) => {
-    const normalized = ensureAppointmentStatus(nextStatus);
-    setStatus(normalized);
-    updateStatusMutation.mutate(normalized);
-  };
-
-  const handleCancel = () => {
-    if (!cancelReason.trim()) {
-      toast.error("Please enter a cancellation reason.");
-      return;
+  const patientName = useMemo(() => {
+    if (patient) {
+      return (
+        (patient as any).accountInfo?.fullName ?? patient.fullName ?? patient.id
+      );
     }
-    cancelAppointmentMutation.mutate();
+    if (appointment?.patient) {
+      const p = appointment.patient as any;
+      return p.accountInfo?.fullName ?? p.fullName ?? appointment.patientId;
+    }
+    return appointment?.patientId ?? "Unknown";
+  }, [patient, appointment]);
+
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "N/A";
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch {
+      return dateStr;
+    }
   };
+
+  const formatDateTime = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "Not recorded";
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  if (isLoadingAppointment) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <p className="text-gray-500">Loading appointment details...</p>
+      </div>
+    );
+  }
+
+  if (!appointment) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <p className="text-red-500">Appointment not found</p>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -841,527 +549,399 @@ export function AppointmentDetailForm({
       }
       style={layout === "modal" ? { maxHeight: "70vh" } : undefined}
     >
+      {/* Appointment Information */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Appointment Information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Patient Info */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Patient</Label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm text-gray-700">{patientName}</p>
+                {onOpenPatientProfile && appointment.patientId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onOpenPatientProfile(appointment.patientId!)}
+                  >
+                    View Profile
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Doctor Info - Only show if doctor exists */}
+            {hasDoctor && assignedDoctor ? (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Assigned Doctor</Label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm text-gray-700">
+                    {assignedDoctor.fullName ||
+                      assignedDoctor.badgeId ||
+                      "Unknown Doctor"}
+                  </p>
+                  {assignedDoctor.specialty && (
+                    <Badge variant="secondary" className="text-xs">
+                      {assignedDoctor.specialty}
+                    </Badge>
+                  )}
+                  {assignedDoctor.role && (
+                    <Badge variant="outline" className="text-xs">
+                      {assignedDoctor.role}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-amber-600">
+                  Doctor Assignment
+                </Label>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-amber-800">No doctor assigned</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => assignRandomDoctorMutation.mutate()}
+                    disabled={
+                      assignRandomDoctorMutation.isPending ||
+                      doctors.length === 0
+                    }
+                  >
+                    {assignRandomDoctorMutation.isPending
+                      ? "Assigning..."
+                      : "Assign"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Booking Date */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Booking Date</Label>
+              <p className="text-sm text-gray-700">
+                {appointmentDate ? formatDate(appointmentDate) : "N/A"}
+              </p>
+            </div>
+
+            {/* Appointment Time */}
+            {appointmentTime && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">
+                  Appointment Time
+                </Label>
+                <p className="text-sm text-gray-700">{appointmentTime}</p>
+              </div>
+            )}
+
+            {/* Appointment Status */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Status</Label>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant={
+                    appointmentStatus === "Completed"
+                      ? "default"
+                      : appointmentStatus === "Cancelled"
+                        ? "destructive"
+                        : "secondary"
+                  }
+                >
+                  {appointmentStatus
+                    ? (APPOINTMENT_STATUS_LABELS[appointmentStatus] ??
+                      appointmentStatus)
+                    : "Unknown"}
+                </Badge>
+              </div>
+            </div>
+
+            {/* Appointment Type */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Appointment Type</Label>
+              <p className="text-sm text-gray-700 capitalize">
+                {appointmentType
+                  ? (APPOINTMENT_TYPES.find((t) => t.value === appointmentType)
+                      ?.label ?? appointmentType)
+                  : "N/A"}
+              </p>
+            </div>
+          </div>
+
+          {/* Notes - Full width */}
+          {appointment.notes && (
+            <div className="space-y-2 mt-4">
+              <Label className="text-sm font-semibold">
+                Notes / Patient Requests
+              </Label>
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                  {appointment.notes}
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Actions */}
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* Check In/Out */}
         <Card>
           <CardHeader>
-            <CardTitle>Scheduling details</CardTitle>
+            <CardTitle>Attendance</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 text-sm text-gray-700">
-            {isDetailsLoading ? (
-              <p>Loading appointment...</p>
-            ) : (
-              <>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">
-                    Title
-                  </label>
-                  <Input
-                    value={formState.title}
-                    placeholder="Short summary"
-                    onChange={(event) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        title: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">
-                    Description / notes
-                  </label>
-                  <textarea
-                    rows={3}
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={formState.description}
-                    onChange={(event) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Appointment date
-                    </label>
-                    <Input
-                      type="date"
-                      value={formState.appointmentDate}
-                      onChange={(event) =>
-                        setFormState((prev) => ({
-                          ...prev,
-                          appointmentDate: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Type
-                    </label>
-                    <select
-                      value={formState.type}
-                      onChange={(event) =>
-                        setFormState((prev) => ({
-                          ...prev,
-                          type: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    >
-                      <option value="consultation">Consultation</option>
-                      <option value="procedure">Procedure</option>
-                      <option value="follow-up">Follow-up</option>
-                      <option value="testing">Testing</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Start time
-                    </label>
-                    <Input
-                      type="time"
-                      value={formState.startTime}
-                      onChange={(event) =>
-                        setFormState((prev) => ({
-                          ...prev,
-                          startTime: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      End time
-                    </label>
-                    <Input
-                      type="time"
-                      value={formState.endTime}
-                      onChange={(event) =>
-                        setFormState((prev) => ({
-                          ...prev,
-                          endTime: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Status
-                  </label>
-                  <select
-                    value={status}
-                    onChange={(event) =>
-                      handleStatusChange(
-                        event.target.value as AppointmentStatus
-                      )
-                    }
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm capitalize focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
-                    {STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
-          </CardContent>
-          <CardFooter className="flex flex-wrap gap-3">
-            <Button
-              onClick={handleSubmit}
-              disabled={updateAppointmentMutation.isPending}
-            >
-              Save changes
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() =>
-                appointment &&
-                setFormState({
-                  title: "",
-                  description: appointment.notes || "",
-                  appointmentDate: getDateInputValue(
-                    appointment.appointmentDate
-                  ),
-                  startTime: getTimeInputValue(appointment.appointmentDate),
-                  endTime: "",
-                  type: appointment.appointmentType || "Consultation",
-                  checkInTime: derivedCheckInTime || "",
-                  checkOutTime: derivedCheckOutTime || "",
-                })
-              }
-            >
-              Reset form
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                if (derivedPatientId) {
-                  onOpenPatientProfile?.(derivedPatientId);
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Check-in Time</Label>
+              <Input
+                readOnly
+                value={formatDateTime(appointment.checkInTime ?? null)}
+                className="bg-gray-50"
+              />
+              <Button
+                onClick={() => checkInMutation.mutate()}
+                disabled={
+                  checkInMutation.isPending || !!appointment.checkInTime
                 }
-              }}
-              disabled={!derivedPatientId}
-            >
-              Open patient profile
-            </Button>
-            {layout === "modal" ? (
-              <Button variant="ghost" onClick={onClose}>
-                Close
+                size="sm"
+              >
+                {checkInMutation.isPending ? "Checking in..." : "Check In"}
               </Button>
-            ) : null}
-          </CardFooter>
+            </div>
+            <div className="space-y-2">
+              <Label>Check-out Time</Label>
+              <Input
+                readOnly
+                value={formatDateTime(appointment.checkOutTime ?? null)}
+                className="bg-gray-50"
+              />
+              <Button
+                onClick={() => checkOutMutation.mutate()}
+                disabled={
+                  checkOutMutation.isPending ||
+                  !!appointment.checkOutTime ||
+                  !appointment.checkInTime
+                }
+                size="sm"
+                variant="secondary"
+              >
+                {checkOutMutation.isPending ? "Checking out..." : "Check Out"}
+              </Button>
+            </div>
+          </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Participants</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-gray-700">
-              <div>
-                <span className="font-medium text-gray-900">Patient:</span>{" "}
-                {patientDisplayName}
-              </div>
-              <div>
-                <span className="font-medium text-gray-900">Doctor:</span>{" "}
-                {doctorDisplayName}
-                {doctorRole ? (
-                  <span className="ml-2 inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs capitalize text-slate-600">
-                    {doctorRole}
-                  </span>
-                ) : null}
-                {doctorEmail ? (
-                  <div className="text-xs text-gray-500">
-                    Email: {doctorEmail}
-                  </div>
-                ) : null}
-                {doctorPhone ? (
-                  <div className="text-xs text-gray-500">
-                    Phone: {doctorPhone}
-                  </div>
-                ) : null}
-                {additionalDoctorSummaries.length ? (
-                  <div className="text-xs text-gray-500">
-                    Additional doctors: {additionalDoctorSummaries.join(", ")}
-                  </div>
-                ) : null}
-              </div>
-              <div>
-                <span className="font-medium text-gray-900">
-                  Current status:
-                </span>{" "}
-                {statusLabel}
-              </div>
-              {derivedSlotId ? (
-                <div className="mt-3 space-y-3 rounded-md border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-800">
-                  <p className="text-xs font-medium">
-                    {isPatientSelfBooking
-                      ? "Patient self-booked this visit. Confirm or override the doctor assignment below before finalizing."
-                      : "This appointment is linked to a patient slot. Assign the appropriate doctor for this schedule below."}
-                  </p>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <select
-                      value={selectedDoctorForAssignment}
-                      onChange={(event) =>
-                        setSelectedDoctorForAssignment(event.target.value)
-                      }
-                      className="w-full rounded-md border border-blue-200 px-3 py-2 text-xs text-blue-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 sm:max-w-xs"
-                    >
-                      <option value="">
-                        {doctorSelectOptions.length
-                          ? "Select doctor"
-                          : "Loading doctors..."}
-                      </option>
-                      {doctorSelectOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                          {recommendedDoctorId === option.id
-                            ? " (recommended)"
-                            : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={
-                        !selectedDoctorForAssignment ||
-                        assignDoctorMutation.isPending
-                      }
-                      onClick={() =>
-                        selectedDoctorForAssignment &&
-                        assignDoctorMutation.mutate(selectedDoctorForAssignment)
-                      }
-                    >
-                      {assignDoctorMutation.isPending
-                        ? "Assigning..."
-                        : "Assign doctor"}
-                    </Button>
-                  </div>
-                  {recommendedDoctor ? (
-                    <p className="text-[11px] text-blue-700">
-                      Recommended doctor:{" "}
-                      <span className="font-semibold">
-                        {recommendedDoctor.fullName}
-                      </span>
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
+        {/* Change Doctor */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Change Doctor</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Select Doctor</Label>
+              <select
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={selectedDoctorId}
+                onChange={(e) => {
+                  setSelectedDoctorId(e.target.value);
+                  setSelectedSlotId(""); // Reset slot when doctor changes
+                }}
+              >
+                <option value="">Select a doctor</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>
+                    {doctor.fullName || doctor.email || doctor.id}
+                    {doctor.specialty && ` - ${doctor.specialty}`}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {derivedSlotId ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Patient-selected slot</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-gray-700">
-                {slotLoading || slotFetching ? (
-                  <p className="text-xs text-gray-500">
-                    Loading slot information...
-                  </p>
-                ) : slotDetail ? (
-                  <>
-                    {isPatientSelfBooking ? (
-                      <div className="rounded-md bg-blue-50 p-3 text-xs text-blue-700">
-                        This appointment was self-booked by the patient. Please
-                        align the assigned doctor with the captured schedule and
-                        slot before confirming.
-                      </div>
-                    ) : null}
-                    <div>
-                      <span className="font-medium text-gray-900">
-                        Slot ID:
-                      </span>{" "}
-                      {slotDetail.id}
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-900">Time:</span>{" "}
-                      {slotDetail.startTime
-                        ? new Date(slotDetail.startTime).toLocaleString()
-                        : "??"}{" "}
-                      →{" "}
-                      {slotDetail.endTime
-                        ? new Date(slotDetail.endTime).toLocaleString()
-                        : "??"}
-                    </div>
-                    {typeof slotDetail.isBooked === "boolean" ? (
-                      <div>
-                        <span className="font-medium text-gray-900">
-                          Is booked:
-                        </span>{" "}
-                        {slotDetail.isBooked ? "Yes" : "No"}
-                      </div>
-                    ) : null}
-                    {derivedPatientId ? (
-                      <div>
-                        <span className="font-medium text-gray-900">
-                          Patient:
-                        </span>{" "}
-                        {derivedPatientId}
-                      </div>
-                    ) : null}
-                    <div>
-                      <span className="font-medium text-gray-900">
-                        Schedule reference:
-                      </span>{" "}
-                      {slotScheduleId ?? "Unlinked"}
-                    </div>
-                    {scheduleLoading || scheduleFetching ? (
-                      <p className="text-xs text-gray-500">
-                        Loading linked doctor schedule...
-                      </p>
-                    ) : scheduleDetail ? (
+            {/* Available Slots */}
+            {selectedDoctorId && (
+              <div className="space-y-2">
+                <Label>Available Slots</Label>
+                {isLoadingSchedules ? (
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-xs text-gray-600">
+                      Loading schedules...
+                    </p>
+                  </div>
+                ) : schedulesForDate.length === 0 ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs text-amber-800">
+                      No schedule found for this doctor on this date. You can
+                      still change the doctor without selecting a slot.
+                    </p>
+                  </div>
+                ) : isLoadingSlots ? (
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-xs text-gray-600">
+                      Loading available slots...
+                    </p>
+                  </div>
+                ) : slotsError ? (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                    <p className="text-xs text-red-800">
+                      Error loading slots. You can still change the doctor
+                      without selecting a slot.
+                    </p>
+                  </div>
+                ) : availableSlots && availableSlots.length > 0 ? (
+                  (() => {
+                    const freeSlots = availableSlots.filter((s) => !s.isBooked);
+                    return freeSlots.length > 0 ? (
                       <>
-                        <div>
-                          <span className="font-medium text-gray-900">
-                            Schedule window:
-                          </span>{" "}
-                          {`${scheduleDetail.startTime ?? "??"} → ${
-                            scheduleDetail.endTime ?? "??"
-                          }`}
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-900">
-                            Work date:
-                          </span>{" "}
-                          {scheduleDetail.workDate
-                            ? new Date(
-                                scheduleDetail.workDate
-                              ).toLocaleDateString()
-                            : "Not provided"}
-                        </div>
-                        {scheduleDetail.notes ? (
-                          <div className="text-xs text-gray-500">
-                            Notes: {scheduleDetail.notes}
-                          </div>
-                        ) : null}
+                        <select
+                          className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          value={selectedSlotId}
+                          onChange={(e) => setSelectedSlotId(e.target.value)}
+                        >
+                          <option value="">Select a slot (optional)</option>
+                          {freeSlots.map((slot) => {
+                            const getTimeDisplay = (timeStr?: string) => {
+                              if (!timeStr) return "N/A";
+                              try {
+                                if (timeStr.includes("T")) {
+                                  const date = new Date(timeStr);
+                                  if (isNaN(date.getTime())) {
+                                    return timeStr.slice(0, 5);
+                                  }
+                                  return date.toLocaleTimeString("en-US", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    hour12: false,
+                                  });
+                                }
+                                return timeStr.slice(0, 5);
+                              } catch {
+                                return timeStr.slice(0, 5);
+                              }
+                            };
+                            return (
+                              <option key={slot.id} value={slot.id}>
+                                {getTimeDisplay(slot.startTime)} -{" "}
+                                {getTimeDisplay(slot.endTime)}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <p className="text-xs text-green-600">
+                          {freeSlots.length} available slot(s) on this date
+                        </p>
                       </>
                     ) : (
-                      <p className="text-xs text-gray-500">
-                        No doctor schedule linked to this slot yet.
-                      </p>
-                    )}
-                    {recommendedDoctorId ? (
-                      <div className="space-y-2">
-                        <div>
-                          <span className="font-medium text-gray-900">
-                            Recommended doctor:
-                          </span>{" "}
-                          {recommendedDoctor?.fullName || recommendedDoctorId}
-                        </div>
-                        {!derivedDoctorId ||
-                        derivedDoctorId !== recommendedDoctorId ? (
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              assignDoctorMutation.mutate(recommendedDoctorId)
-                            }
-                            disabled={assignDoctorMutation.isPending}
-                          >
-                            Assign recommended doctor
-                          </Button>
-                        ) : (
-                          <p className="text-xs text-green-600">
-                            Recommended doctor already assigned.
-                          </p>
-                        )}
+                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                        <p className="text-xs text-amber-800">
+                          All slots are booked for this doctor on this date. You
+                          can still change the doctor without selecting a slot.
+                        </p>
                       </div>
-                    ) : (
-                      <p className="text-xs text-gray-500">
-                        Unable to determine a doctor from the linked schedule.
-                      </p>
-                    )}
-                  </>
+                    );
+                  })()
                 ) : (
-                  <p className="text-xs text-red-600">
-                    Slot data could not be loaded. Please verify the booking.
-                  </p>
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs text-amber-800">
+                      No slots available for this doctor on this date. You can
+                      still change the doctor without selecting a slot.
+                    </p>
+                  </div>
                 )}
-              </CardContent>
-            </Card>
-          ) : null}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Attendance</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm text-gray-700">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Check-in time
-                </label>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Input
-                    readOnly
-                    value={formatDateTimeDisplay(formState.checkInTime)}
-                    placeholder="Not recorded"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() =>
-                        updateCheckInMutation.mutate(new Date().toISOString())
-                      }
-                      disabled={updateCheckInMutation.isPending}
-                    >
-                      Check-in now
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => updateCheckInMutation.mutate(null)}
-                      disabled={
-                        updateCheckInMutation.isPending ||
-                        !formState.checkInTime
-                      }
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Check-out time
-                </label>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Input
-                    readOnly
-                    value={formatDateTimeDisplay(formState.checkOutTime)}
-                    placeholder="Not recorded"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() =>
-                        updateCheckOutMutation.mutate(new Date().toISOString())
-                      }
-                      disabled={updateCheckOutMutation.isPending}
-                    >
-                      Check-out now
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => updateCheckOutMutation.mutate(null)}
-                      disabled={
-                        updateCheckOutMutation.isPending ||
-                        !formState.checkOutTime
-                      }
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Cancellation</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-gray-700">
-              <p className="text-gray-600">
-                Set status to <strong>Cancelled</strong> with an optional reason
-                to notify the patient and doctor.
-              </p>
-              <textarea
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                rows={3}
-                placeholder="Reason for cancellation (required)"
-                value={cancelReason}
-                onChange={(event) => setCancelReason(event.target.value)}
-              />
-            </CardContent>
-            <CardFooter>
-              <Button
-                variant="destructive"
-                onClick={handleCancel}
-                disabled={cancelAppointmentMutation.isPending}
-              >
-                Cancel appointment
-              </Button>
-            </CardFooter>
-          </Card>
-        </div>
+            <Button
+              onClick={() => {
+                if (selectedDoctorId) {
+                  changeDoctorMutation.mutate({
+                    doctorId: selectedDoctorId,
+                    slotId: selectedSlotId || undefined,
+                  });
+                }
+              }}
+              disabled={
+                changeDoctorMutation.isPending ||
+                !selectedDoctorId ||
+                (assignedDoctor
+                  ? selectedDoctorId === assignedDoctor.doctorId &&
+                    (!selectedSlotId || selectedSlotId === appointment?.slotId)
+                  : false)
+              }
+              size="sm"
+              variant="outline"
+            >
+              {changeDoctorMutation.isPending ? "Changing..." : "Change Doctor"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Cancel Appointment */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-red-600">Cancel Appointment</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!showCancelDialog ? (
+            <Button
+              variant="destructive"
+              onClick={() => setShowCancelDialog(true)}
+              disabled={appointmentStatus === "Cancelled"}
+            >
+              Cancel Appointment
+            </Button>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Cancellation Reason</Label>
+                <Textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Enter reason for cancellation"
+                  rows={3}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    if (!cancelReason.trim()) {
+                      toast.error("Please enter a cancellation reason");
+                      return;
+                    }
+                    cancelAppointmentMutation.mutate();
+                  }}
+                  disabled={cancelAppointmentMutation.isPending}
+                >
+                  {cancelAppointmentMutation.isPending
+                    ? "Cancelling..."
+                    : "Confirm Cancellation"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCancelDialog(false);
+                    setCancelReason("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {layout === "modal" && (
+        <div className="flex justify-end">
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

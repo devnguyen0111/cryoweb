@@ -9,11 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/api/client";
-import type {
-  ServiceRequestStatus,
-  Appointment,
-  Patient,
-} from "@/api/types";
+import type { ServiceRequestStatus, Appointment, Patient } from "@/api/types";
 import { ServiceRequestDetailModal } from "@/features/doctor/service-requests/ServiceRequestDetailModal";
 import { CreateServiceRequestModal } from "@/features/doctor/service-requests/CreateServiceRequestModal";
 import { ServiceRequestActionModal } from "@/features/doctor/service-requests/ServiceRequestActionModal";
@@ -36,7 +32,7 @@ function DoctorServiceRequestsComponent() {
   const [actionModal, setActionModal] = useState<{
     isOpen: boolean;
     requestId: string | null;
-    action: "approve" | "reject" | "complete" | "cancel" | null;
+    action: "approve" | "reject" | "complete" | null;
   }>({
     isOpen: false,
     requestId: null,
@@ -203,7 +199,7 @@ function DoctorServiceRequestsComponent() {
       action,
     }: {
       id: string;
-      action: "approve" | "reject" | "complete" | "cancel";
+      action: "approve" | "reject" | "complete";
     }) => {
       switch (action) {
         case "approve":
@@ -212,8 +208,6 @@ function DoctorServiceRequestsComponent() {
           return api.serviceRequest.rejectServiceRequest(id);
         case "complete":
           return api.serviceRequest.completeServiceRequest(id);
-        case "cancel":
-          return api.serviceRequest.cancelServiceRequest(id);
       }
     },
     onSuccess: (_, variables) => {
@@ -225,9 +219,7 @@ function DoctorServiceRequestsComponent() {
           ? "approved"
           : variables.action === "reject"
             ? "rejected"
-            : variables.action === "complete"
-              ? "completed"
-              : "cancelled";
+            : "completed";
       toast.success(`Service request ${actionText} successfully`);
       setActionModal({ isOpen: false, requestId: null, action: null });
     },
@@ -240,7 +232,7 @@ function DoctorServiceRequestsComponent() {
 
   const handleStatusAction = (
     id: string,
-    action: "approve" | "reject" | "complete" | "cancel"
+    action: "approve" | "reject" | "complete"
   ) => {
     setActionModal({ isOpen: true, requestId: id, action });
   };
@@ -481,24 +473,6 @@ function DoctorServiceRequestsComponent() {
                                       Complete
                                     </Button>
                                   )}
-                                  {request.status !== "Completed" &&
-                                    request.status !== "Cancelled" && (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                          handleStatusAction(
-                                            request.id,
-                                            "cancel"
-                                          )
-                                        }
-                                        disabled={
-                                          statusActionMutation.isPending
-                                        }
-                                      >
-                                        Cancel
-                                      </Button>
-                                    )}
                                 </div>
                               </td>
                             </tr>

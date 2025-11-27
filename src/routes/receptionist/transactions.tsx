@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { isAxiosError } from "axios";
+import { Printer } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -251,6 +252,243 @@ function ReceptionistTransactionsComponent() {
 
   const handleViewDetails = (transactionId: string) => {
     setSelectedTransactionDetailId(transactionId);
+  };
+
+  const handlePrintInvoice = () => {
+    if (!transactionDetail?.data) return;
+
+    // Create a new window for printing
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Please allow popups to print invoice");
+      return;
+    }
+
+    const transaction = transactionDetail.data;
+    const invoiceDate = formatDate(
+      transaction.transactionDate || transaction.createdAt
+    );
+
+    // Generate invoice HTML
+    const invoiceHTML = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice - ${transaction.transactionCode}</title>
+          <style>
+            @media print {
+              @page {
+                size: A4;
+                margin: 20mm;
+              }
+              body {
+                margin: 0;
+                padding: 0;
+              }
+            }
+            body {
+              font-family: Arial, sans-serif;
+              max-width: 800px;
+              margin: 0 auto;
+              padding: 20px;
+              color: #333;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 2px solid #000;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .header h1 {
+              margin: 0;
+              font-size: 28px;
+              color: #000;
+            }
+            .header p {
+              margin: 5px 0;
+              color: #666;
+            }
+            .invoice-info {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 30px;
+            }
+            .info-section {
+              flex: 1;
+            }
+            .info-section h3 {
+              margin-top: 0;
+              font-size: 14px;
+              text-transform: uppercase;
+              color: #666;
+              border-bottom: 1px solid #ddd;
+              padding-bottom: 5px;
+            }
+            .info-section p {
+              margin: 5px 0;
+              font-size: 14px;
+            }
+            .items-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 20px;
+            }
+            .items-table th,
+            .items-table td {
+              border: 1px solid #ddd;
+              padding: 10px;
+              text-align: left;
+            }
+            .items-table th {
+              background-color: #f5f5f5;
+              font-weight: bold;
+            }
+            .items-table td {
+              font-size: 14px;
+            }
+            .total-section {
+              text-align: right;
+              margin-top: 20px;
+            }
+            .total-row {
+              display: flex;
+              justify-content: flex-end;
+              margin: 5px 0;
+            }
+            .total-label {
+              width: 150px;
+              font-weight: bold;
+              text-align: right;
+              padding-right: 10px;
+            }
+            .total-value {
+              width: 150px;
+              text-align: right;
+              font-weight: bold;
+            }
+            .footer {
+              margin-top: 40px;
+              padding-top: 20px;
+              border-top: 1px solid #ddd;
+              text-align: center;
+              font-size: 12px;
+              color: #666;
+            }
+            .status-badge {
+              display: inline-block;
+              padding: 4px 12px;
+              border-radius: 12px;
+              font-size: 12px;
+              font-weight: bold;
+            }
+            .status-pending {
+              background-color: #fef3c7;
+              color: #92400e;
+            }
+            .status-completed {
+              background-color: #d1fae5;
+              color: #065f46;
+            }
+            .status-failed {
+              background-color: #fee2e2;
+              color: #991b1b;
+            }
+            .status-cancelled {
+              background-color: #f3f4f6;
+              color: #374151;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>INVOICE</h1>
+            <p>FSCMS - Fertility Services Clinic Management System</p>
+          </div>
+
+          <div class="invoice-info">
+            <div class="info-section">
+              <h3>Transaction Information</h3>
+              <p><strong>Transaction Code:</strong> ${transaction.transactionCode || transaction.id}</p>
+              <p><strong>Transaction ID:</strong> ${transaction.id}</p>
+              <p><strong>Date:</strong> ${invoiceDate}</p>
+              <p><strong>Type:</strong> ${transaction.transactionType || "Payment"}</p>
+              <p><strong>Status:</strong> <span class="status-badge status-${transaction.status?.toLowerCase() || "pending"}">${transaction.status || "Pending"}</span></p>
+              ${transaction.referenceNumber ? `<p><strong>Reference:</strong> ${transaction.referenceNumber}</p>` : ""}
+            </div>
+
+            <div class="info-section">
+              <h3>Patient Information</h3>
+              ${transaction.patientName ? `<p><strong>Name:</strong> ${transaction.patientName}</p>` : ""}
+              ${transaction.patientId ? `<p><strong>Patient ID:</strong> ${transaction.patientId}</p>` : ""}
+              ${transaction.relatedEntityType ? `<p><strong>Related To:</strong> ${transaction.relatedEntityType}</p>` : ""}
+              ${transaction.relatedEntityId ? `<p><strong>Entity ID:</strong> ${transaction.relatedEntityId}</p>` : ""}
+            </div>
+          </div>
+
+          <div class="info-section">
+            <h3>Payment Information</h3>
+            ${transaction.paymentMethod ? `<p><strong>Payment Method:</strong> ${transaction.paymentMethod}</p>` : ""}
+            ${transaction.paymentGateway ? `<p><strong>Payment Gateway:</strong> ${transaction.paymentGateway}</p>` : ""}
+            ${transaction.processedDate ? `<p><strong>Processed Date:</strong> ${formatDate(transaction.processedDate)}</p>` : ""}
+            ${transaction.processedBy ? `<p><strong>Processed By:</strong> ${transaction.processedBy}</p>` : ""}
+          </div>
+
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th style="text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  ${transaction.description || "Payment transaction"}
+                  ${transaction.notes ? `<br/><small style="color: #666;">${transaction.notes}</small>` : ""}
+                </td>
+                <td style="text-align: right; font-weight: bold;">
+                  ${formatCurrency(transaction.amount)}
+                  ${transaction.currency ? ` ${transaction.currency}` : " VND"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="total-section">
+            <div class="total-row">
+              <div class="total-label">Total Amount:</div>
+              <div class="total-value">
+                ${formatCurrency(transaction.amount)}
+                ${transaction.currency ? ` ${transaction.currency}` : " VND"}
+              </div>
+            </div>
+          </div>
+
+          ${transaction.description || transaction.notes ? `
+          <div class="info-section" style="margin-top: 30px;">
+            <h3>Notes</h3>
+            <p>${transaction.description || ""}</p>
+            ${transaction.notes ? `<p>${transaction.notes}</p>` : ""}
+          </div>
+          ` : ""}
+
+          <div class="footer">
+            <p>This is a computer-generated invoice. No signature required.</p>
+            <p>Generated on ${new Date().toLocaleString("vi-VN")}</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(invoiceHTML);
+    printWindow.document.close();
+
+    // Wait for content to load then print
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+    }, 250);
   };
 
   // Query transaction detail
@@ -1320,6 +1558,14 @@ function ReceptionistTransactionsComponent() {
                   onClick={() => setSelectedTransactionDetailId(null)}
                 >
                   Close
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handlePrintInvoice}
+                  className="flex items-center gap-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  Print Invoice
                 </Button>
                 {transactionDetail.data.paymentUrl && (
                   <Button

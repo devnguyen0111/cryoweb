@@ -11,8 +11,8 @@ export const Route = createFileRoute("/lab-technician/samples")({
 
 function LabTechnicianSamplesComponent() {
   const { data, isLoading } = useQuery({
-    queryKey: ["samples", { Page: 1, Size: 20 }],
-    queryFn: () => api.sample.getSamples({ Page: 1, Size: 20 }),
+    queryKey: ["samples", { pageNumber: 1, pageSize: 20 }],
+    queryFn: () => api.sample.getSamples({ pageNumber: 1, pageSize: 20 }),
   });
 
   return (

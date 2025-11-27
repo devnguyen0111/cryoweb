@@ -6,6 +6,7 @@ import type {
   UserDetailResponse,
   UpdateUserRequest,
   GetUsersRequest,
+  CreateUserRequest,
 } from "../types";
 
 /**
@@ -32,6 +33,19 @@ export class UserApi {
   async getUserById(userId: string): Promise<BaseResponse<UserDetailResponse>> {
     const response = await this.client.get<BaseResponse<UserDetailResponse>>(
       `/user/${userId}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get detailed user information
+   * GET /api/user/{userId}/details
+   */
+  async getUserDetails(
+    userId: string
+  ): Promise<BaseResponse<UserDetailResponse>> {
+    const response = await this.client.get<BaseResponse<UserDetailResponse>>(
+      `/user/${userId}/details`
     );
     return response.data;
   }
@@ -82,6 +96,26 @@ export class UserApi {
     const response = await this.client.get<BaseResponse<boolean>>(
       "/user/email-exists",
       { params: { email } }
+    );
+    return response.data;
+  }
+
+  /**
+   * Create a new user
+   * POST /api/user
+   */
+  async createUser(data: CreateUserRequest): Promise<BaseResponse<User>> {
+    const response = await this.client.post<BaseResponse<User>>("/user", data);
+    return response.data;
+  }
+
+  /**
+   * Delete a user by ID
+   * DELETE /api/user/{userId}
+   */
+  async deleteUser(userId: string): Promise<BaseResponse<void>> {
+    const response = await this.client.delete<BaseResponse<void>>(
+      `/user/${userId}`
     );
     return response.data;
   }

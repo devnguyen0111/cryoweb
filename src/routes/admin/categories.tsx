@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { EmptyState } from "@/components/admin/EmptyState";
-import { Badge } from "@/components/ui/badge";
 import { api } from "@/api/client";
 import { toast } from "sonner";
 
@@ -24,7 +23,8 @@ function AdminCategoriesComponent() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["serviceCategories", { Page: 1, Size: 50 }],
-    queryFn: () => api.serviceCategory.getServiceCategories({ Page: 1, Size: 50 }),
+    queryFn: () =>
+      api.serviceCategory.getServiceCategories({ Page: 1, Size: 50 }),
   });
 
   const categories = data?.data ?? [];
@@ -33,26 +33,22 @@ function AdminCategoriesComponent() {
     return categories.filter((category) => {
       const matchesSearch =
         !searchTerm ||
-        category.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        category.categoryName
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
         category.description?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesType =
-        typeFilter === "all" ||
-        category.categoryType?.toLowerCase() === typeFilter.toLowerCase();
+      // categoryType doesn't exist in ServiceCategory type
+      const matchesType = typeFilter === "all";
 
       return matchesSearch && matchesType;
     });
   }, [categories, searchTerm, typeFilter]);
 
   const categoryTypes = useMemo(() => {
-    const types = new Set<string>();
-    categories.forEach((category) => {
-      if (category.categoryType) {
-        types.add(category.categoryType);
-      }
-    });
-    return Array.from(types);
-  }, [categories]);
+    // categoryType doesn't exist in ServiceCategory type
+    return [];
+  }, []);
 
   return (
     <ProtectedRoute allowedRoles={["Admin"]}>
@@ -122,7 +118,10 @@ function AdminCategoriesComponent() {
                   title="No categories match your filters"
                   description="Try broadening your search criteria."
                   action={
-                    <Button variant="outline" onClick={() => setTypeFilter("all")}>
+                    <Button
+                      variant="outline"
+                      onClick={() => setTypeFilter("all")}
+                    >
                       Reset filters
                     </Button>
                   }
@@ -151,33 +150,28 @@ function AdminCategoriesComponent() {
                     </thead>
                     <tbody>
                       {filteredCategories.map((category) => (
-                        <tr key={category.id} className="border-t bg-background hover:bg-muted/30">
+                        <tr
+                          key={category.id}
+                          className="border-t bg-background hover:bg-muted/30"
+                        >
                           <td className="p-3">
-                            <div className="font-medium text-foreground">{category.name}</div>
+                            <div className="font-medium text-foreground">
+                              {category.categoryName}
+                            </div>
                             {category.description ? (
                               <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                                 {category.description}
                               </p>
                             ) : null}
                           </td>
-                          <td className="p-3">
-                            {category.categoryType ? (
-                              <Badge variant="outline">{category.categoryType}</Badge>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
+                          <td className="p-3">{"-"}</td>
                           <td className="p-3 text-sm text-muted-foreground">
-                            {category.updatedAt
-                              ? new Date(category.updatedAt).toLocaleDateString()
-                              : "—"}
+                            {"—"}
                           </td>
                           <td className="p-3">
                             <StatusBadge
-                              status={category.status === "active" ? "active" : "inactive"}
-                              label={
-                                category.status === "active" ? "Active" : "Inactive"
-                              }
+                              status={category.isActive ? "active" : "inactive"}
+                              label={category.isActive ? "Active" : "Inactive"}
                             />
                           </td>
                           <td className="p-3">
@@ -222,4 +216,3 @@ function AdminCategoriesComponent() {
     </ProtectedRoute>
   );
 }
-

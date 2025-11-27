@@ -11,6 +11,7 @@ import type {
   CancelAppointmentRequest,
   GetAppointmentsRequest,
   AppointmentSummary,
+  AppointmentHistoryQuery,
 } from "../types";
 
 /**
@@ -266,6 +267,42 @@ export class AppointmentApi {
     const response = await this.client.get<PaginatedResponse<Appointment>>(
       `/appointment/patient/${patientId}/booking`
     );
+    return response.data;
+  }
+
+  /**
+   * Get appointment history by patient
+   * GET /api/appointment/patient/{patientId}/history
+   */
+  async getAppointmentHistoryByPatient(
+    patientId: string,
+    params?: AppointmentHistoryQuery
+  ): Promise<PaginatedResponse<AppointmentExtendedDetailResponse>> {
+    const queryParams: Record<string, unknown> = {};
+
+    if (params) {
+      if (params.TreatmentCycleId)
+        queryParams.TreatmentCycleId = params.TreatmentCycleId;
+      if (params.DoctorId) queryParams.DoctorId = params.DoctorId;
+      if (params.SlotId) queryParams.SlotId = params.SlotId;
+      if (params.Type) queryParams.Type = params.Type;
+      if (params.Status) queryParams.Status = params.Status;
+      if (params.AppointmentDateFrom)
+        queryParams.AppointmentDateFrom = params.AppointmentDateFrom;
+      if (params.AppointmentDateTo)
+        queryParams.AppointmentDateTo = params.AppointmentDateTo;
+      if (params.SearchTerm) queryParams.SearchTerm = params.SearchTerm;
+      if (params.Page !== undefined) queryParams.Page = params.Page;
+      if (params.Size !== undefined) queryParams.Size = params.Size;
+      if (params.Sort) queryParams.Sort = params.Sort;
+      if (params.Order) queryParams.Order = params.Order;
+    }
+
+    const response = await this.client.get<
+      PaginatedResponse<AppointmentExtendedDetailResponse>
+    >(`/appointment/patient/${patientId}/history`, {
+      params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
     return response.data;
   }
 }

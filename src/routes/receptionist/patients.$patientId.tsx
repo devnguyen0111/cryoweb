@@ -8,8 +8,13 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
 import { cn } from "@/utils/cn";
+import {
+  isPatientDetailResponse,
+  getPatientProperty,
+} from "@/utils/patient-helpers";
 
 export const Route = createFileRoute("/receptionist/patients/$patientId")({
   component: ReceptionistPatientDetail,
@@ -47,12 +52,12 @@ function ReceptionistPatientDetail() {
   });
 
   const { data: patientServiceRequests } = useQuery({
-    queryKey: ["receptionist", "service-requests", { PatientId: patientId }],
+    queryKey: ["receptionist", "service-requests", { patientId: patientId }],
     queryFn: () =>
       api.serviceRequest.getServiceRequests({
-        PatientId: patientId,
-        Page: 1,
-        Size: 10,
+        patientId: patientId,
+        pageNumber: 1,
+        pageSize: 10,
       }),
   });
 
@@ -60,12 +65,10 @@ function ReceptionistPatientDetail() {
     queryKey: ["receptionist", "appointments", { patientId }],
     queryFn: () =>
       api.appointment.getAppointments({
-        Page: 1,
-        Size: 10,
-        Sort: "appointmentDate",
-        Order: "desc",
-        ...(patientId ? { PatientId: patientId } : {}),
-      } as any),
+        pageNumber: 1,
+        pageSize: 10,
+        ...(patientId ? { patientId: patientId } : {}),
+      }),
   });
 
   useEffect(() => {
@@ -84,7 +87,12 @@ function ReceptionistPatientDetail() {
 
   const patient = patientResponse?.data;
   const displayName =
-    patient?.accountInfo?.username || patient?.patientCode || "Patient detail";
+    (patient && isPatientDetailResponse(patient)
+      ? patient.accountInfo?.username
+      : null) ||
+    patient?.fullName ||
+    patient?.patientCode ||
+    "Patient detail";
 
   useEffect(() => {
     debug("Patient query state", { isLoading, hasPatient: Boolean(patient) });
@@ -100,17 +108,43 @@ function ReceptionistPatientDetail() {
     phone: "",
     email: "",
   });
+  const [showCreateTransactionModal, setShowCreateTransactionModal] =
+    useState(false);
+  const [createTransactionFormData, setCreateTransactionFormData] = useState({
+    relatedEntityType: "ServiceRequest" as "ServiceRequest" | "Appointment" | "CryoStorageContract",
+    relatedEntityId: "",
+  });
+  const [showQRCode, setShowQRCode] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  const [createdTransactionId, setCreatedTransactionId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (!patient) return;
     setFormState({
       patientCode: patient.patientCode || "",
       nationalId: patient.nationalId || "",
-      emergencyContact: patient.emergencyContact || "",
-      emergencyPhone: patient.emergencyPhone || "",
-      address: patient.accountInfo?.address || "",
-      phone: patient.accountInfo?.phone || "",
-      email: patient.accountInfo?.email || "",
+      emergencyContact: getPatientProperty(patient, "emergencyContact", ""),
+      emergencyPhone: getPatientProperty(patient, "emergencyPhone", ""),
+      address:
+        (isPatientDetailResponse(patient)
+          ? patient.accountInfo?.address
+          : null) ||
+        patient.address ||
+        "",
+      phone:
+        (isPatientDetailResponse(patient)
+          ? patient.accountInfo?.phone
+          : null) ||
+        patient.phoneNumber ||
+        "",
+      email:
+        (isPatientDetailResponse(patient)
+          ? patient.accountInfo?.email
+          : null) ||
+        patient.email ||
+        "",
     });
     debug("Form state initialised", { patientCode: patient.patientCode });
   }, [patient]);
@@ -118,11 +152,14 @@ function ReceptionistPatientDetail() {
   const updatePatientMutation = useMutation({
     mutationFn: () =>
       api.patient.updatePatient(patientId, {
-        patientCode: formState.patientCode || undefined,
         nationalId: formState.nationalId || undefined,
-        emergencyContact: formState.emergencyContact || undefined,
-        emergencyPhone: formState.emergencyPhone || undefined,
-        notes: patient?.notes || undefined,
+        fullName: patient?.fullName || undefined,
+        dateOfBirth: patient?.dateOfBirth || undefined,
+        gender: patient?.gender as any,
+        phoneNumber: formState.phone || undefined,
+        email: formState.email || undefined,
+        address: formState.address || undefined,
+        bloodType: patient?.bloodType || undefined,
       }),
     onSuccess: () => {
       toast.success("Patient profile updated");
@@ -137,6 +174,39 @@ function ReceptionistPatientDetail() {
         error?.response?.data?.message ||
         "Unable to update patient. Please try again.";
       toast.error(message);
+    },
+  });
+
+  // Create transaction mutation
+  const createTransactionMutation = useMutation({
+    mutationFn: () =>
+      api.transaction.createPaymentQR({
+        relatedEntityType: createTransactionFormData.relatedEntityType,
+        relatedEntityId: createTransactionFormData.relatedEntityId,
+      }),
+    onSuccess: (response) => {
+      if (response.data) {
+        setQrCodeUrl(response.data.paymentUrl || null);
+        setCreatedTransactionId(response.data.id);
+        setShowCreateTransactionModal(false);
+        setShowQRCode(true);
+        toast.success("Transaction created successfully");
+        queryClient.invalidateQueries({
+          queryKey: ["receptionist", "transactions"],
+        });
+        // Reset form
+        setCreateTransactionFormData({
+          relatedEntityType: "ServiceRequest",
+          relatedEntityId: "",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to create transaction. Please try again."
+      );
     },
   });
 
@@ -192,11 +262,27 @@ function ReceptionistPatientDetail() {
                   {patient?.bloodType || "N/A"}
                 </p>
                 <p className="text-sm text-gray-500">
-                  Email: {patient?.accountInfo?.email || "-"} · Phone:{" "}
-                  {patient?.accountInfo?.phone || "-"}
+                  Email:{" "}
+                  {(patient && isPatientDetailResponse(patient)
+                    ? patient.accountInfo?.email
+                    : null) ||
+                    patient?.email ||
+                    "-"}{" "}
+                  · Phone:{" "}
+                  {(patient && isPatientDetailResponse(patient)
+                    ? patient.accountInfo?.phone
+                    : null) ||
+                    patient?.phoneNumber ||
+                    "-"}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => setShowCreateTransactionModal(true)}
+                >
+                  Create Transaction
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -315,11 +401,34 @@ function ReceptionistPatientDetail() {
                             setFormState({
                               patientCode: patient.patientCode || "",
                               nationalId: patient.nationalId || "",
-                              emergencyContact: patient.emergencyContact || "",
-                              emergencyPhone: patient.emergencyPhone || "",
-                              address: patient.accountInfo?.address || "",
-                              phone: patient.accountInfo?.phone || "",
-                              email: patient.accountInfo?.email || "",
+                              emergencyContact: getPatientProperty(
+                                patient,
+                                "emergencyContact",
+                                ""
+                              ),
+                              emergencyPhone: getPatientProperty(
+                                patient,
+                                "emergencyPhone",
+                                ""
+                              ),
+                              address:
+                                (isPatientDetailResponse(patient)
+                                  ? patient.accountInfo?.address
+                                  : null) ||
+                                patient.address ||
+                                "",
+                              phone:
+                                (isPatientDetailResponse(patient)
+                                  ? patient.accountInfo?.phone
+                                  : null) ||
+                                patient.phoneNumber ||
+                                "",
+                              email:
+                                (isPatientDetailResponse(patient)
+                                  ? patient.accountInfo?.email
+                                  : null) ||
+                                patient.email ||
+                                "",
                             });
                           }
                         }}
@@ -346,19 +455,27 @@ function ReceptionistPatientDetail() {
                       <span className="font-medium text-gray-900">
                         Emergency contact:
                       </span>{" "}
-                      {patient?.emergencyContact || "Not provided"}
+                      {getPatientProperty(
+                        patient,
+                        "emergencyContact",
+                        "Not provided"
+                      )}
                     </p>
                     <p>
                       <span className="font-medium text-gray-900">
                         Emergency phone:
                       </span>{" "}
-                      {patient?.emergencyPhone || "-"}
+                      {getPatientProperty(patient, "emergencyPhone", "-")}
                     </p>
                     <p>
                       <span className="font-medium text-gray-900">
                         Insurance:
                       </span>{" "}
-                      {patient?.insurance || "No insurance info"}
+                      {getPatientProperty(
+                        patient,
+                        "insurance",
+                        "No insurance info"
+                      )}
                     </p>
                     <p>
                       <span className="font-medium text-gray-900">
@@ -384,19 +501,23 @@ function ReceptionistPatientDetail() {
                   <span className="font-medium text-gray-900">
                     Medical history:
                   </span>{" "}
-                  {patient?.medicalHistory || "Not recorded"}
+                  {getPatientProperty(
+                    patient,
+                    "medicalHistory",
+                    "Not recorded"
+                  )}
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">Allergies:</span>{" "}
-                  {patient?.allergies || "None reported"}
+                  {getPatientProperty(patient, "allergies", "None reported")}
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">Occupation:</span>{" "}
-                  {patient?.occupation || "Not available"}
+                  {getPatientProperty(patient, "occupation", "Not available")}
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">Notes:</span>{" "}
-                  {patient?.notes || "No notes"}
+                  {getPatientProperty(patient, "notes", "No notes")}
                 </p>
               </CardContent>
             </Card>
@@ -425,9 +546,7 @@ function ReceptionistPatientDetail() {
                     >
                       <div>
                         <p className="font-medium text-gray-900">
-                          {request.serviceId
-                            ? `Service ${request.serviceId}`
-                            : "General enquiry"}
+                          {request.requestCode || "General enquiry"}
                         </p>
                         <p className="text-xs text-gray-500">
                           Requested: {request.requestedDate || "—"}
@@ -478,19 +597,18 @@ function ReceptionistPatientDetail() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-gray-700">
                 {recentAppointments.length ? (
-                  recentAppointments.map((appointment) => (
+                  recentAppointments.map((appointment, index) => (
                     <div
                       key={appointment.id}
                       className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
                     >
                       <div>
                         <p className="font-medium text-gray-900">
-                          {appointment.title || "Untitled appointment"}
+                          {appointment.appointmentCode ||
+                            `appointment #${index + 1}`}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {appointment.appointmentDate || "—"} ·{" "}
-                          {appointment.startTime || "--"} -{" "}
-                          {appointment.endTime || "--"}
+                          {appointment.appointmentDate || "—"}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -526,6 +644,229 @@ function ReceptionistPatientDetail() {
             </Card>
           </div>
         </div>
+
+        {/* Create Transaction Modal */}
+        <Modal
+          isOpen={showCreateTransactionModal}
+          onClose={() => {
+            setShowCreateTransactionModal(false);
+            setCreateTransactionFormData({
+              relatedEntityType: "ServiceRequest",
+              relatedEntityId: "",
+            });
+          }}
+          title="Create Payment Transaction"
+          description={`Create a new payment transaction for ${displayName}`}
+          size="md"
+        >
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Entity Type <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={createTransactionFormData.relatedEntityType}
+                onChange={(e) => {
+                  setCreateTransactionFormData((prev) => ({
+                    ...prev,
+                    relatedEntityType: e.target.value as
+                      | "ServiceRequest"
+                      | "Appointment"
+                      | "CryoStorageContract",
+                    relatedEntityId: "", // Reset when type changes
+                  }));
+                }}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="ServiceRequest">Service Request</option>
+                <option value="Appointment">Appointment</option>
+                <option value="CryoStorageContract">
+                  Cryo Storage Contract
+                </option>
+              </select>
+            </div>
+
+            {createTransactionFormData.relatedEntityType ===
+              "ServiceRequest" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Service Request <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={createTransactionFormData.relatedEntityId}
+                  onChange={(e) =>
+                    setCreateTransactionFormData((prev) => ({
+                      ...prev,
+                      relatedEntityId: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">
+                    {patientServiceRequests?.data?.length
+                      ? "Select a service request"
+                      : "No service requests found"}
+                  </option>
+                  {patientServiceRequests?.data?.map((request) => (
+                    <option key={request.id} value={request.id}>
+                      {request.requestCode || request.id.slice(0, 8)} -{" "}
+                      {request.status || "Pending"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {createTransactionFormData.relatedEntityType === "Appointment" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Appointment <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={createTransactionFormData.relatedEntityId}
+                  onChange={(e) =>
+                    setCreateTransactionFormData((prev) => ({
+                      ...prev,
+                      relatedEntityId: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">
+                    {patientAppointments?.data?.length
+                      ? "Select an appointment"
+                      : "No appointments found"}
+                  </option>
+                  {patientAppointments?.data?.map((appointment) => (
+                    <option key={appointment.id} value={appointment.id}>
+                      {appointment.appointmentDate
+                        ? new Date(appointment.appointmentDate).toLocaleDateString(
+                            "vi-VN"
+                          )
+                        : "No date"}{" "}
+                      - {appointment.status || "Pending"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {createTransactionFormData.relatedEntityType ===
+              "CryoStorageContract" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Cryo Storage Contract <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="text"
+                  value={createTransactionFormData.relatedEntityId}
+                  onChange={(e) =>
+                    setCreateTransactionFormData((prev) => ({
+                      ...prev,
+                      relatedEntityId: e.target.value,
+                    }))
+                  }
+                  placeholder="Enter contract ID (UUID)"
+                />
+                <p className="text-xs text-gray-500">
+                  Note: CryoStorageContract API integration pending. Please
+                  enter the contract ID manually.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-4">
+              <Button
+                onClick={() => createTransactionMutation.mutate()}
+                disabled={
+                  !createTransactionFormData.relatedEntityId ||
+                  createTransactionMutation.isPending
+                }
+                className="flex-1"
+              >
+                {createTransactionMutation.isPending
+                  ? "Creating..."
+                  : "Create Transaction"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCreateTransactionModal(false);
+                  setCreateTransactionFormData({
+                    relatedEntityType: "ServiceRequest",
+                    relatedEntityId: "",
+                  });
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* QR Code Modal for Created Transaction */}
+        <Modal
+          isOpen={showQRCode && Boolean(createdTransactionId)}
+          onClose={() => {
+            setShowQRCode(false);
+            setQrCodeUrl(null);
+            setCreatedTransactionId(null);
+          }}
+          title="Payment QR Code"
+          description="Scan this QR code to complete payment"
+          size="md"
+        >
+          <div className="space-y-4">
+            {qrCodeUrl ? (
+              <div className="space-y-4">
+                <div className="flex justify-center">
+                  <img
+                    src={qrCodeUrl}
+                    alt="Payment QR Code"
+                    className="max-w-full h-auto border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div className="text-center text-sm text-gray-600">
+                  <p>
+                    Scan this QR code with your payment app to complete the
+                    transaction.
+                  </p>
+                  {createdTransactionId && (
+                    <p className="mt-2 text-xs">
+                      Transaction ID: {createdTransactionId.slice(0, 8)}
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() =>
+                      navigate({ to: "/receptionist/transactions" })
+                    }
+                  >
+                    View All Transactions
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setShowQRCode(false);
+                      setQrCodeUrl(null);
+                      setCreatedTransactionId(null);
+                    }}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-gray-500">
+                Unable to generate QR code. Please try again.
+              </div>
+            )}
+          </div>
+        </Modal>
       </DashboardLayout>
     </ProtectedRoute>
   );

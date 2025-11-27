@@ -106,4 +106,32 @@ export class TreatmentApi {
     );
     return response.data;
   }
+
+  /**
+   * Update treatment status
+   * PUT /api/treatment/{id}/status
+   */
+  async updateTreatmentStatus(
+    id: string,
+    status: string
+  ): Promise<BaseResponse<Treatment>> {
+    const response = await this.client.put<BaseResponse<Treatment>>(
+      `/treatment/${id}/status`,
+      { status }
+    );
+    return response.data;
+  }
+
+  /**
+   * Cancel remaining cycles for a treatment
+   * PUT /api/treatment/{treatmentId}/cancel-remaining-cycles
+   */
+  async cancelRemainingCycles(
+    treatmentId: string
+  ): Promise<BaseResponse<Treatment>> {
+    const response = await this.client.put<BaseResponse<Treatment>>(
+      `/treatment/${treatmentId}/cancel-remaining-cycles`
+    );
+    return response.data;
+  }
 }

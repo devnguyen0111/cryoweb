@@ -17,7 +17,12 @@ import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/utils/cn";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
-import type { AppointmentStatus, AppointmentType, Patient } from "@/api/types";
+import type {
+  AppointmentStatus,
+  AppointmentType,
+  Patient,
+  PatientDetailResponse,
+} from "@/api/types";
 import { DoctorAppointmentDetailModal } from "@/features/doctor/appointments/DoctorAppointmentDetailModal";
 import { Modal } from "@/components/ui/modal";
 import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
@@ -90,10 +95,27 @@ function DoctorAppointmentsComponent() {
   });
 
   // Extract unique patient IDs from appointments
+  // Try multiple possible field names (case variations)
   const patientIds = useMemo(() => {
     if (!data?.data) return [];
     const ids = data.data
-      .map((apt) => apt.patientId)
+      .map((apt) => {
+        const raw = apt as unknown as Record<string, any>;
+        return (
+          apt.patientId ??
+          raw.patientID ??
+          raw.PatientId ??
+          raw.PatientID ??
+          raw.patient?.id ??
+          raw.patient?.patientId ??
+          raw.patient?.accountId ??
+          raw.patientAccountId ??
+          raw.patientAccountID ??
+          raw.PatientAccountId ??
+          raw.PatientAccountID ??
+          null
+        );
+      })
       .filter((id): id is string => Boolean(id));
     // Remove duplicates
     return Array.from(new Set(ids));
@@ -103,7 +125,7 @@ function DoctorAppointmentsComponent() {
   const patientQueries = useQueries({
     queries: patientIds.map((patientId) => ({
       queryKey: ["doctor", "patient", patientId, "appointment-list"],
-      queryFn: async (): Promise<Patient | null> => {
+      queryFn: async (): Promise<Patient | PatientDetailResponse | null> => {
         try {
           const response = await api.patient.getPatientById(patientId);
           return response.data ?? null;
@@ -131,7 +153,7 @@ function DoctorAppointmentsComponent() {
 
   // Create a map of patientId -> Patient for quick lookup
   const patientsMap = useMemo(() => {
-    const map = new Map<string, Patient>();
+    const map = new Map<string, Patient | PatientDetailResponse>();
     patientQueries.forEach((query, index) => {
       if (query.data && patientIds[index]) {
         map.set(patientIds[index], query.data);
@@ -221,6 +243,12 @@ function DoctorAppointmentsComponent() {
     if (normalized === "consultation") return "Consultation";
     // Return capitalized version for any other value
     return type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+  };
+
+  // Helper function to get last 4 characters of an ID
+  const getLast4Chars = (id: string | null | undefined): string => {
+    if (!id) return "N/A";
+    return id.length >= 4 ? id.slice(-4) : id;
   };
 
   const appointmentTypes = [
@@ -375,14 +403,33 @@ function DoctorAppointmentsComponent() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {data.data.map((appointment) => {
-                        const patient = appointment.patientId
-                          ? patientsMap.get(appointment.patientId)
+                        // Get patientId from multiple possible sources
+                        const rawAppointment = appointment as unknown as Record<
+                          string,
+                          any
+                        >;
+                        const appointmentPatientId =
+                          appointment.patientId ??
+                          rawAppointment.patientID ??
+                          rawAppointment.PatientId ??
+                          rawAppointment.PatientID ??
+                          rawAppointment.patient?.id ??
+                          rawAppointment.patient?.patientId ??
+                          rawAppointment.patient?.accountId ??
+                          rawAppointment.patientAccountId ??
+                          rawAppointment.patientAccountID ??
+                          rawAppointment.PatientAccountId ??
+                          rawAppointment.PatientAccountID ??
+                          null;
+
+                        const patient = appointmentPatientId
+                          ? patientsMap.get(appointmentPatientId)
                           : null;
                         const patientName =
                           patient?.fullName || patient?.patientCode || null;
-                        const patientIndex = appointment.patientId
+                        const patientIndex = appointmentPatientId
                           ? patientIds.findIndex(
-                              (id) => id === appointment.patientId
+                              (id) => id === appointmentPatientId
                             )
                           : -1;
                         const isPatientLoading =
@@ -403,11 +450,12 @@ function DoctorAppointmentsComponent() {
                                       <>Code: {patient.patientCode}</>
                                     )}
                                     {patient.patientCode &&
-                                      appointment.patientId &&
+                                      appointmentPatientId &&
                                       " • "}
-                                    {appointment.patientId && (
+                                    {appointmentPatientId && (
                                       <>
-                                        ID: {appointment.patientId.slice(0, 8)}
+                                        ID:{" "}
+                                        {getLast4Chars(appointmentPatientId)}
                                       </>
                                     )}
                                   </p>
@@ -418,9 +466,10 @@ function DoctorAppointmentsComponent() {
                                     Loading...
                                   </div>
                                   <p className="text-xs text-gray-500">
-                                    {appointment.patientId && (
+                                    {appointmentPatientId && (
                                       <>
-                                        ID: {appointment.patientId.slice(0, 8)}
+                                        ID:{" "}
+                                        {getLast4Chars(appointmentPatientId)}
                                       </>
                                     )}
                                   </p>
@@ -428,19 +477,26 @@ function DoctorAppointmentsComponent() {
                               ) : (
                                 <>
                                   {appointment.appointmentCode ||
-                                    `Appt ${appointment.id?.slice(0, 8) || "N/A"}`}
+                                    `Appt ${getLast4Chars(appointment.id)}`}
                                   <p className="text-xs text-gray-500">
                                     Patient ID:{" "}
-                                    {appointment.patientId
-                                      ? appointment.patientId.slice(0, 8)
-                                      : "N/A"}
+                                    {appointmentPatientId
+                                      ? getLast4Chars(appointmentPatientId)
+                                      : patient?.id
+                                        ? getLast4Chars(patient.id)
+                                        : patient?.patientCode
+                                          ? patient.patientCode
+                                          : "N/A"}
                                   </p>
                                 </>
                               )}
                             </td>
                             <td className="px-4 py-3 text-gray-600">
                               {formatAppointmentType(
-                                appointment.appointmentType
+                                appointment.appointmentType ??
+                                  (appointment as any).type ??
+                                  (appointment as any).typeName ??
+                                  null
                               )}
                             </td>
                             <td className="px-4 py-3 text-gray-600">
@@ -473,7 +529,7 @@ function DoctorAppointmentsComponent() {
                                   onClick={() => {
                                     setDetailModalAppointmentId(appointment.id);
                                     setDetailModalPatientId(
-                                      appointment.patientId || null
+                                      appointmentPatientId || null
                                     );
                                   }}
                                 >
@@ -486,7 +542,8 @@ function DoctorAppointmentsComponent() {
                                       to: "/doctor/encounters/create",
                                       search: {
                                         appointmentId: appointment.id,
-                                        patientId: appointment.patientId,
+                                        patientId:
+                                          appointmentPatientId || undefined,
                                       },
                                     })
                                   }

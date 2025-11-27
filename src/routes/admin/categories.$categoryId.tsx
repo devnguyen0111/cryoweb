@@ -56,12 +56,12 @@ function AdminCategoryDetailComponent() {
   const category = data?.data;
 
   const { data: servicesData } = useQuery({
-    queryKey: ["services", { CategoryId: categoryId }],
+    queryKey: ["services", { categoryId: categoryId }],
     queryFn: () =>
       api.service.getServices({
-        CategoryId: categoryId,
-        Page: 1,
-        Size: 50,
+        categoryId: categoryId,
+        pageNumber: 1,
+        pageSize: 50,
       }),
     enabled: !!category,
   });
@@ -117,32 +117,31 @@ function AdminCategoryDetailComponent() {
   const allowEdit = isCreate || search.mode === "edit";
 
   const priceHistory = useMemo(() => {
-    return (
-      category?.priceHistory ?? [
-        {
-          id: "price-1",
-          price: 12000000,
-          effectiveFrom: "2025-01-01",
-          updatedBy: "Admin",
-        },
-        {
-          id: "price-2",
-          price: 11500000,
-          effectiveFrom: "2024-03-01",
-          updatedBy: "Admin",
-        },
-      ]
-    );
-  }, [category?.priceHistory]);
+    // Price history is not available in ServiceCategory type
+    return [
+      {
+        id: "price-1",
+        price: 12000000,
+        effectiveFrom: "2025-01-01",
+        updatedBy: "Admin",
+      },
+      {
+        id: "price-2",
+        price: 11500000,
+        effectiveFrom: "2024-03-01",
+        updatedBy: "Admin",
+      },
+    ];
+  }, []);
 
   useEffect(() => {
     if (category) {
       reset(
         {
-          name: category.name ?? "",
+          name: category.categoryName ?? "",
           description: category.description ?? "",
-          categoryType: category.categoryType ?? "",
-          status: category.status ?? "active",
+          categoryType: "",
+          status: category.isActive ? "active" : "inactive",
         },
         { keepDefaultValues: true }
       );
@@ -203,7 +202,7 @@ function AdminCategoryDetailComponent() {
         <div className="space-y-8">
           <AdminPageHeader
             title={
-              category?.name ?? (isCreate ? "Create category" : "Category overview")
+              category?.categoryName ?? (isCreate ? "Create category" : "Category overview")
             }
             description={
               isCreate
@@ -213,7 +212,7 @@ function AdminCategoryDetailComponent() {
             breadcrumbs={[
               { label: "Dashboard", href: "/admin/dashboard" },
               { label: "Service categories", href: "/admin/categories" },
-              { label: category?.name ?? (isCreate ? "Create" : "Details") },
+              { label: category?.categoryName ?? (isCreate ? "Create" : "Details") },
             ]}
             actions={
               !isCreate && category ? (
@@ -378,7 +377,7 @@ function AdminCategoryDetailComponent() {
                   <CardTitle>Price history</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  {priceHistory.map((entry) => (
+                  {priceHistory.map((entry: { id: string; price: number; effectiveFrom: string; updatedBy: string }) => (
                     <div key={entry.id} className="rounded-lg border bg-muted/20 p-3">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-foreground">

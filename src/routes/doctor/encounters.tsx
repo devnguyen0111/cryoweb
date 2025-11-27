@@ -6,9 +6,13 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Treatment } from "@/api/types";
+import { CreateEncounterForm } from "@/features/doctor/encounters/CreateEncounterForm";
+import { DiagnosisForm } from "@/features/doctor/encounters/DiagnosisForm";
+import { isAxiosError } from "axios";
+import { StructuredNote } from "@/components/StructuredNote";
 
 export const Route = createFileRoute("/doctor/encounters")({
   component: DoctorEncountersComponent,
@@ -21,14 +25,17 @@ function DoctorEncountersComponent() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [diagnosisModalTreatmentId, setDiagnosisModalTreatmentId] = useState<
+    string | null
+  >(null);
 
-  // Fetch encounters (treatments with type "Other" or all types for this doctor)
-  const { data: encountersData, isLoading } = useQuery({
-    queryKey: ["doctor-encounters", user?.id, statusFilter, searchTerm],
+  // Fetch all treatments for this doctor
+  const { data: treatmentsData, isLoading } = useQuery({
+    queryKey: ["doctor-treatments", user?.id, statusFilter, searchTerm],
     queryFn: async () => {
       const response = await api.treatment.getTreatments({
         doctorId: user?.id,
-        treatmentType: "Other", // Encounters are stored as "Other" type
         status: statusFilter !== "all" ? (statusFilter as any) : undefined,
         pageNumber: 1,
         pageSize: 50,
@@ -38,21 +45,22 @@ function DoctorEncountersComponent() {
     enabled: !!user?.id,
   });
 
-  const encounters = encountersData?.data || [];
-  const filteredEncounters = useMemo(() => {
-    if (!searchTerm) return encounters;
+  const treatments = treatmentsData?.data || [];
+  const filteredTreatments = useMemo(() => {
+    if (!searchTerm) return treatments;
     const term = searchTerm.toLowerCase();
-    return encounters.filter(
-      (encounter) =>
-        encounter.treatmentCode?.toLowerCase().includes(term) ||
-        encounter.notes?.toLowerCase().includes(term)
+    return treatments.filter(
+      (treatment) =>
+        treatment.treatmentCode?.toLowerCase().includes(term) ||
+        treatment.notes?.toLowerCase().includes(term) ||
+        treatment.treatmentType?.toLowerCase().includes(term)
     );
-  }, [encounters, searchTerm]);
+  }, [treatments, searchTerm]);
 
   const quickGuide = useMemo(
     () => [
       {
-        title: "Step 1: Start the encounter",
+        title: "Step 1: Start the treatment",
         description:
           "Capture visit reasons, medical history, and vital signs. The system automatically links to the current appointment.",
       },
@@ -62,7 +70,7 @@ function DoctorEncountersComponent() {
           "After saving, continue to the diagnosis screen to add assessments and ancillary orders.",
       },
       {
-        title: "Step 3: Transition to treatment",
+        title: "Step 3: Manage treatment cycles",
         description:
           "From diagnosis you can issue prescriptions, create IUI/IVF cycles, or hand off data to the cryobank.",
       },
@@ -85,6 +93,211 @@ function DoctorEncountersComponent() {
     }
   };
 
+  // Component to display signature status for IUI/IVF treatments
+  function SignatureStatus({
+    treatmentId,
+    treatmentType,
+  }: {
+    treatmentId: string;
+    treatmentType?: string;
+  }) {
+    const { data: agreement } = useQuery({
+      queryKey: ["agreement", treatmentId],
+      queryFn: async () => {
+        if (treatmentType !== "IUI" && treatmentType !== "IVF") {
+          return null;
+        }
+        try {
+          const response = await api.agreement.getAgreements({
+            TreatmentId: treatmentId,
+            Size: 1,
+          });
+          if (response.data && response.data.length > 0) {
+            return response.data[0];
+          }
+          return null;
+        } catch (error) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            return null;
+          }
+          return null;
+        }
+      },
+      enabled:
+        !!treatmentId && (treatmentType === "IUI" || treatmentType === "IVF"),
+      retry: false,
+    });
+
+    if (treatmentType !== "IUI" && treatmentType !== "IVF") {
+      return null;
+    }
+
+    if (!agreement) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700">
+          <svg
+            className="h-3 w-3"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          Signature Pending
+        </span>
+      );
+    }
+
+    // Use new field names (signedByDoctor/signedByPatient) with fallback to legacy fields
+    const doctorSigned =
+      agreement.signedByDoctor ?? agreement.doctorSigned ?? false;
+    const patientSigned =
+      agreement.signedByPatient ?? agreement.patientSigned ?? false;
+    const bothSigned = doctorSigned && patientSigned;
+
+    if (bothSigned) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium bg-green-100 text-green-700">
+          <svg
+            className="h-3 w-3"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+          Fully Signed
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700">
+        <svg
+          className="h-3 w-3"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+        {doctorSigned ? "Patient Pending" : "Signatures Pending"}
+      </span>
+    );
+  }
+
+  // Component to display treatment notes in a readable format
+  function TreatmentNotesDisplay({
+    notes,
+    treatmentId,
+    treatmentType,
+  }: {
+    notes: string;
+    treatmentId: string;
+    treatmentType?: string;
+  }) {
+    // Fetch agreement to sync signature status
+    const { data: agreement } = useQuery({
+      queryKey: ["agreement", treatmentId],
+      queryFn: async () => {
+        if (treatmentType !== "IUI" && treatmentType !== "IVF") {
+          return null;
+        }
+        try {
+          const response = await api.agreement.getAgreements({
+            TreatmentId: treatmentId,
+            Size: 1,
+          });
+          if (response.data && response.data.length > 0) {
+            return response.data[0];
+          }
+          return null;
+        } catch (error) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            return null;
+          }
+          return null;
+        }
+      },
+      enabled:
+        !!treatmentId && (treatmentType === "IUI" || treatmentType === "IVF"),
+      retry: false,
+    });
+
+    return (
+      <StructuredNote
+        note={notes}
+        className="text-sm text-gray-700"
+        agreement={agreement || undefined}
+      />
+    );
+  }
+
+  // Component to display patient info
+  function PatientInfo({ patientId }: { patientId?: string }) {
+    const { data: patientDetails } = useQuery({
+      queryKey: ["patient-details", patientId],
+      queryFn: async () => {
+        if (!patientId) return null;
+        try {
+          const response = await api.patient.getPatientDetails(patientId);
+          return response.data;
+        } catch {
+          return null;
+        }
+      },
+      enabled: !!patientId,
+    });
+
+    const { data: userDetails } = useQuery({
+      queryKey: ["user-details", patientId],
+      queryFn: async () => {
+        if (!patientId) return null;
+        try {
+          const response = await api.user.getUserDetails(patientId);
+          return response.data;
+        } catch {
+          return null;
+        }
+      },
+      enabled: !!patientId,
+    });
+
+    if (!patientId) return <span className="text-gray-500">N/A</span>;
+
+    const patientName =
+      patientDetails?.accountInfo?.username ||
+      userDetails?.fullName ||
+      userDetails?.userName ||
+      "Unknown";
+    const patientCode = patientDetails?.patientCode;
+    // Use patientCode if available, otherwise use short ID (last 4 chars)
+    const shortId = patientCode || patientId.slice(-4);
+
+    return (
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-gray-500 font-mono">{shortId}</span>
+        <span className="text-gray-400">•</span>
+        <span className="font-medium text-gray-900">{patientName}</span>
+      </div>
+    );
+  }
+
   return (
     <ProtectedRoute allowedRoles={["Doctor"]}>
       <DashboardLayout>
@@ -93,22 +306,15 @@ function DoctorEncountersComponent() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold">
-                  Encounters &amp; clinical visits
+                  Treatments &amp; clinical visits
                 </h1>
                 <p className="text-gray-600">
-                  Manage outpatient visits, update patient records, and move into
-                  the diagnosis workflow.
+                  Manage patient treatments, update records, and move into the
+                  diagnosis workflow.
                 </p>
               </div>
-              <Button
-                onClick={() =>
-                  navigate({
-                    to: "/doctor/encounters/create",
-                    search,
-                  })
-                }
-              >
-                + Create encounter
+              <Button onClick={() => setIsCreateModalOpen(true)}>
+                + Create treatment
               </Button>
             </div>
           </section>
@@ -118,15 +324,19 @@ function DoctorEncountersComponent() {
             <CardContent className="pt-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Search encounters</label>
+                  <label className="text-sm font-medium">
+                    Search treatments
+                  </label>
                   <Input
-                    placeholder="Search by code or notes..."
+                    placeholder="Search by code, type, or notes..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Filter by status</label>
+                  <label className="text-sm font-medium">
+                    Filter by status
+                  </label>
                   <select
                     className="w-full rounded-md border px-3 py-2 text-sm"
                     value={statusFilter}
@@ -143,71 +353,78 @@ function DoctorEncountersComponent() {
             </CardContent>
           </Card>
 
-          {/* Encounters List */}
+          {/* Treatments List */}
           <Card>
             <CardHeader>
               <CardTitle>
-                Recent encounters ({filteredEncounters.length})
+                Recent treatments ({filteredTreatments.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <div className="py-8 text-center text-gray-500">
-                  Loading encounters...
+                  Loading treatments...
                 </div>
-              ) : filteredEncounters.length === 0 ? (
+              ) : filteredTreatments.length === 0 ? (
                 <div className="py-8 text-center text-gray-500">
-                  <p className="mb-4">No encounters found.</p>
+                  <p className="mb-4">No treatments found.</p>
                   <Button
                     variant="outline"
-                    onClick={() =>
-                      navigate({
-                        to: "/doctor/encounters/create",
-                        search,
-                      })
-                    }
+                    onClick={() => setIsCreateModalOpen(true)}
                   >
-                    Create your first encounter
+                    Create your first treatment
                   </Button>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {filteredEncounters.map((encounter) => (
+                  {filteredTreatments.map((treatment) => (
                     <div
-                      key={encounter.id}
+                      key={treatment.id}
                       className="rounded-lg border p-4 hover:bg-gray-50 transition"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
                             <h3 className="font-semibold text-lg">
-                              {encounter.treatmentCode || `Encounter ${encounter.id.slice(0, 8)}`}
+                              {treatment.treatmentCode ||
+                                `Treatment ${treatment.id.slice(0, 8)}`}
                             </h3>
                             <span
                               className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(
-                                encounter.status
+                                treatment.status
                               )}`}
                             >
-                              {encounter.status}
+                              {treatment.status}
                             </span>
+                            <span className="rounded-full px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700">
+                              {treatment.treatmentType}
+                            </span>
+                            <SignatureStatus
+                              treatmentId={treatment.id}
+                              treatmentType={treatment.treatmentType}
+                            />
                           </div>
                           <div className="grid gap-2 text-sm text-gray-600 md:grid-cols-2">
                             <div>
                               <span className="font-medium">Date: </span>
-                              {encounter.startDate
-                                ? new Date(encounter.startDate).toLocaleDateString("vi-VN")
+                              {treatment.startDate
+                                ? new Date(
+                                    treatment.startDate
+                                  ).toLocaleDateString("vi-VN")
                                 : "N/A"}
                             </div>
                             <div>
-                              <span className="font-medium">Patient ID: </span>
-                              {encounter.patientId || "N/A"}
+                              <span className="font-medium">Patient: </span>
+                              <PatientInfo patientId={treatment.patientId} />
                             </div>
-                            {encounter.notes && (
+                            {treatment.notes && (
                               <div className="md:col-span-2">
                                 <span className="font-medium">Notes: </span>
-                                <span className="line-clamp-2">
-                                  {encounter.notes}
-                                </span>
+                                <TreatmentNotesDisplay
+                                  notes={treatment.notes}
+                                  treatmentId={treatment.id}
+                                  treatmentType={treatment.treatmentType}
+                                />
                               </div>
                             )}
                           </div>
@@ -219,24 +436,17 @@ function DoctorEncountersComponent() {
                             onClick={() =>
                               navigate({
                                 to: "/doctor/encounters/$encounterId",
-                                params: { encounterId: encounter.id },
+                                params: { encounterId: treatment.id },
                               })
                             }
                           >
                             View
                           </Button>
-                          {encounter.status === "InProgress" && (
+                          {treatment.status === "InProgress" && (
                             <Button
                               size="sm"
                               onClick={() =>
-                                navigate({
-                                  to: "/doctor/encounters/$encounterId/diagnosis",
-                                  params: { encounterId: encounter.id },
-                                  search: {
-                                    patientId: encounter.patientId,
-                                    treatmentId: encounter.id,
-                                  },
-                                })
+                                setDiagnosisModalTreatmentId(treatment.id)
                               }
                             >
                               Diagnose
@@ -264,6 +474,48 @@ function DoctorEncountersComponent() {
             ))}
           </section>
         </div>
+
+        <Modal
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          title="Create Treatment"
+          description="Start by creating a treatment plan for IUI/IVF treatments, or create an encounter for consultations."
+          size="xl"
+        >
+          <CreateEncounterForm
+            layout="modal"
+            defaultPatientId={search.patientId}
+            startWithPlan={true}
+            onClose={() => setIsCreateModalOpen(false)}
+            onCreated={() => {
+              setIsCreateModalOpen(false);
+            }}
+          />
+        </Modal>
+
+        <Modal
+          isOpen={Boolean(diagnosisModalTreatmentId)}
+          onClose={() => setDiagnosisModalTreatmentId(null)}
+          title="Diagnosis & Treatment Recommendation"
+          description="Evaluate patient factors and recommend appropriate treatment (IVF or IUI)."
+          size="xl"
+        >
+          {diagnosisModalTreatmentId && (
+            <DiagnosisForm
+              treatmentId={diagnosisModalTreatmentId}
+              patientId={
+                filteredTreatments.find(
+                  (t) => t.id === diagnosisModalTreatmentId
+                )?.patientId
+              }
+              layout="modal"
+              onClose={() => setDiagnosisModalTreatmentId(null)}
+              onSaved={() => {
+                setDiagnosisModalTreatmentId(null);
+              }}
+            />
+          )}
+        </Modal>
       </DashboardLayout>
     </ProtectedRoute>
   );

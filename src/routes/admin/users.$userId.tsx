@@ -1,5 +1,9 @@
 import { useEffect, useMemo } from "react";
-import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  useNavigate,
+  useSearch,
+} from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -7,7 +11,13 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { api } from "@/api/client";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,18 +41,21 @@ export const Route = createFileRoute("/admin/users/$userId")({
 function AdminUserDetailComponent() {
   const { userId } = Route.useParams();
   const navigate = useNavigate();
-  const search = useSearch({ from: "/admin/users/$userId" }) as { mode?: string };
+  const search = useSearch({ from: "/admin/users/$userId" }) as {
+    mode?: string;
+  };
   const isCreate = userId === "new";
   const queryClient = useQueryClient();
-  const { register, handleSubmit, reset, watch, setValue } = useForm<UserDetailForm>({
-    defaultValues: {
-      fullName: "",
-      email: "",
-      roleName: "",
-      phone: "",
-      status: true,
-    },
-  });
+  const { register, handleSubmit, reset, watch, setValue } =
+    useForm<UserDetailForm>({
+      defaultValues: {
+        fullName: "",
+        email: "",
+        roleName: "",
+        phone: "",
+        status: true,
+      },
+    });
 
   useEffect(() => {
     register("status");
@@ -72,16 +85,16 @@ function AdminUserDetailComponent() {
   const createMutation = useMutation({
     mutationFn: (payload: Partial<UserDetailForm>) =>
       api.user.createUser({
-        fullName: payload.fullName,
-        email: payload.email,
-        roleName: payload.roleName,
-        phone: payload.phone,
-        status: payload.status,
+        fullName: payload.fullName || "",
+        email: payload.email || "",
+        password: "TempPassword123!", // TODO: Generate secure password or prompt user
+        phoneNumber: payload.phone,
+        role: (payload.roleName as any) || "Patient", // TODO: Map roleName to UserRole
       }),
     onSuccess: (response) => {
       toast.success("User created successfully");
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      const newUserId = response.data?.id;
+      const newUserId = (response as any).data?.id;
       if (newUserId) {
         navigate({
           to: "/admin/users/$userId",
@@ -211,11 +224,16 @@ function AdminUserDetailComponent() {
       <DashboardLayout>
         <div className="space-y-8">
           <AdminPageHeader
-            title={user?.fullName ?? user?.email ?? (isCreate ? "Create user" : "User")}
-            description=
-              {isCreate
+            title={
+              user?.fullName ??
+              user?.email ??
+              (isCreate ? "Create user" : "User")
+            }
+            description={
+              isCreate
                 ? "Provision a new account and assign role-level permissions."
-                : "Review and update account attributes, permissions, and audit trail."}
+                : "Review and update account attributes, permissions, and audit trail."
+            }
             breadcrumbs={[
               { label: "Dashboard", href: "/admin/dashboard" },
               { label: "Users", href: "/admin/users" },
@@ -268,7 +286,11 @@ function AdminUserDetailComponent() {
                       <Label htmlFor="fullName">Full name</Label>
                       <Input
                         id="fullName"
-                        disabled={!allowEdit || updateMutation.isPending || createMutation.isPending}
+                        disabled={
+                          !allowEdit ||
+                          updateMutation.isPending ||
+                          createMutation.isPending
+                        }
                         {...register("fullName")}
                       />
                     </div>
@@ -277,7 +299,11 @@ function AdminUserDetailComponent() {
                       <Input
                         id="email"
                         type="email"
-                        disabled={!allowEdit || updateMutation.isPending || createMutation.isPending}
+                        disabled={
+                          !allowEdit ||
+                          updateMutation.isPending ||
+                          createMutation.isPending
+                        }
                         {...register("email")}
                       />
                     </div>
@@ -285,7 +311,11 @@ function AdminUserDetailComponent() {
                       <Label htmlFor="roleName">Role</Label>
                       <Input
                         id="roleName"
-                        disabled={!allowEdit || updateMutation.isPending || createMutation.isPending}
+                        disabled={
+                          !allowEdit ||
+                          updateMutation.isPending ||
+                          createMutation.isPending
+                        }
                         {...register("roleName")}
                       />
                     </div>
@@ -293,7 +323,11 @@ function AdminUserDetailComponent() {
                       <Label htmlFor="phone">Phone</Label>
                       <Input
                         id="phone"
-                        disabled={!allowEdit || updateMutation.isPending || createMutation.isPending}
+                        disabled={
+                          !allowEdit ||
+                          updateMutation.isPending ||
+                          createMutation.isPending
+                        }
                         {...register("phone")}
                       />
                     </div>
@@ -306,7 +340,13 @@ function AdminUserDetailComponent() {
                         label={watch("status") ? "Active" : "Inactive"}
                       />
                       <Badge variant="outline">
-                        Role: {capitalize(watch("roleName") || user?.roleName || user?.role || "Unknown")}
+                        Role:{" "}
+                        {capitalize(
+                          watch("roleName") ||
+                            user?.roleName ||
+                            user?.role ||
+                            "Unknown"
+                        )}
                       </Badge>
                     </div>
                     {allowEdit ? (
@@ -316,7 +356,10 @@ function AdminUserDetailComponent() {
                             name="status"
                             type="radio"
                             className="h-4 w-4"
-                            disabled={updateMutation.isPending || createMutation.isPending}
+                            disabled={
+                              updateMutation.isPending ||
+                              createMutation.isPending
+                            }
                             checked={watch("status") === true}
                             onChange={() => setValue("status", true)}
                           />
@@ -327,7 +370,10 @@ function AdminUserDetailComponent() {
                             name="status"
                             type="radio"
                             className="h-4 w-4"
-                            disabled={updateMutation.isPending || createMutation.isPending}
+                            disabled={
+                              updateMutation.isPending ||
+                              createMutation.isPending
+                            }
                             checked={watch("status") === false}
                             onChange={() => setValue("status", false)}
                           />
@@ -353,7 +399,9 @@ function AdminUserDetailComponent() {
                     </Button>
                     <Button
                       type="submit"
-                      disabled={updateMutation.isPending || createMutation.isPending}
+                      disabled={
+                        updateMutation.isPending || createMutation.isPending
+                      }
                     >
                       Save changes
                     </Button>
@@ -377,19 +425,27 @@ function AdminUserDetailComponent() {
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Created</span>
                         <span className="font-medium">
-                          {user.createdAt ? new Date(user.createdAt).toLocaleString() : "—"}
+                          {user.createdAt
+                            ? new Date(user.createdAt).toLocaleString()
+                            : "—"}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Updated</span>
                         <span className="font-medium">
-                          {user.updatedAt ? new Date(user.updatedAt).toLocaleString() : "—"}
+                          {user.updatedAt
+                            ? new Date(user.updatedAt).toLocaleString()
+                            : "—"}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Email verified</span>
+                        <span className="text-muted-foreground">
+                          Email verified
+                        </span>
                         <span className="font-medium">
-                          {user.emailVerified || user.isEmailVerified ? "Yes" : "No"}
+                          {user.emailVerified || user.isEmailVerified
+                            ? "Yes"
+                            : "No"}
                         </span>
                       </div>
                     </CardContent>
@@ -401,8 +457,13 @@ function AdminUserDetailComponent() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       {auditTimeline.map((item) => (
-                        <div key={item.id} className="rounded-lg border bg-muted/20 p-3 text-sm">
-                          <div className="font-medium text-foreground">{item.action}</div>
+                        <div
+                          key={item.id}
+                          className="rounded-lg border bg-muted/20 p-3 text-sm"
+                        >
+                          <div className="font-medium text-foreground">
+                            {item.action}
+                          </div>
                           <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
                             <span>{item.performedBy}</span>
                             <span>{item.timestamp}</span>
@@ -419,13 +480,17 @@ function AdminUserDetailComponent() {
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm text-muted-foreground">
                     <p>
-                      After saving the new user, an audit entry is logged and invitation email is
-                      sent automatically.
+                      After saving the new user, an audit entry is logged and
+                      invitation email is sent automatically.
                     </p>
                     <ul className="list-disc space-y-1 pl-4">
                       <li>Assign appropriate role and verify email.</li>
-                      <li>System will prompt for password setup on first login.</li>
-                      <li>Revisit audit logs to monitor onboarding progress.</li>
+                      <li>
+                        System will prompt for password setup on first login.
+                      </li>
+                      <li>
+                        Revisit audit logs to monitor onboarding progress.
+                      </li>
                     </ul>
                   </CardContent>
                 </Card>
@@ -437,4 +502,3 @@ function AdminUserDetailComponent() {
     </ProtectedRoute>
   );
 }
-

@@ -106,7 +106,8 @@ export function AppointmentDetailForm({
     queryKey: ["receptionist", "appointments", "detail", appointmentId],
     queryFn: async () => {
       try {
-        const detail = await api.appointment.getAppointmentDetails(appointmentId);
+        const detail =
+          await api.appointment.getAppointmentDetails(appointmentId);
         return detail.data;
       } catch (error) {
         throw error;
@@ -122,7 +123,13 @@ export function AppointmentDetailForm({
       return (initialAppointment ?? null) as Appointment | null;
     }
     if (!initialAppointment) {
-      return appointmentResponse as Appointment;
+      // Convert AppointmentExtendedDetailResponse to Appointment format
+      const extended = appointmentResponse as any;
+      return {
+        ...extended,
+        appointmentCode: extended.appointmentCode || extended.id,
+        appointmentType: extended.type || extended.appointmentType,
+      } as Appointment;
     }
     const merged: Record<string, any> = { ...(initialAppointment as any) };
     Object.entries(appointmentResponse as Record<string, any>).forEach(

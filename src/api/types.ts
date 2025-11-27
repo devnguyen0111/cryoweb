@@ -150,6 +150,11 @@ export interface User {
 export interface UserDetailResponse extends User {
   patient?: Patient;
   doctor?: Doctor;
+  gender?: boolean; // true for Male, false for Female
+  dob?: string; // Date of birth
+  totalAppointments?: number | null;
+  totalPayments?: number | null;
+  totalFeedbacks?: number | null;
 }
 
 export interface CreateUserRequest {
@@ -382,9 +387,13 @@ export interface DoctorDetail extends DoctorDetailResponse {}
 
 export type AppointmentStatus =
   | "Pending"
+  | "Scheduled"
   | "Confirmed"
+  | "CheckedIn"
+  | "InProgress"
   | "Completed"
-  | "Cancelled";
+  | "Cancelled"
+  | "NoShow";
 export type AppointmentType = "Consultation" | "Treatment" | "FollowUp";
 
 export interface Appointment {
@@ -513,6 +522,21 @@ export interface AppointmentListQuery extends GetAppointmentsRequest {
   treatmentCycleId?: string;
 }
 
+export interface AppointmentHistoryQuery {
+  TreatmentCycleId?: string;
+  DoctorId?: string;
+  SlotId?: string;
+  Type?: AppointmentType;
+  Status?: AppointmentStatus;
+  AppointmentDateFrom?: string;
+  AppointmentDateTo?: string;
+  SearchTerm?: string;
+  Page?: number;
+  Size?: number;
+  Sort?: string;
+  Order?: "asc" | "desc";
+}
+
 // ============================================================================
 // Appointment Doctor Types
 // ============================================================================
@@ -547,6 +571,24 @@ export interface GetAppointmentDoctorsRequest {
 
 // Legacy compatibility
 export interface AppointmentDoctorAssignment extends AppointmentDoctor {}
+export interface AppointmentDoctorListQuery
+  extends GetAppointmentDoctorsRequest {
+  page?: number;
+  Page?: number;
+  size?: number;
+  Size?: number;
+  sort?: string;
+  Sort?: string;
+  order?: "asc" | "desc";
+  Order?: "asc" | "desc";
+  AppointmentId?: string;
+  DoctorId?: string;
+  Role?: string;
+  SearchTerm?: string;
+  FromDate?: string;
+  ToDate?: string;
+  Status?: string;
+}
 
 // ============================================================================
 // Doctor Schedule Types
@@ -653,7 +695,7 @@ export interface SlotListQuery extends GetSlotsRequest {}
 // Treatment Types
 // ============================================================================
 
-export type TreatmentType = "IVF" | "IUI" | "Other";
+export type TreatmentType = "IVF" | "IUI" | "Other" | "Consultation";
 export type TreatmentStatus =
   | "Planning"
   | "InProgress"
@@ -665,11 +707,16 @@ export interface Treatment {
   treatmentCode: string;
   patientId: string;
   doctorId: string; // Doctor managing this treatment (ERD: 1 Doctor → 0..* Treatment)
+  treatmentName?: string;
   treatmentType: TreatmentType;
   status: TreatmentStatus;
   startDate?: string; // ISO date
   endDate?: string; // ISO date
+  diagnosis?: string;
+  goals?: string;
   notes?: string;
+  estimatedCost?: number;
+  actualCost?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -700,27 +747,121 @@ export interface GetTreatmentsRequest {
 export interface TreatmentListQuery extends GetTreatmentsRequest {}
 
 // ============================================================================
-// Treatment Cycle Types
+// Treatment Cycle Types - Timeline Based System
 // ============================================================================
 
+// IVF Timeline Steps (7 steps)
+export type IVFStep =
+  | "step0_pre_cycle_prep" // Pre-Cycle Preparation (IVF_PreCyclePreparation)
+  | "step1_stimulation" // Controlled Ovarian Stimulation (IVF_StimulationStart)
+  | "step2_monitoring" // Mid-Stimulation Monitoring (IVF_Monitoring)
+  | "step3_trigger" // Ovulation Trigger (IVF_Trigger)
+  | "step4_opu" // Oocyte Pick-Up (OPU) (IVF_OPU)
+  | "step5_fertilization" // Fertilization/Lab (IVF_Fertilization)
+  | "step6_embryo_culture" // Embryo Culture (IVF_EmbryoCulture)
+  | "step7_embryo_transfer"; // Embryo Transfer (IVF_EmbryoTransfer)
+
+// IUI Timeline Steps (7 steps matching backend TreatmentStepType enum)
+export type IUIStep =
+  | "step0_pre_cycle_prep" // Pre-Cycle Preparation (IUI_PreCyclePreparation)
+  | "step1_day2_3_assessment" // Day 2-3 Assessment (IUI_Day2_3_Assessment)
+  | "step2_follicle_monitoring" // Day 7-10 Follicle Monitoring (IUI_Day7_10_FollicleMonitoring)
+  | "step3_trigger" // Day 10-12 Trigger (IUI_Day10_12_Trigger)
+  | "step4_iui_procedure" // IUI Procedure (IUI_Procedure)
+  | "step5_post_iui" // Post-IUI Monitoring (IUI_PostIUI)
+  | "step6_beta_hcg"; // Beta HCG Test (IUI_BetaHCGTest)
+
 export type TreatmentCycleStatus =
-  | "Planning"
+  | "Planning" // Not started (legacy)
+  | "Planned" // Planned (1)
+  | "InProgress" // In treatment (2)
+  | "Completed" // Completed (3)
+  | "Cancelled" // Cancelled (4)
+  | "OnHold" // On hold (5)
+  | "Failed" // Failed (6)
+  | "Scheduled" // Scheduled (7)
+  | 1 // Planned
+  | 2 // InProgress
+  | 3 // Completed
+  | 4 // Cancelled
+  | 5 // OnHold
+  | 6 // Failed
+  | 7; // Scheduled
+
+// Helper function to normalize status (convert number to string)
+export function normalizeTreatmentCycleStatus(
+  status: TreatmentCycleStatus | number | string | undefined | null
+):
+  | "Planned"
   | "InProgress"
   | "Completed"
-  | "Cancelled";
+  | "Cancelled"
+  | "OnHold"
+  | "Failed"
+  | "Scheduled"
+  | "Planning"
+  | null {
+  if (status === null || status === undefined) return null;
+
+  // If already a string, return as is (but ensure it's a valid status)
+  if (typeof status === "string") {
+    const validStatuses = [
+      "Planned",
+      "InProgress",
+      "Completed",
+      "Cancelled",
+      "OnHold",
+      "Failed",
+      "Scheduled",
+      "Planning",
+    ];
+    if (validStatuses.includes(status)) {
+      return status as any;
+    }
+    return null;
+  }
+
+  // If number, convert to string
+  if (typeof status === "number") {
+    const statusMap: Record<number, string> = {
+      1: "Planned",
+      2: "InProgress",
+      3: "Completed",
+      4: "Cancelled",
+      5: "OnHold",
+      6: "Failed",
+      7: "Scheduled",
+    };
+    return (statusMap[status] as any) || null;
+  }
+
+  return null;
+}
 
 export interface TreatmentCycle {
   id: string;
   treatmentId: string;
-  patientId?: string; // Backend supports patientId
-  doctorId?: string; // Backend supports doctorId - Doctor managing this cycle
+  patientId?: string;
+  doctorId?: string;
   cycleNumber: number;
-  treatmentType?: string; // Treatment type (IVF, IUI, etc.)
+  cycleName?: string; // Cycle name (e.g., "IUI Cycle 1")
+  orderIndex?: number; // Cycle order
+  stepType?: number | string; // Step type (can be number or string enum like "IUI_PreCyclePreparation")
+  expectedDurationDays?: number; // Expected number of days
+  treatmentType?: "IUI" | "IVF"; // Treatment type
   startDate?: string; // ISO date
   expectedEndDate?: string; // ISO date
   actualEndDate?: string; // ISO date
   endDate?: string; // Alias for actualEndDate
   status: TreatmentCycleStatus;
+  protocol?: string; // Protocol name (e.g., "Standard IUI Protocol")
+  cost?: number | null; // Cost
+
+  // Timeline tracking
+  currentStep?: IVFStep | IUIStep; // Current step in timeline
+  completedSteps?: (IVFStep | IUIStep)[]; // Completed steps
+  stepDates?: Record<string, string>; // Date of each step execution
+
   notes?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -734,17 +875,35 @@ export interface TreatmentCycleDetailResponseModel extends TreatmentCycle {
 
 export interface CreateTreatmentCycleRequest {
   treatmentId: string;
+  cycleName: string;
   cycleNumber: number;
   startDate?: string;
+  endDate?: string;
   expectedEndDate?: string;
+  protocol?: string;
   notes?: string;
+  cost?: number;
+  // Timeline fields (optional, can be set after creation)
+  currentStep?: IVFStep | IUIStep;
+  completedSteps?: (IVFStep | IUIStep)[];
+  stepDates?: Record<string, string>;
 }
 
 export interface UpdateTreatmentCycleRequest {
+  cycleName?: string;
   cycleNumber?: number;
   startDate?: string;
-  expectedEndDate?: string;
+  endDate?: string;
+  status?: TreatmentCycleStatus;
+  protocol?: string;
   notes?: string;
+  cost?: number;
+  isAdminOverride?: boolean;
+  // Legacy fields for backward compatibility
+  expectedEndDate?: string;
+  currentStep?: IVFStep | IUIStep;
+  completedSteps?: (IVFStep | IUIStep)[];
+  stepDates?: Record<string, string>;
 }
 
 export interface StartTreatmentCycleRequest {
@@ -754,50 +913,94 @@ export interface StartTreatmentCycleRequest {
 
 export interface CompleteTreatmentCycleRequest {
   endDate: string;
-  result?: string;
+  outcome?: string;
   notes?: string;
 }
 
 export interface CancelTreatmentCycleRequest {
-  cancellationReason: string;
+  reason?: string;
+  notes?: string;
+}
+
+export interface UpdateTreatmentCycleStatusRequest {
+  TreatmentId: string;
+  CycleNumber: number;
+  Status: TreatmentCycleStatus;
+  Notes?: string;
 }
 
 export interface GetTreatmentCyclesRequest {
   pageNumber?: number;
   pageSize?: number;
+  Page?: number; // Backend uses Page/Size
+  Size?: number;
+  TreatmentId?: string;
   treatmentId?: string;
+  PatientId?: string;
   patientId?: string; // Filter by patient
+  DoctorId?: string;
   doctorId?: string; // Filter by doctor (Backend supports this)
+  Status?: TreatmentCycleStatus;
   status?: TreatmentCycleStatus;
-  startDateFrom?: string; // Filter by start date range
+  FromDate?: string; // Filter by start date range
+  ToDate?: string;
+  startDateFrom?: string; // Legacy support
   startDateTo?: string;
+  SearchTerm?: string;
+  searchTerm?: string;
+  Sort?: string;
+  Order?: string;
 }
 
 export interface AddCycleSampleRequest {
-  sampleId: string;
+  sampleCode: string;
+  sampleType: string;
+  collectionDate: string; // ISO date
   notes?: string;
 }
 
 export interface AddCycleAppointmentRequest {
-  appointmentId: string;
+  appointmentDate: string; // Date format: "YYYY-MM-DD"
+  type: string;
+  reason?: string;
+  instructions?: string;
   notes?: string;
+  slotId?: string;
 }
 
 export interface TreatmentCycleBillingResponse {
-  cycleId: string;
-  totalAmount: number;
-  paidAmount: number;
-  remainingAmount: number;
-  transactions: Transaction[];
+  treatmentCycleId: string;
+  estimatedCost: number;
+  totalPaid: number;
+  outstanding: number;
+  items: Array<{
+    description: string;
+    amount: number;
+    date: string; // ISO date
+    reference: string;
+  }>;
 }
 
 export interface DocumentSummary {
   id: string;
   fileName: string;
-  fileUrl: string;
-  uploadedAt: string;
+  fileType: string;
+  fileSize: number;
+  category: string;
+  uploadDate: string; // ISO date
 }
 
+export interface AddCycleDocumentRequest {
+  fileName: string;
+  filePath: string;
+  fileType: string;
+  fileSize: number;
+  title?: string;
+  description?: string;
+  category?: string;
+}
+
+// Legacy type for backward compatibility
 export interface UploadCycleDocumentRequest {
   fileId: string;
   description?: string;
@@ -858,9 +1061,16 @@ export interface TreatmentIUI {
 
 export interface TreatmentIUICreateUpdateRequest {
   treatmentId: string;
-  cycleStatus?: IUICycleStatus;
+  protocol?: string;
+  medications?: string;
+  monitoring?: string;
+  ovulationTriggerDate?: string;
   inseminationDate?: string;
+  motileSpermCount?: number;
+  numberOfAttempts?: number;
+  outcome?: string;
   notes?: string;
+  status?: IUICycleStatus;
 }
 
 // ============================================================================
@@ -869,23 +1079,35 @@ export interface TreatmentIUICreateUpdateRequest {
 
 export interface Service {
   id: string;
-  serviceCode: string;
-  serviceName: string;
-  name?: string; // Backend may return 'name' instead of 'serviceName'
-  categoryId: string;
+  name: string; // Primary field from API
+  serviceName?: string; // Legacy compatibility
+  code?: string; // Primary field from API
+  serviceCode?: string; // Legacy compatibility
+  serviceCategoryId: string; // Primary field from API
+  categoryId?: string; // Legacy compatibility
+  serviceCategoryName?: string; // Included in API response
   price: number;
   description?: string;
+  unit?: string;
+  duration?: number | null;
   isActive: boolean;
+  notes?: string | null;
   createdAt?: string;
-  updatedAt?: string;
+  updatedAt?: string | null;
 }
 
 export interface ServiceCategory {
   id: string;
-  categoryCode: string;
-  categoryName: string;
+  name: string; // Primary field from API
+  categoryName?: string; // Legacy compatibility
+  code: string; // Primary field from API
+  categoryCode?: string; // Legacy compatibility
   description?: string;
   isActive: boolean;
+  displayOrder?: number;
+  serviceCount?: number;
+  createdAt?: string;
+  updatedAt?: string | null;
 }
 
 export interface ServiceCreateUpdateRequestModel {
@@ -934,36 +1156,49 @@ export type ServiceRequestStatus =
 
 export interface ServiceRequest {
   id: string;
-  requestCode: string;
-  appointmentId: string;
-  patientId: string;
+  requestCode?: string; // May not be in response
+  appointmentId: string | null;
+  patientId?: string; // May not be in response
   status: ServiceRequestStatus;
-  requestedDate?: string; // ISO date
-  approvedDate?: string; // ISO date
-  approvedBy?: string;
-  notes?: string;
+  statusName?: string; // Included in API response
+  requestDate: string; // Primary field from API (ISO date-time)
+  requestedDate?: string; // Legacy compatibility (ISO date)
+  approvedDate?: string | null; // ISO date-time
+  approvedBy?: string | null;
+  totalAmount?: number; // Included in API response
+  notes?: string | null;
+  serviceDetails?: ServiceRequestDetail[]; // Nested in API response
   createdAt?: string;
-  updatedAt?: string;
+  updatedAt?: string | null;
 }
 
 export interface ServiceRequestDetail {
   id: string;
   serviceRequestId: string;
   serviceId: string;
+  serviceName?: string; // Included in API response
+  serviceCode?: string | null; // Included in API response
+  serviceUnit?: string | null; // Included in API response
   quantity: number;
-  price: number;
-  notes?: string;
+  unitPrice: number; // Primary field from API
+  price?: number; // Legacy compatibility
+  discount?: number | null;
+  totalPrice: number; // Included in API response
+  notes?: string | null;
 }
 
 export interface ServiceRequestCreateRequestModel {
-  appointmentId: string;
-  patientId: string;
-  requestedDate?: string;
-  notes?: string;
+  appointmentId?: string | null; // Can be null
+  patientId?: string; // May be optional
+  requestDate?: string; // ISO date-time
+  requestedDate?: string; // Legacy compatibility (ISO date)
+  notes?: string | null;
   serviceDetails: {
     serviceId: string;
     quantity: number;
-    price?: number;
+    unitPrice?: number; // Primary field
+    price?: number; // Legacy compatibility
+    notes?: string | null;
   }[];
 }
 
@@ -1314,34 +1549,58 @@ export type TransactionType = "Payment" | "Refund";
 export interface Transaction {
   id: string;
   transactionCode: string;
+  paymentUrl?: string;
+  transactionType: TransactionType;
+  amount: number;
+  currency?: string;
+  transactionDate?: string;
+  status: TransactionStatus;
+  paymentMethod?: string;
+  paymentGateway?: string;
+  referenceNumber?: string;
+  description?: string;
+  notes?: string;
+  patientId?: string;
+  patientName?: string;
+  processedDate?: string;
+  processedBy?: string;
+  relatedEntityType?: "ServiceRequest" | "Appointment" | "CryoStorageContract";
+  relatedEntityId?: string;
+  // Legacy fields for backward compatibility
   serviceRequestId?: string;
   appointmentId?: string;
-  amount: number;
-  status: TransactionStatus;
-  transactionType: TransactionType;
-  paymentMethod?: string;
-  description?: string;
   vnPayUrl?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
+/**
+ * Create transaction request
+ * POST /api/transaction
+ * Uses query parameters: RelatedEntityType and RelatedEntityId
+ */
 export interface CreateTransactionRequest {
-  serviceRequestId?: string;
-  appointmentId?: string;
-  amount: number;
-  description?: string;
-  paymentMethod?: string;
+  relatedEntityType: "ServiceRequest" | "Appointment" | "CryoStorageContract";
+  relatedEntityId: string;
 }
 
 export interface GetTransactionsRequest {
+  patientId?: string;
+  relatedEntityType?: "ServiceRequest" | "Appointment" | "CryoStorageContract";
+  relatedEntityId?: string;
+  fromDate?: string; // ISO date-time
+  toDate?: string; // ISO date-time
+  status?: TransactionStatus;
+  page?: number;
+  size?: number;
+  sort?: string;
+  order?: string;
+  // Legacy fields for backward compatibility
   pageNumber?: number;
   pageSize?: number;
-  status?: TransactionStatus;
   transactionType?: TransactionType;
   dateFrom?: string;
   dateTo?: string;
-  patientId?: string;
 }
 
 // ============================================================================
@@ -1550,4 +1809,166 @@ export interface ResetPasswordRequest {
 export interface VerifyEmailRequest {
   email: string;
   verificationCode: string;
+}
+
+// ============================================================================
+// Agreement Types
+// ============================================================================
+
+export type AgreementStatus =
+  | "Pending" // 0
+  | "Active" // 1
+  | "Completed" // 2
+  | "Canceled"; // 3
+
+export interface Agreement {
+  id: string;
+  agreementCode?: string;
+  treatmentId?: string;
+  treatmentName?: string;
+  patientId: string;
+  patientName?: string;
+  startDate?: string;
+  endDate?: string;
+  totalAmount?: number;
+  status: AgreementStatus;
+  statusName?: string;
+  signedByPatient?: boolean;
+  signedByDoctor?: boolean;
+  fileUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // Legacy fields for backward compatibility
+  code?: string;
+  title?: string;
+  content?: string;
+  doctorId?: string;
+  doctorSigned?: boolean;
+  doctorSignedDate?: string;
+  doctorSignedBy?: string;
+  patientSigned?: boolean;
+  patientSignedDate?: string;
+  patientSignedBy?: string;
+}
+
+export interface AgreementDetailResponse extends Agreement {
+  treatment?: {
+    id: string;
+    name: string;
+    description: string;
+  };
+  patient?: {
+    id: string;
+    fullName: string;
+    email: string;
+    phoneNumber: string;
+    dob: string;
+    gender: string;
+  };
+}
+
+export interface AgreementCreateRequest {
+  treatmentId?: string;
+  patientId: string;
+  startDate?: string;
+  endDate?: string;
+  totalAmount?: number;
+  fileUrl?: string;
+}
+
+export interface AgreementUpdateRequest {
+  startDate?: string;
+  endDate?: string;
+  totalAmount?: number;
+  status?: AgreementStatus;
+  signedByPatient?: boolean;
+  signedByDoctor?: boolean;
+  fileUrl?: string;
+}
+
+export interface AgreementSignRequest {
+  signedByPatient?: boolean;
+  signedByDoctor?: boolean;
+}
+
+export interface AgreementListQuery {
+  TreatmentId?: string;
+  PatientId?: string;
+  Status?: AgreementStatus;
+  FromStartDate?: string;
+  ToStartDate?: string;
+  FromEndDate?: string;
+  ToEndDate?: string;
+  SignedByPatient?: boolean;
+  SignedByDoctor?: boolean;
+  SearchTerm?: string;
+  Page?: number;
+  Size?: number;
+  Sort?: string;
+  Order?: string;
+}
+
+// ============================================================================
+// Medical Record Types
+// ============================================================================
+
+export interface MedicalRecord {
+  id: string;
+  appointmentId: string;
+  chiefComplaint?: string | null;
+  history?: string | null;
+  physicalExamination?: string | null;
+  diagnosis?: string | null;
+  treatmentPlan?: string | null;
+  followUpInstructions?: string | null;
+  vitalSigns?: string | null;
+  labResults?: string | null;
+  imagingResults?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  isDeleted: boolean;
+  deletedAt?: string | null;
+}
+
+export interface MedicalRecordDetailResponse extends MedicalRecord {
+  appointment?: Appointment;
+  patient?: Patient;
+}
+
+export interface CreateMedicalRecordRequest {
+  appointmentId: string;
+  chiefComplaint?: string;
+  history?: string;
+  physicalExamination?: string;
+  diagnosis?: string;
+  treatmentPlan?: string;
+  followUpInstructions?: string;
+  vitalSigns?: string;
+  labResults?: string;
+  imagingResults?: string;
+  notes?: string;
+}
+
+export interface UpdateMedicalRecordRequest {
+  chiefComplaint?: string;
+  history?: string;
+  physicalExamination?: string;
+  diagnosis?: string;
+  treatmentPlan?: string;
+  followUpInstructions?: string;
+  vitalSigns?: string;
+  labResults?: string;
+  imagingResults?: string;
+  notes?: string;
+}
+
+export interface MedicalRecordListQuery {
+  AppointmentId?: string;
+  PatientId?: string;
+  SearchTerm?: string;
+  Page?: number;
+  Size?: number;
+  Sort?: string;
+  Order?: "asc" | "desc";
 }

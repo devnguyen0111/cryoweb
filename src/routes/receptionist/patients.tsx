@@ -9,6 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
+import {
+  isPatientDetailResponse,
+  getPatientProperty,
+} from "@/utils/patient-helpers";
 
 export const Route = createFileRoute("/receptionist/patients")({
   validateSearch: z.object({
@@ -28,20 +32,23 @@ function ReceptionistPatientsComponent() {
     queryKey: [
       "receptionist",
       "patients",
-      { Page: page, Size: pageSize, SearchTerm: searchTerm || undefined },
+      {
+        pageNumber: page,
+        pageSize: pageSize,
+        searchTerm: searchTerm || undefined,
+      },
     ],
     queryFn: () =>
       api.patient.getPatients({
-        Page: page,
-        Size: pageSize,
-        SearchTerm: searchTerm || undefined,
+        pageNumber: page,
+        pageSize: pageSize,
+        searchTerm: searchTerm || undefined,
       }),
   });
 
   const patients = data?.data ?? [];
-  const total = data?.metaData?.total ?? 0;
-  const totalPages =
-    data?.metaData?.totalPage ?? data?.metaData?.totalPages ?? 1;
+  const total = data?.metaData?.totalCount ?? 0;
+  const totalPages = data?.metaData?.totalPages ?? 1;
   const isDetailOpen = Boolean(viewId);
 
   useEffect(() => {
@@ -77,15 +84,21 @@ function ReceptionistPatientsComponent() {
 
   const { data: patientServiceRequests, isLoading: isServiceRequestsLoading } =
     useQuery({
-      queryKey: ["receptionist", "patient", "detail", "service-requests", viewId],
+      queryKey: [
+        "receptionist",
+        "patient",
+        "detail",
+        "service-requests",
+        viewId,
+      ],
       enabled: isDetailOpen && Boolean(viewId),
       queryFn: async () => {
         if (!viewId) return null;
         try {
           return await api.serviceRequest.getServiceRequests({
-            PatientId: viewId,
-            Page: 1,
-            Size: 5,
+            patientId: viewId,
+            pageNumber: 1,
+            pageSize: 5,
           });
         } catch (error) {
           if (isAxiosError(error) && error.response?.status === 403) {
@@ -165,14 +178,27 @@ function ReceptionistPatientsComponent() {
   const detailHeader = useMemo(() => {
     if (!patientDetail) return null;
     const displayName =
-      patientDetail.accountInfo?.username ||
+      (isPatientDetailResponse(patientDetail)
+        ? patientDetail.accountInfo?.username
+        : null) ||
+      patientDetail.fullName ||
       patientDetail.patientCode ||
       "Patient detail";
     return {
       displayName,
       patientCode: patientDetail.patientCode || "N/A",
-      email: patientDetail.accountInfo?.email || "-",
-      phone: patientDetail.accountInfo?.phone || "-",
+      email:
+        (isPatientDetailResponse(patientDetail)
+          ? patientDetail.accountInfo?.email
+          : null) ||
+        patientDetail.email ||
+        "-",
+      phone:
+        (isPatientDetailResponse(patientDetail)
+          ? patientDetail.accountInfo?.phone
+          : null) ||
+        patientDetail.phoneNumber ||
+        "-",
       bloodType: patientDetail.bloodType || "N/A",
     };
   }, [patientDetail]);
@@ -243,8 +269,12 @@ function ReceptionistPatientsComponent() {
                           </thead>
                           <tbody>
                             {patients.map((patient) => {
+                              const isDetail = isPatientDetailResponse(patient);
                               const displayName =
-                                patient.accountInfo?.username ||
+                                (isDetail
+                                  ? (patient as any).accountInfo?.username
+                                  : null) ||
+                                patient.fullName ||
                                 patient.patientCode ||
                                 "Unknown";
                               return (
@@ -266,17 +296,26 @@ function ReceptionistPatientsComponent() {
                                     </div>
                                     <div className="text-xs">
                                       Verified:{" "}
-                                      {patient.accountInfo?.isVerified
+                                      {isDetail &&
+                                      (patient as any).accountInfo?.isVerified
                                         ? "Yes"
                                         : "No"}
                                     </div>
                                   </td>
                                   <td className="p-2 text-sm text-gray-600">
                                     <div>
-                                      {patient.accountInfo?.email || "-"}
+                                      {(isDetail
+                                        ? (patient as any).accountInfo?.email
+                                        : null) ||
+                                        patient.email ||
+                                        "-"}
                                     </div>
                                     <div className="text-xs">
-                                      {patient.accountInfo?.phone || "-"}
+                                      {(isDetail
+                                        ? (patient as any).accountInfo?.phone
+                                        : null) ||
+                                        patient.phoneNumber ||
+                                        "-"}
                                     </div>
                                   </td>
                                   <td className="p-2">
@@ -284,7 +323,9 @@ function ReceptionistPatientsComponent() {
                                       size="sm"
                                       variant="outline"
                                       type="button"
-                                      onClick={() => handleViewDetails(patient.id)}
+                                      onClick={() =>
+                                        handleViewDetails(patient.id)
+                                      }
                                     >
                                       View details
                                     </Button>
@@ -347,9 +388,7 @@ function ReceptionistPatientsComponent() {
                   </h2>
                   <p className="text-sm text-gray-500">
                     Patient ID:{" "}
-                    <span className="font-medium">
-                      {viewId || "—"}
-                    </span>
+                    <span className="font-medium">{viewId || "—"}</span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -413,7 +452,11 @@ function ReceptionistPatientsComponent() {
                             <span className="font-medium text-gray-900">
                               Insurance:
                             </span>{" "}
-                            {patientDetail.insurance || "No insurance info"}
+                            {getPatientProperty(
+                              patientDetail,
+                              "insurance",
+                              "No insurance info"
+                            )}
                           </p>
                           <p>
                             <span className="font-medium text-gray-900">
@@ -445,19 +488,31 @@ function ReceptionistPatientsComponent() {
                             <span className="font-medium text-gray-900">
                               Address:
                             </span>{" "}
-                            {patientDetail.accountInfo?.address || "-"}
+                            {(isPatientDetailResponse(patientDetail)
+                              ? patientDetail.accountInfo?.address
+                              : null) ||
+                              patientDetail.address ||
+                              "-"}
                           </p>
                           <p>
                             <span className="font-medium text-gray-900">
                               Emergency contact:
                             </span>{" "}
-                            {patientDetail.emergencyContact || "Not provided"}
+                            {getPatientProperty(
+                              patientDetail,
+                              "emergencyContact",
+                              "Not provided"
+                            )}
                           </p>
                           <p>
                             <span className="font-medium text-gray-900">
                               Emergency phone:
                             </span>{" "}
-                            {patientDetail.emergencyPhone || "-"}
+                            {getPatientProperty(
+                              patientDetail,
+                              "emergencyPhone",
+                              "-"
+                            )}
                           </p>
                         </CardContent>
                       </Card>
@@ -481,9 +536,7 @@ function ReceptionistPatientsComponent() {
                               >
                                 <div>
                                   <p className="font-medium text-gray-900">
-                                    {request.serviceId
-                                      ? `Service ${request.serviceId}`
-                                      : "General enquiry"}
+                                    {request.requestCode || "General enquiry"}
                                   </p>
                                   <p className="text-xs text-gray-500">
                                     Requested: {request.requestedDate || "—"}
@@ -512,21 +565,22 @@ function ReceptionistPatientsComponent() {
                         </CardHeader>
                         <CardContent className="space-y-3 text-sm text-gray-700">
                           {isAppointmentsLoading ? (
-                            <p className="text-gray-500">Loading appointments...</p>
+                            <p className="text-gray-500">
+                              Loading appointments...
+                            </p>
                           ) : recentAppointments.length ? (
-                            recentAppointments.map((appointment) => (
+                            recentAppointments.map((appointment, index) => (
                               <div
                                 key={appointment.id}
                                 className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
                               >
                                 <div>
                                   <p className="font-medium text-gray-900">
-                                    {appointment.title || "Untitled appointment"}
+                                    {appointment.appointmentCode ||
+                                      `appointment #${index + 1}`}
                                   </p>
                                   <p className="text-xs text-gray-500">
-                                    {appointment.appointmentDate || "—"} ·{" "}
-                                    {appointment.startTime || "--"} -{" "}
-                                    {appointment.endTime || "--"}
+                                    {appointment.appointmentDate || "—"}
                                   </p>
                                 </div>
                                 <span
@@ -556,25 +610,41 @@ function ReceptionistPatientsComponent() {
                           <span className="font-medium text-gray-900">
                             Medical history:
                           </span>{" "}
-                          {patientDetail.medicalHistory || "Not recorded"}
+                          {getPatientProperty(
+                            patientDetail,
+                            "medicalHistory",
+                            "Not recorded"
+                          )}
                         </p>
                         <p>
                           <span className="font-medium text-gray-900">
                             Allergies:
                           </span>{" "}
-                          {patientDetail.allergies || "None reported"}
+                          {getPatientProperty(
+                            patientDetail,
+                            "allergies",
+                            "None reported"
+                          )}
                         </p>
                         <p>
                           <span className="font-medium text-gray-900">
                             Occupation:
                           </span>{" "}
-                          {patientDetail.occupation || "Not available"}
+                          {getPatientProperty(
+                            patientDetail,
+                            "occupation",
+                            "Not available"
+                          )}
                         </p>
                         <p>
                           <span className="font-medium text-gray-900">
                             Notes:
                           </span>{" "}
-                          {patientDetail.notes || "No notes"}
+                          {getPatientProperty(
+                            patientDetail,
+                            "notes",
+                            "No notes"
+                          )}
                         </p>
                       </CardContent>
                     </Card>

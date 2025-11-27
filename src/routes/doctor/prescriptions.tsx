@@ -34,8 +34,17 @@ type PrescriptionSearchState = {
 };
 
 const createEmptyResponse = <T,>(): DynamicResponse<T> => ({
+  code: 200,
+  message: "Success",
   data: [],
-  metaData: { total: 0, page: 1, size: 0, totalPages: 0 },
+  metaData: {
+    totalCount: 0,
+    pageNumber: 1,
+    pageSize: 0,
+    totalPages: 0,
+    hasPrevious: false,
+    hasNext: false,
+  },
 });
 
 const usdFormatter = new Intl.NumberFormat("en-US", {
@@ -84,7 +93,10 @@ function DoctorPrescriptionComponent() {
     retry: false,
     queryFn: async (): Promise<DynamicResponse<Service>> => {
       try {
-        const response = await api.service.getServices({ Page: 1, Size: 100 });
+        const response = await api.service.getServices({
+          pageNumber: 1,
+          pageSize: 100,
+        });
         const raw = response as unknown as {
           data?: DynamicResponse<Service> | Service[];
         };
@@ -92,12 +104,16 @@ function DoctorPrescriptionComponent() {
 
         if (Array.isArray(payload)) {
           return {
+            code: 200,
+            message: "Success",
             data: payload,
             metaData: {
-              total: payload.length,
-              page: 1,
-              size: payload.length,
+              totalCount: payload.length,
+              pageNumber: 1,
+              pageSize: payload.length,
               totalPages: 1,
+              hasPrevious: false,
+              hasNext: false,
             },
           } as DynamicResponse<Service>;
         }
@@ -148,10 +164,10 @@ function DoctorPrescriptionComponent() {
     queryFn: async (): Promise<DynamicResponse<ServiceRequest>> => {
       try {
         const response = await api.serviceRequest.getServiceRequests({
-          Page: 1,
-          Size: 25,
-          Status: "Pending",
-          PatientId: search.patientId,
+          pageNumber: 1,
+          pageSize: 25,
+          status: "Pending",
+          patientId: search.patientId,
         });
 
         const raw = response.data as
@@ -160,12 +176,16 @@ function DoctorPrescriptionComponent() {
           | undefined;
         const items = Array.isArray(raw) ? raw : (raw?.data ?? []);
         const base: DynamicResponse<ServiceRequest> = {
+          code: 200,
+          message: "Success",
           data: items,
           metaData: {
-            total: items.length,
-            page: 1,
-            size: items.length,
+            totalCount: items.length,
+            pageNumber: 1,
+            pageSize: items.length,
             totalPages: 1,
+            hasPrevious: false,
+            hasNext: false,
           },
         };
 
@@ -178,8 +198,8 @@ function DoctorPrescriptionComponent() {
             data: filtered,
             metaData: {
               ...base.metaData,
-              total: filtered.length,
-              size: filtered.length,
+              totalCount: filtered.length,
+              pageSize: filtered.length,
             },
           };
         }

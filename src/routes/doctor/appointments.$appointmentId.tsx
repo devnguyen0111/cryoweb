@@ -6,6 +6,7 @@ import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { StructuredNote } from "@/components/StructuredNote";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/api/client";
 import { cn } from "@/utils/cn";
@@ -30,7 +31,8 @@ function DoctorAppointmentDetailsComponent() {
   const { data: appointment, isFetching } = useQuery({
     queryKey: ["doctor", "appointments", "detail", appointmentId],
     queryFn: async () => {
-      const response = await api.appointment.getAppointmentDetails(appointmentId);
+      const response =
+        await api.appointment.getAppointmentDetails(appointmentId);
       return response.data;
     },
   });
@@ -431,7 +433,9 @@ function DoctorAppointmentDetailsComponent() {
                             Appointment Type
                           </p>
                           <p className="mt-1 text-base font-semibold text-gray-900">
-                            {appointment.appointmentType ?? "Consultation"}
+                            {(appointment as any).appointmentType ??
+                              (appointment as any).type ??
+                              "Consultation"}
                           </p>
                         </div>
                         {(appointment as any).treatmentCycleId && (
@@ -450,9 +454,10 @@ function DoctorAppointmentDetailsComponent() {
                           <p className="text-sm font-medium text-gray-500">
                             Notes / Description
                           </p>
-                          <p className="mt-1 text-base text-gray-900 whitespace-pre-wrap">
-                            {appointment.notes}
-                          </p>
+                          <StructuredNote
+                            note={appointment.notes}
+                            className="mt-1 text-base text-gray-900"
+                          />
                         </div>
                       )}
                       {!appointment.notes && (

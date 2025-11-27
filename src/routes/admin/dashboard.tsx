@@ -31,18 +31,18 @@ function AdminDashboardComponent() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const { data: usersData } = useQuery({
-    queryKey: ["users", { Page: 1, Size: 1 }],
-    queryFn: () => api.user.getUsers({ Page: 1, Size: 1 }),
+    queryKey: ["users", { pageNumber: 1, pageSize: 1 }],
+    queryFn: () => api.user.getUsers({ pageNumber: 1, pageSize: 1 }),
   });
 
   const { data: appointmentsData } = useQuery({
-    queryKey: ["appointments", { Page: 1, Size: 1 }],
-    queryFn: () => api.appointment.getAppointments({ Page: 1, Size: 1 }),
+    queryKey: ["appointments", { pageNumber: 1, pageSize: 1 }],
+    queryFn: () => api.appointment.getAppointments({ pageNumber: 1, pageSize: 1 }),
   });
 
   const { data: patientsData } = useQuery({
-    queryKey: ["patients", { Page: 1, Size: 1 }],
-    queryFn: () => api.patient.getPatients({ Page: 1, Size: 1 }),
+    queryKey: ["patients", { pageNumber: 1, pageSize: 1 }],
+    queryFn: () => api.patient.getPatients({ pageNumber: 1, pageSize: 1 }),
   });
 
   const mockActivities = useMemo(
@@ -184,21 +184,21 @@ function AdminDashboardComponent() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <KpiCard
                 title="Total users"
-                value={usersData?.metaData?.total ?? 0}
+                value={usersData?.metaData?.totalCount ?? 0}
                 subtitle="Across all roles"
                 icon={<Users className="h-4 w-4" />}
                 trend={{ label: "+8% vs last month", tone: "up" }}
               />
               <KpiCard
                 title="Patients under care"
-                value={patientsData?.metaData?.total ?? 0}
+                value={patientsData?.metaData?.totalCount ?? 0}
                 subtitle="Active treatment plans"
                 icon={<Activity className="h-4 w-4" />}
                 trend={{ label: "+3% vs last month", tone: "up" }}
               />
               <KpiCard
                 title="Appointments scheduled"
-                value={appointmentsData?.metaData?.total ?? 0}
+                value={appointmentsData?.metaData?.totalCount ?? 0}
                 subtitle="Rolling 30 days"
                 icon={<LayoutDashboard className="h-4 w-4" />}
                 trend={{ label: "-2% vs target", tone: "down" }}

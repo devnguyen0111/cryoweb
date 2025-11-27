@@ -18,14 +18,14 @@ export class SampleApi {
     }
 
     const mapped: Record<string, unknown> = {
-      page: params.page ?? params.Page,
-      size: params.size ?? params.Size,
-      sort: params.sort ?? params.Sort,
-      order: params.order ?? params.Order,
-      sampleType: params.sampleType ?? params.SampleType,
-      status: params.status ?? params.Status,
-      searchTerm: params.searchTerm ?? params.SearchTerm,
-      patientId: params.patientId ?? params.PatientId,
+      page: (params as any).page ?? (params as any).Page ?? params.pageNumber,
+      size: (params as any).size ?? (params as any).Size ?? params.pageSize,
+      sort: (params as any).sort ?? (params as any).Sort ?? (params as any).sortBy,
+      order: (params as any).order ?? (params as any).Order ?? (params as any).sortOrder,
+      sampleType: params.sampleType ?? (params as any).SampleType,
+      status: params.status ?? (params as any).Status,
+      searchTerm: params.searchTerm ?? (params as any).SearchTerm,
+      patientId: params.patientId ?? (params as any).PatientId,
     };
 
     Object.keys(mapped).forEach((key) => {
@@ -95,8 +95,8 @@ export class SampleApi {
    * Delete sample
    * DELETE /api/sample/{id}
    */
-  async deleteSample(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(`/LabSample/${id}`);
+  async deleteSample(id: string): Promise<BaseResponse<void>> {
+    const response = await this.client.delete<BaseResponse<void>>(`/LabSample/${id}`);
     return response.data;
   }
 }

@@ -11,8 +11,8 @@ export const Route = createFileRoute("/admin/appointments")({
 
 function AdminAppointmentsComponent() {
   const { data, isLoading } = useQuery({
-    queryKey: ["appointments", { Page: 1, Size: 20 }],
-    queryFn: () => api.appointment.getAppointments({ Page: 1, Size: 20 }),
+    queryKey: ["appointments", { pageNumber: 1, pageSize: 20 }],
+    queryFn: () => api.appointment.getAppointments({ pageNumber: 1, pageSize: 20 }),
   });
 
   return (
@@ -38,25 +38,25 @@ function AdminAppointmentsComponent() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b">
-                            <th className="text-left p-2">ID</th>
-                            <th className="text-left p-2">Title</th>
+                            <th className="text-left p-2">Code</th>
+                            <th className="text-left p-2">Type</th>
                             <th className="text-left p-2">Date</th>
-                            <th className="text-left p-2">Time</th>
                             <th className="text-left p-2">Status</th>
+                            <th className="text-left p-2">Patient ID</th>
                           </tr>
                         </thead>
                         <tbody>
                           {data.data.map((appointment) => (
                             <tr key={appointment.id} className="border-b">
-                              <td className="p-2">{appointment.id}</td>
-                              <td className="p-2">{appointment.title}</td>
+                              <td className="p-2">{appointment.appointmentCode}</td>
+                              <td className="p-2">{appointment.appointmentType}</td>
                               <td className="p-2">
                                 {appointment.appointmentDate}
                               </td>
                               <td className="p-2">
-                                {appointment.startTime} - {appointment.endTime}
+                                {appointment.status}
                               </td>
-                              <td className="p-2">{appointment.status}</td>
+                              <td className="p-2">{appointment.patientId}</td>
                             </tr>
                           ))}
                         </tbody>

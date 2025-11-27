@@ -1,3 +1,8 @@
+/**
+ * Treatment Cycles List Page
+ * Displays patients currently in treatment with their treatment type and timeline
+ */
+
 import { useMemo, useState } from "react";
 import { isAxiosError } from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -11,11 +16,14 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
+import { HorizontalTreatmentTimeline } from "@/features/doctor/treatment-cycles/HorizontalTreatmentTimeline";
+import { PatientDetailModal } from "@/features/doctor/treatment-cycles/PatientDetailModal";
+import { CycleUpdateModal } from "@/features/doctor/treatment-cycles/CycleUpdateModal";
 import { cn } from "@/utils/cn";
-import type {
-  PaginatedResponse,
-  TreatmentCycle,
-  TreatmentCycleStatus,
+import {
+  normalizeTreatmentCycleStatus,
+  type PaginatedResponse,
+  type TreatmentCycle,
 } from "@/api/types";
 
 export const Route = createFileRoute("/doctor/treatment-cycles")({
@@ -23,87 +31,596 @@ export const Route = createFileRoute("/doctor/treatment-cycles")({
   validateSearch: (search: { patientId?: string } = {}) => search,
 });
 
-const STATUS_COLORS: Record<string, string> = {
-  Planned: "bg-gray-100 text-gray-700",
-  "In Progress": "bg-blue-100 text-blue-700",
-  COS: "bg-blue-100 text-blue-700",
-  OPU: "bg-purple-100 text-purple-700",
-  ET: "bg-emerald-100 text-emerald-700",
-  Completed: "bg-green-100 text-green-700",
-  Cancelled: "bg-red-100 text-red-700",
-};
+interface PatientInTreatment {
+  patientId: string;
+  patientName: string;
+  patientCode?: string;
+  treatmentType: "IUI" | "IVF" | null;
+  activeCycle: TreatmentCycle | null;
+  allCycles: TreatmentCycle[];
+}
 
 function DoctorTreatmentCyclesComponent() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const search = Route.useSearch();
-  const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const [searchTerm, setSearchTerm] = useState<string>(search.patientId || "");
+  const [treatmentTypeFilter, setTreatmentTypeFilter] = useState<string>("");
+  const searchParams = search as { patientId?: string };
+  const [searchTerm, setSearchTerm] = useState<string>(
+    searchParams.patientId || ""
+  );
 
-  // AccountId IS DoctorId - use user.id directly as doctorId
   const doctorId = user?.id ?? null;
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
     useDoctorProfile();
 
-  const filters = useMemo(
-    () => ({ page, statusFilter, searchTerm, doctorId }),
-    [page, statusFilter, searchTerm, doctorId]
-  );
-
-  const emptyResponse: PaginatedResponse<TreatmentCycle> = useMemo(
-    () => ({
-      code: 200,
-      message: "",
-      data: [],
-      metaData: {
-        pageNumber: 1,
-        pageSize: 8,
-        totalCount: 0,
-        totalPages: 0,
-        hasPrevious: false,
-        hasNext: false,
-      },
-    }),
-    []
-  );
-
-  // Get treatment cycles, filtered by doctorId directly (Backend supports this)
-  const { data, isFetching } = useQuery<PaginatedResponse<TreatmentCycle>>({
-    queryKey: ["doctor", "treatment-cycles", filters],
+  // Fetch all active cycles (InProgress or Planning)
+  const { data: cyclesData, isFetching } = useQuery<
+    PaginatedResponse<TreatmentCycle>
+  >({
+    queryKey: ["doctor", "treatment-cycles", "active", doctorId],
     enabled: !!doctorId,
     retry: false,
     queryFn: async (): Promise<PaginatedResponse<TreatmentCycle>> => {
       try {
-        // Backend API supports filtering by doctorId directly
-        return await api.treatmentCycle.getTreatmentCycles({
-          doctorId: doctorId!, // Filter by doctor
-          pageNumber: page,
-          pageSize: 8,
-          status: (statusFilter as TreatmentCycleStatus) || undefined,
-          patientId: search.patientId,
+        // Fetch all cycles for doctor (API has issues with Status filter, so we filter client-side)
+        const response = await api.treatmentCycle.getTreatmentCycles({
+          doctorId: doctorId!,
+          Page: 1,
+          Size: 100, // Get more to group by patient
+          // Don't use Status filter as API returns 500 error
         });
+
+        // Filter for active statuses on client-side
+        // Active statuses: InProgress, Planned, Scheduled, OnHold
+        // Exclude: Completed, Cancelled, Failed
+        const activeStatuses = ["InProgress", "Planned", "Scheduled", "OnHold"];
+        const allCycles = (response.data || []).filter((cycle) => {
+          const normalizedStatus = normalizeTreatmentCycleStatus(cycle.status);
+          return normalizedStatus && activeStatuses.includes(normalizedStatus);
+        });
+
+        const uniqueCycles = Array.from(
+          new Map(allCycles.map((cycle) => [cycle.id, cycle])).values()
+        );
+
+        return {
+          code: 200,
+          message: "",
+          data: uniqueCycles,
+          metaData: {
+            pageNumber: 1,
+            pageSize: uniqueCycles.length,
+            totalCount: uniqueCycles.length,
+            totalPages: 1,
+            hasPrevious: false,
+            hasNext: false,
+          },
+        };
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
-          return emptyResponse;
+          return {
+            code: 200,
+            message: "",
+            data: [],
+            metaData: {
+              pageNumber: 1,
+              pageSize: 0,
+              totalCount: 0,
+              totalPages: 0,
+              hasPrevious: false,
+              hasNext: false,
+            },
+          };
         }
         const message =
           error?.response?.data?.message || "Unable to load treatment cycles.";
         toast.error(message);
-        return emptyResponse;
+        return {
+          code: 200,
+          message: "",
+          data: [],
+          metaData: {
+            pageNumber: 1,
+            pageSize: 0,
+            totalCount: 0,
+            totalPages: 0,
+            hasPrevious: false,
+            hasNext: false,
+          },
+        };
       }
     },
   });
 
-  const totalPages = data?.metaData?.totalPages ?? 1;
-  const timelinePhases = [
-    "Planned",
-    "COS",
-    "OPU",
-    "Fertilization",
-    "ET",
-    "Completed",
-  ];
+  // Fetch treatments to get patientId for cycles
+  const uniqueTreatmentIds = useMemo(() => {
+    const cycles = cyclesData?.data || [];
+    return Array.from(
+      new Set(cycles.map((c) => c.treatmentId).filter(Boolean))
+    );
+  }, [cyclesData?.data]);
+
+  const { data: treatmentsData } = useQuery({
+    queryKey: ["treatments", "for-cycles", uniqueTreatmentIds],
+    enabled: uniqueTreatmentIds.length > 0,
+    queryFn: async () => {
+      const treatments = await Promise.all(
+        uniqueTreatmentIds.map(async (treatmentId) => {
+          try {
+            const response = await api.treatment.getTreatmentById(treatmentId);
+            return response.data;
+          } catch {
+            return null;
+          }
+        })
+      );
+      return treatments.filter(Boolean);
+    },
+  });
+
+  // Create treatmentId -> patientId map
+  const treatmentToPatientMap = useMemo(() => {
+    const map = new Map<string, string>();
+    treatmentsData?.forEach((treatment) => {
+      if (treatment?.patientId) {
+        map.set(treatment.id, treatment.patientId);
+      }
+    });
+    return map;
+  }, [treatmentsData]);
+
+  // Group cycles by patient and fetch patient details
+  const patientsInTreatment = useMemo(() => {
+    const cycles = cyclesData?.data || [];
+    const patientMap = new Map<string, PatientInTreatment>();
+
+    cycles.forEach((cycle) => {
+      // Get patientId from cycle or from treatment map
+      const patientId =
+        cycle.patientId || treatmentToPatientMap.get(cycle.treatmentId);
+      if (!patientId) return;
+
+      if (!patientMap.has(patientId)) {
+        patientMap.set(patientId, {
+          patientId,
+          patientName: "Loading...",
+          patientCode: undefined,
+          treatmentType: cycle.treatmentType || null,
+          activeCycle: null,
+          allCycles: [],
+        });
+      }
+
+      const patient = patientMap.get(patientId)!;
+      patient.allCycles.push(cycle);
+
+      // Set active cycle (prefer InProgress over Planned/Scheduled/OnHold)
+      const cycleStatus = normalizeTreatmentCycleStatus(cycle.status);
+      const activeCycleStatus = normalizeTreatmentCycleStatus(
+        patient.activeCycle?.status
+      );
+
+      if (!patient.activeCycle) {
+        patient.activeCycle = cycle;
+      } else if (
+        cycleStatus === "InProgress" &&
+        (activeCycleStatus === "Planned" ||
+          activeCycleStatus === "Scheduled" ||
+          activeCycleStatus === "OnHold")
+      ) {
+        patient.activeCycle = cycle;
+      }
+
+      // Get treatment type from cycle or treatment
+      let cycleTreatmentType = cycle.treatmentType;
+      if (!cycleTreatmentType) {
+        const treatment = treatmentsData?.find(
+          (t) => t && t.id === cycle.treatmentId
+        );
+        if (treatment?.treatmentType) {
+          // Only use if it's IUI or IVF
+          if (
+            treatment.treatmentType === "IUI" ||
+            treatment.treatmentType === "IVF"
+          ) {
+            cycleTreatmentType = treatment.treatmentType;
+            // Update cycle object with treatmentType for components
+            (cycle as any).treatmentType = treatment.treatmentType;
+          }
+        }
+      }
+
+      // Update patient treatment type
+      if (cycleTreatmentType) {
+        patient.treatmentType = cycleTreatmentType;
+      }
+    });
+
+    return Array.from(patientMap.values());
+  }, [cyclesData?.data, treatmentToPatientMap, treatmentsData]);
+
+  // Filter patients based on search and treatment type
+  const filteredPatients = useMemo(() => {
+    let filtered = patientsInTreatment;
+
+    if (treatmentTypeFilter) {
+      filtered = filtered.filter(
+        (p) => p.treatmentType === treatmentTypeFilter
+      );
+    }
+
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (p) =>
+          p.patientName.toLowerCase().includes(searchLower) ||
+          p.patientCode?.toLowerCase().includes(searchLower) ||
+          p.patientId.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return filtered;
+  }, [patientsInTreatment, treatmentTypeFilter, searchTerm]);
+
+  // Component to fetch and display patient info
+  function PatientCard({ patient }: { patient: PatientInTreatment }) {
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+    const activeCycle = patient.activeCycle;
+
+    // Fetch treatment to ensure we have treatmentType for the cycle
+    const { data: cycleTreatment } = useQuery({
+      queryKey: ["treatment", activeCycle?.treatmentId],
+      queryFn: async () => {
+        if (!activeCycle?.treatmentId) return null;
+        try {
+          const response = await api.treatment.getTreatmentById(
+            activeCycle.treatmentId
+          );
+          return response.data;
+        } catch {
+          return null;
+        }
+      },
+      enabled: !!activeCycle?.treatmentId,
+    });
+
+    // Ensure activeCycle has treatmentType
+    const cycleWithType = useMemo(() => {
+      if (!activeCycle) return null;
+      if (activeCycle.treatmentType) return activeCycle;
+      if (cycleTreatment?.treatmentType) {
+        return {
+          ...activeCycle,
+          treatmentType:
+            cycleTreatment.treatmentType === "IUI" ||
+            cycleTreatment.treatmentType === "IVF"
+              ? cycleTreatment.treatmentType
+              : undefined,
+        };
+      }
+      return activeCycle;
+    }, [activeCycle, cycleTreatment]);
+
+    const { data: patientDetails } = useQuery({
+      queryKey: ["patient-details", patient.patientId],
+      queryFn: async () => {
+        try {
+          const response = await api.patient.getPatientDetails(
+            patient.patientId
+          );
+          return response.data;
+        } catch {
+          return null;
+        }
+      },
+      enabled: !!patient.patientId,
+    });
+
+    const { data: userDetails } = useQuery({
+      queryKey: ["user-details", patient.patientId],
+      queryFn: async () => {
+        try {
+          const response = await api.user.getUserDetails(patient.patientId);
+          return response.data;
+        } catch {
+          return null;
+        }
+      },
+      enabled: !!patient.patientId,
+    });
+
+    // Fetch all appointments for this patient (for the entire treatment)
+    const { data: appointmentsData } = useQuery({
+      queryKey: ["appointments", "patient", patient.patientId],
+      queryFn: async () => {
+        if (!patient.patientId) return [];
+        try {
+          const response = await api.appointment.getAppointments({
+            patientId: patient.patientId,
+            pageNumber: 1,
+            pageSize: 100, // Get all appointments
+          });
+          const appointments = response.data || [];
+          // Filter appointments to ensure they belong to this specific patient
+          // This prevents counting appointments from other patients if API doesn't filter correctly
+          return appointments.filter((apt) => {
+            // Check multiple possible field names for patientId
+            const aptPatientId =
+              apt.patientId ||
+              (apt as any).patientID ||
+              (apt as any).PatientId ||
+              (apt as any).PatientID ||
+              (apt as any).patient?.id ||
+              (apt as any).patient?.patientId ||
+              (apt as any).patientAccountId ||
+              (apt as any).patientAccountID;
+            return aptPatientId === patient.patientId;
+          });
+        } catch {
+          return [];
+        }
+      },
+      enabled: !!patient.patientId,
+    });
+
+    // Fetch all lab samples for all cycles in this treatment
+    const { data: samplesData } = useQuery({
+      queryKey: ["samples", "treatment", cycleWithType?.treatmentId],
+      queryFn: async () => {
+        if (!cycleWithType?.treatmentId) return [];
+        try {
+          // Get all cycles for the treatment first
+          const cyclesResponse = await api.treatmentCycle.getTreatmentCycles({
+            TreatmentId: cycleWithType.treatmentId,
+            Page: 1,
+            Size: 100,
+          });
+          const cycles = cyclesResponse.data || [];
+
+          // Fetch samples for all cycles
+          // Handle 500 errors gracefully - API might not be available for all cycles
+          const allSamples = await Promise.allSettled(
+            cycles.map(async (cycle) => {
+              try {
+                const samplesResponse =
+                  await api.treatmentCycle.getCycleSamples(cycle.id);
+                return samplesResponse.data || [];
+              } catch (error: any) {
+                // If 500 error, API might not be implemented yet - return empty array
+                if (error?.response?.status === 500) {
+                  return [];
+                }
+                return [];
+              }
+            })
+          );
+
+          // Extract successful results
+          const successfulSamples = allSamples
+            .filter((result) => result.status === "fulfilled")
+            .map((result) => (result as PromiseFulfilledResult<any[]>).value);
+
+          // Flatten and return unique samples
+          const flattened = successfulSamples.flat();
+          return flattened;
+        } catch {
+          return [];
+        }
+      },
+      enabled: !!cycleWithType?.treatmentId,
+    });
+
+    // Fetch all agreements for this treatment
+    const { data: agreementsData } = useQuery({
+      queryKey: ["agreements", "treatment", cycleWithType?.treatmentId],
+      queryFn: async () => {
+        if (!cycleWithType?.treatmentId) return [];
+        try {
+          const response = await api.agreement.getAgreements({
+            TreatmentId: cycleWithType.treatmentId,
+            Page: 1,
+            Size: 100, // Get all agreements
+          });
+          return response.data || [];
+        } catch {
+          return [];
+        }
+      },
+      enabled: !!cycleWithType?.treatmentId,
+    });
+
+    // Fetch all cycles for this treatment to determine progress
+    const { data: allCyclesData } = useQuery({
+      queryKey: ["treatment-cycles", "treatment", cycleWithType?.treatmentId],
+      queryFn: async () => {
+        if (!cycleWithType?.treatmentId) return [];
+        try {
+          const response = await api.treatmentCycle.getTreatmentCycles({
+            TreatmentId: cycleWithType.treatmentId,
+            Page: 1,
+            Size: 100, // Get all cycles for the treatment
+          });
+          return response.data || [];
+        } catch {
+          return [];
+        }
+      },
+      enabled: !!cycleWithType?.treatmentId,
+    });
+
+    const patientName =
+      patientDetails?.accountInfo?.username ||
+      userDetails?.fullName ||
+      userDetails?.userName ||
+      patient.patientName ||
+      "Unknown";
+    const patientCode = patientDetails?.patientCode || patient.patientCode;
+    const shortId = patientCode || `P-${patient.patientId.slice(-8)}`;
+
+    // Get age from userDetails
+    const age = userDetails?.age;
+
+    // Get phone number
+    const phone =
+      patientDetails?.accountInfo?.phone ||
+      userDetails?.phone ||
+      userDetails?.phoneNumber ||
+      patientDetails?.phoneNumber ||
+      null;
+
+    // Format phone number
+    const formattedPhone = phone
+      ? phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
+      : null;
+
+    if (!activeCycle || !cycleWithType) {
+      return null;
+    }
+
+    // Format start date
+    const startDate = cycleWithType.startDate
+      ? new Date(cycleWithType.startDate).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : null;
+
+    const appointmentsCount = appointmentsData?.length || 0;
+    const samplesCount = samplesData?.length || 0;
+    const agreementsCount = agreementsData?.length || 0;
+
+    return (
+      <>
+        <Card className="overflow-hidden border border-gray-200 shadow-sm">
+          <CardContent className="p-6">
+            {/* Patient Header Section */}
+            <div className="mb-6 flex items-start justify-between">
+              <div className="flex items-center gap-4">
+                {/* Avatar */}
+                <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 text-2xl font-bold text-blue-600">
+                  {patientDetails?.accountInfo?.username?.charAt(0) ||
+                    patientName.charAt(0).toUpperCase()}
+                </div>
+
+                {/* Patient Info */}
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      {patientName}
+                      {age && (
+                        <span className="ml-2 text-gray-600">, {age}</span>
+                      )}
+                    </h2>
+                    {cycleWithType.treatmentType && (
+                      <span
+                        className={cn(
+                          "rounded-full px-3 py-1 text-xs font-semibold",
+                          cycleWithType.treatmentType === "IVF"
+                            ? "bg-purple-100 text-purple-700"
+                            : "bg-pink-100 text-pink-700"
+                        )}
+                      >
+                        {cycleWithType.treatmentType}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 space-y-0.5 text-sm text-gray-600">
+                    <div>
+                      <span className="font-medium">ID: </span>
+                      {shortId}
+                    </div>
+                    {formattedPhone && (
+                      <div>
+                        <span className="font-medium">Phone: </span>
+                        {formattedPhone}
+                      </div>
+                    )}
+                    {startDate && (
+                      <div>
+                        <span className="font-medium">Started: </span>
+                        {startDate}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                  onClick={() => setIsDetailModalOpen(true)}
+                >
+                  View Details
+                </Button>
+                <Button size="sm" onClick={() => setIsUpdateModalOpen(true)}>
+                  Update Record
+                </Button>
+              </div>
+            </div>
+
+            {/* Summary Stats */}
+            <div className="mb-6 flex gap-4">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2">
+                <div className="text-xs text-gray-500">Appointments</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {appointmentsCount}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2">
+                <div className="text-xs text-gray-500">Lab Samples</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {samplesCount}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2">
+                <div className="text-xs text-gray-500">Agreements</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {agreementsCount}
+                </div>
+              </div>
+            </div>
+
+            {/* Horizontal Timeline */}
+            <div className="mt-6">
+              <HorizontalTreatmentTimeline
+                cycle={cycleWithType}
+                allCycles={allCyclesData || patient.allCycles}
+                onStepClick={(step) => {
+                  navigate({
+                    to: "/doctor/treatment-cycles/$cycleId",
+                    params: { cycleId: cycleWithType.id },
+                    search: { step },
+                  } as any);
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Patient Detail Modal */}
+        <PatientDetailModal
+          patientId={patient.patientId}
+          isOpen={isDetailModalOpen}
+          onClose={() => setIsDetailModalOpen(false)}
+        />
+
+        {/* Cycle Update Modal */}
+        {cycleWithType && (
+          <CycleUpdateModal
+            cycle={cycleWithType}
+            isOpen={isUpdateModalOpen}
+            onClose={() => setIsUpdateModalOpen(false)}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <ProtectedRoute allowedRoles={["Doctor"]}>
@@ -117,207 +634,95 @@ function DoctorTreatmentCyclesComponent() {
           ) : null}
 
           <section className="flex flex-col gap-2">
-            <h1 className="text-3xl font-bold">Treatment cycles</h1>
-            <p className="text-gray-600">
-              Monitor IUI/IVF progress, update statuses, and coordinate with the
-              cryobank. Showing cycles for treatments you manage.
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold">Patients in Treatment</h1>
+                <p className="text-gray-600">
+                  List of patients currently in IUI/IVF treatment with progress
+                  timeline
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  navigate({ to: "/doctor/encounters/create" } as any)
+                }
+              >
+                Create New Treatment
+              </Button>
+            </div>
           </section>
 
           <Card>
             <CardHeader className="space-y-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
-                  <CardTitle>Cycle filters</CardTitle>
+                  <CardTitle>Filters</CardTitle>
                   <p className="text-sm text-gray-500">
-                    Page {page}/{totalPages} - {data?.metaData?.totalCount ?? 0}{" "}
-                    cycles
+                    {filteredPatients.length} patients in treatment
                   </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() =>
-                      navigate({ to: "/doctor/treatment-cycles/create" })
-                    }
-                  >
-                    + Create Treatment Cycle
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate({ to: "/doctor/cryobank" })}
-                  >
-                    View cryobank
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate({ to: "/doctor/encounters" })}
-                  >
-                    Back to encounters
-                  </Button>
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
                     Search
                   </label>
                   <Input
-                    placeholder="By patient name or cycle ID"
+                    placeholder="By patient name or patient code"
                     value={searchTerm}
                     onChange={(event) => {
                       setSearchTerm(event.target.value);
-                      setPage(1);
                     }}
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Status
+                    Treatment Type
                   </label>
                   <select
-                    value={statusFilter}
-                    onChange={(event) => setStatusFilter(event.target.value)}
+                    value={treatmentTypeFilter}
+                    onChange={(event) =>
+                      setTreatmentTypeFilter(event.target.value)
+                    }
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="">All</option>
-                    {timelinePhases.map((phase) => (
-                      <option key={phase} value={phase}>
-                        {phase}
-                      </option>
-                    ))}
-                    <option value="Cancelled">Cancelled</option>
+                    <option value="IUI">IUI</option>
+                    <option value="IVF">IVF</option>
                   </select>
                 </div>
               </div>
             </CardHeader>
           </Card>
 
-          <section className="grid gap-6 lg:grid-cols-2">
+          {/* Patients List */}
+          <section className="space-y-6">
             {isFetching ? (
-              <div className="lg:col-span-2 py-12 text-center text-gray-500">
-                Loading data...
+              <div className="py-12 text-center text-gray-500">
+                Loading patients...
               </div>
-            ) : data?.data?.length ? (
-              data.data.map((cycle) => {
-                const currentIndex = timelinePhases.findIndex(
-                  (phase) => phase === cycle.status
-                );
-                return (
-                  <Card key={cycle.id}>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <div>
-                        <CardTitle>{cycle.treatmentType || "Cycle"}</CardTitle>
-                        <p className="text-sm text-gray-500">
-                          Patient: {cycle.patientId || "Not linked"}
-                        </p>
-                      </div>
-                      <span
-                        className={cn(
-                          "rounded-full px-3 py-1 text-xs font-semibold",
-                          STATUS_COLORS[cycle.status || ""] ||
-                            STATUS_COLORS.Planned
-                        )}
-                      >
-                        {cycle.status || "Planned"}
-                      </span>
-                    </CardHeader>
-                    <CardContent className="space-y-4 text-sm text-gray-600">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p>Start: {cycle.startDate || "-"}</p>
-                          <p>Expected end: {cycle.endDate || "-"}</p>
-                        </div>
-                        <div>
-                          <p>Notes: {cycle.notes || "None"}</p>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="font-medium text-gray-700">Timeline</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {timelinePhases.map((phase, index) => (
-                            <span
-                              key={phase}
-                              className={cn(
-                                "rounded-full px-3 py-1 text-xs font-semibold",
-                                index < currentIndex
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : index === currentIndex
-                                    ? "bg-blue-100 text-blue-700"
-                                    : "bg-gray-100 text-gray-500"
-                              )}
-                            >
-                              {phase}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            navigate({
-                              to: "/doctor/treatment-cycles/$cycleId",
-                              params: { cycleId: cycle.id },
-                            })
-                          }
-                        >
-                          Cycle details
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            navigate({
-                              to: "/doctor/treatment-cycles/$cycleId/workflow",
-                              params: { cycleId: cycle.id },
-                            })
-                          }
-                        >
-                          Open workflow
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
+            ) : filteredPatients.length > 0 ? (
+              filteredPatients.map((patient) => (
+                <PatientCard key={patient.patientId} patient={patient} />
+              ))
             ) : (
-              <div className="lg:col-span-2 py-12 text-center text-gray-500">
-                No matching treatment cycles.
+              <div className="py-12 text-center">
+                <div className="mx-auto max-w-md">
+                  <div className="mb-4 text-6xl">📋</div>
+                  <h3 className="mb-2 text-lg font-semibold text-gray-900">
+                    No patients in treatment found
+                  </h3>
+                  <p className="text-gray-600">
+                    {searchTerm || treatmentTypeFilter
+                      ? "Try changing the filters to search"
+                      : "Currently no patients are in treatment"}
+                  </p>
+                </div>
               </div>
             )}
           </section>
-
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-500">
-              Showing {data?.data?.length ?? 0} cycles on this page
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-gray-600">
-                Page {page}/{totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() =>
-                  setPage((prev) => Math.min(totalPages, prev + 1))
-                }
-              >
-                Next
-              </Button>
-            </div>
-          </div>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

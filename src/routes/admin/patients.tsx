@@ -13,8 +13,8 @@ export const Route = createFileRoute("/admin/patients")({
 function AdminPatientsComponent() {
   const navigate = useNavigate();
   const { data, isLoading } = useQuery({
-    queryKey: ["patients", { Page: 1, Size: 20 }],
-    queryFn: () => api.patient.getPatients({ Page: 1, Size: 20 }),
+    queryKey: ["patients", { pageNumber: 1, pageSize: 20 }],
+    queryFn: () => api.patient.getPatients({ pageNumber: 1, pageSize: 20 }),
   });
 
   const patients = data?.data ?? [];
@@ -53,7 +53,7 @@ function AdminPatientsComponent() {
                         <tbody>
                           {patients.map((patient) => {
                             const displayName =
-                              patient.accountInfo?.username ||
+                              patient.fullName ||
                               patient.patientCode ||
                               "Unknown";
                             return (
@@ -66,18 +66,17 @@ function AdminPatientsComponent() {
                                     {displayName}
                                   </div>
                                   <div className="text-xs text-gray-500">
-                                    Patient code:{" "}
-                                    {patient.patientCode || "N/A"}
+                                    Patient code: {patient.patientCode || "N/A"}
                                   </div>
                                   <div className="text-xs text-gray-500">
                                     Account ID: {patient.accountId || "—"}
                                   </div>
                                 </td>
                                 <td className="p-2 text-sm text-gray-600">
-                                  {patient.accountInfo?.email || "-"}
+                                  {patient.email || "-"}
                                 </td>
                                 <td className="p-2 text-sm text-gray-600">
-                                  {patient.accountInfo?.phone || "-"}
+                                  {patient.phoneNumber || "-"}
                                 </td>
                                 <td className="p-2 text-sm text-gray-600">
                                   {patient.isActive ? (
@@ -94,7 +93,7 @@ function AdminPatientsComponent() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                  type="button"
+                                    type="button"
                                     onClick={() =>
                                       navigate({
                                         to: "/admin/patients/$patientId",

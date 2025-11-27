@@ -2,12 +2,13 @@ import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { api } from "@/api/client";
-import type { Patient } from "@/api/types";
+import type { Patient, PatientDetailResponse } from "@/api/types";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/utils/cn";
+import { StructuredNote } from "@/components/StructuredNote";
 
 interface DoctorPatientDetailModalProps {
   patientId: string | null;
@@ -95,7 +96,7 @@ export function DoctorPatientDetailModal({
     isError,
     error,
     isFetching,
-  } = useQuery<Patient | null>({
+  } = useQuery<Patient | PatientDetailResponse | null>({
     enabled: isOpen && Boolean(patientId),
     queryKey: ["doctor", "patient", patientId, "detail-modal"],
     retry: false,
@@ -121,31 +122,38 @@ export function DoctorPatientDetailModal({
     },
   });
 
+  const patientDetail = useMemo(() => {
+    return patient && "accountInfo" in patient
+      ? (patient as PatientDetailResponse)
+      : null;
+  }, [patient]);
+
   const accountStatus = useMemo(() => {
     if (!patient) {
       return null;
     }
-    const isActive = patient.isActive ?? patient.accountInfo?.isActive ?? false;
+    const isActive =
+      patient.isActive ?? patientDetail?.accountInfo?.isActive ?? false;
     return {
       label: isActive ? "Active" : "Inactive",
       tone: isActive
         ? "border-emerald-200 bg-emerald-50 text-emerald-700"
         : "border-gray-200 bg-gray-100 text-gray-600",
     };
-  }, [patient]);
+  }, [patient, patientDetail]);
 
   const verificationStatus = useMemo(() => {
-    if (!patient) {
+    if (!patientDetail) {
       return null;
     }
-    const isVerified = patient.accountInfo?.isVerified ?? false;
+    const isVerified = patientDetail.accountInfo?.isVerified ?? false;
     return {
       label: isVerified ? "Verified" : "Not verified",
       tone: isVerified
         ? "border-sky-200 bg-sky-50 text-sky-700"
         : "border-amber-200 bg-amber-50 text-amber-700",
     };
-  }, [patient]);
+  }, [patientDetail]);
 
   const handleOpenFullProfile = useCallback(() => {
     if (!patientId) {
@@ -191,7 +199,7 @@ export function DoctorPatientDetailModal({
               <div className="space-y-1">
                 <h3 className="text-lg font-semibold text-gray-900">
                   {patient.fullName ||
-                    patient.accountInfo?.username ||
+                    patientDetail?.accountInfo?.username ||
                     patient.patientCode ||
                     "Patient"}
                 </h3>
@@ -246,11 +254,10 @@ export function DoctorPatientDetailModal({
                 value={formatDate(patient.dateOfBirth)}
               />
               <DetailField label="Gender" value={patient.gender} />
-              <DetailField label="Age" value={patient.age} />
               <DetailField label="National ID" value={patient.nationalId} />
               <DetailField
                 label="Occupation"
-                value={patient.occupation}
+                value={patientDetail?.occupation}
                 placeholder="Not provided"
               />
             </CardContent>
@@ -265,33 +272,33 @@ export function DoctorPatientDetailModal({
             <CardContent className="grid gap-4 md:grid-cols-2">
               <DetailField
                 label="Email"
-                value={patient.accountInfo?.email ?? patient.email}
+                value={patientDetail?.accountInfo?.email ?? patient.email}
                 placeholder="Not provided"
               />
               <DetailField
                 label="Phone number"
-                value={patient.accountInfo?.phone ?? patient.phoneNumber}
+                value={patientDetail?.accountInfo?.phone ?? patient.phoneNumber}
                 placeholder="Not provided"
               />
               <DetailField
                 label="Address"
-                value={patient.accountInfo?.address ?? patient.address}
+                value={patientDetail?.accountInfo?.address ?? patient.address}
                 placeholder="Not provided"
                 multiline
               />
               <DetailField
                 label="Insurance"
-                value={patient.insurance}
+                value={patientDetail?.insurance}
                 placeholder="Not provided"
               />
               <DetailField
                 label="Emergency contact"
-                value={patient.emergencyContact}
+                value={patientDetail?.emergencyContact}
                 placeholder="Not provided"
               />
               <DetailField
                 label="Emergency phone"
-                value={patient.emergencyPhone}
+                value={patientDetail?.emergencyPhone}
                 placeholder="Not provided"
               />
             </CardContent>
@@ -307,8 +314,9 @@ export function DoctorPatientDetailModal({
               <DetailField
                 label="Height"
                 value={
-                  patient.height !== null && patient.height !== undefined
-                    ? `${patient.height} cm`
+                  patientDetail?.height !== null &&
+                  patientDetail?.height !== undefined
+                    ? `${patientDetail.height} cm`
                     : null
                 }
                 placeholder="Not recorded"
@@ -316,8 +324,9 @@ export function DoctorPatientDetailModal({
               <DetailField
                 label="Weight"
                 value={
-                  patient.weight !== null && patient.weight !== undefined
-                    ? `${patient.weight} kg`
+                  patientDetail?.weight !== null &&
+                  patientDetail?.weight !== undefined
+                    ? `${patientDetail.weight} kg`
                     : null
                 }
                 placeholder="Not recorded"
@@ -325,8 +334,9 @@ export function DoctorPatientDetailModal({
               <DetailField
                 label="BMI"
                 value={
-                  patient.bmi !== null && patient.bmi !== undefined
-                    ? patient.bmi.toFixed(1)
+                  patientDetail?.bmi !== null &&
+                  patientDetail?.bmi !== undefined
+                    ? patientDetail.bmi.toFixed(1)
                     : null
                 }
                 placeholder="Not recorded"
@@ -343,22 +353,28 @@ export function DoctorPatientDetailModal({
             <CardContent className="grid gap-4">
               <DetailField
                 label="Medical history"
-                value={patient.medicalHistory}
+                value={patientDetail?.medicalHistory}
                 placeholder="Not provided"
                 multiline
               />
               <DetailField
                 label="Allergies"
-                value={patient.allergies}
+                value={patientDetail?.allergies}
                 placeholder="Not provided"
                 multiline
               />
-              <DetailField
-                label="Notes"
-                value={patient.notes}
-                placeholder="No additional notes"
-                multiline
-              />
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Notes
+                </p>
+                <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                  {patientDetail?.notes ? (
+                    <StructuredNote note={patientDetail.notes} />
+                  ) : (
+                    <p className="text-sm text-gray-500">No additional notes</p>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -371,17 +387,17 @@ export function DoctorPatientDetailModal({
             <CardContent className="grid gap-4 md:grid-cols-2">
               <DetailField
                 label="Treatment cycles"
-                value={patient.treatmentCount}
+                value={patientDetail?.treatmentCount}
                 placeholder="0"
               />
               <DetailField
                 label="Lab samples"
-                value={patient.labSampleCount}
+                value={patientDetail?.labSampleCount}
                 placeholder="0"
               />
               <DetailField
                 label="Relationships on file"
-                value={patient.relationshipCount}
+                value={patientDetail?.relationshipCount}
                 placeholder="0"
               />
               <DetailField

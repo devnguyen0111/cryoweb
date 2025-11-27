@@ -13,7 +13,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 type DecisionMode = "reject" | "cancel" | null;
 
@@ -31,6 +33,12 @@ function ReceptionistServiceRequestDetailRoute() {
   const [notesDraft, setNotesDraft] = useState("");
   const [decisionMode, setDecisionMode] = useState<DecisionMode>(null);
   const [decisionNotes, setDecisionNotes] = useState("");
+  const [showQRCode, setShowQRCode] = useState(false);
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  const [createdTransactionId, setCreatedTransactionId] = useState<
+    string | null
+  >(null);
 
   const { data: request, isLoading } = useQuery({
     queryKey: ["receptionist", "service-request", { serviceRequestId }],
@@ -42,7 +50,6 @@ function ReceptionistServiceRequestDetailRoute() {
   });
 
   const patientId = request?.patientId;
-  const serviceId = request?.serviceId;
 
   const { data: patient } = useQuery({
     queryKey: ["receptionist", "patients", { patientId }],
@@ -62,16 +69,6 @@ function ReceptionistServiceRequestDetailRoute() {
     },
   });
 
-  const { data: service } = useQuery({
-    queryKey: ["receptionist", "services", { serviceId }],
-    enabled: Boolean(serviceId),
-    queryFn: async () => {
-      if (!serviceId) return null;
-      const response = await api.service.getServiceById(serviceId);
-      return response.data;
-    },
-  });
-
   const { data: requestDetails } = useQuery({
     queryKey: ["receptionist", "service-request-details", { serviceRequestId }],
     queryFn: () =>
@@ -83,6 +80,13 @@ function ReceptionistServiceRequestDetailRoute() {
   });
 
   const details = requestDetails?.data ?? [];
+
+  // Calculate total amount from service request details
+  const totalAmount = useMemo(() => {
+    return details.reduce((sum, detail) => {
+      return sum + (detail.totalPrice ?? 0);
+    }, 0);
+  }, [details]);
 
   useEffect(() => {
     if (request?.notes) {
@@ -98,10 +102,9 @@ function ReceptionistServiceRequestDetailRoute() {
     }) =>
       api.serviceRequest.updateServiceRequest(serviceRequestId, {
         ...("notes" in payload ? { notes: payload.notes } : {}),
-        ...("scheduledDate" in payload
-          ? { scheduledDate: payload.scheduledDate }
+        ...("status" in payload && payload.status
+          ? { status: payload.status as any }
           : {}),
-        ...("status" in payload ? { status: payload.status } : {}),
       }),
     onSuccess: (_, variables) => {
       toast.success("Service request updated");
@@ -142,8 +145,7 @@ function ReceptionistServiceRequestDetailRoute() {
 
   const handleConfirm = () => {
     updateRequestMutation.mutate({
-      status: "Confirmed",
-      scheduledDate: request?.scheduledDate,
+      status: "Approved" as any,
     });
   };
 
@@ -160,6 +162,46 @@ function ReceptionistServiceRequestDetailRoute() {
       status,
       notes: decisionNotes.trim(),
     });
+  };
+
+  // Create payment transaction with QR code
+  const createPaymentQRMutation = useMutation({
+    mutationFn: () => {
+      return api.transaction.createPaymentQR({
+        relatedEntityType: "ServiceRequest",
+        relatedEntityId: serviceRequestId,
+      });
+    },
+    onSuccess: (response) => {
+      if (response.data) {
+        // Use paymentUrl from the transaction response
+        setQrCodeUrl(
+          response.data.paymentUrl || response.data.qrCodeUrl || null
+        );
+        setQrCodeData(response.data.qrCodeData || null);
+        setCreatedTransactionId(response.data.id);
+        setShowQRCode(true);
+        toast.success("Payment transaction created successfully");
+        queryClient.invalidateQueries({
+          queryKey: ["receptionist", "transactions"],
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to create payment transaction. Please try again."
+      );
+    },
+  });
+
+  const handleCreatePaymentQR = () => {
+    if (totalAmount <= 0) {
+      toast.error("Total amount must be greater than 0");
+      return;
+    }
+    createPaymentQRMutation.mutate();
   };
 
   return (
@@ -215,7 +257,7 @@ function ReceptionistServiceRequestDetailRoute() {
                   <span className="font-medium text-gray-900">
                     Preferred date:
                   </span>{" "}
-                  {request?.scheduledDate || request?.requestedDate || "—"}
+                  {request?.requestedDate || "—"}
                 </div>
                 <div>
                   <span className="font-medium text-gray-900">Patient ID:</span>{" "}
@@ -238,7 +280,7 @@ function ReceptionistServiceRequestDetailRoute() {
                 </div>
                 <div>
                   <span className="font-medium text-gray-900">Service:</span>{" "}
-                  {service?.name || "—"}
+                  {request?.requestCode || "—"}
                 </div>
                 <div>
                   <span className="font-medium text-gray-900">
@@ -365,27 +407,39 @@ function ReceptionistServiceRequestDetailRoute() {
                     <>
                       <p>
                         <span className="font-medium text-gray-900">Name:</span>{" "}
-                        {patient.accountInfo?.username ||
-                          patient.patientCode ||
+                        {(isPatientDetailResponse(patient)
+                          ? patient.accountInfo?.username
+                          : null) ||
+                          patient?.fullName ||
+                          patient?.patientCode ||
                           "—"}
                       </p>
                       <p>
                         <span className="font-medium text-gray-900">
                           Email:
                         </span>{" "}
-                        {patient.accountInfo?.email || "—"}
+                        {(isPatientDetailResponse(patient)
+                          ? patient.accountInfo?.email
+                          : null) ||
+                          patient?.email ||
+                          "—"}
                       </p>
                       <p>
                         <span className="font-medium text-gray-900">
                           Phone:
                         </span>{" "}
-                        {patient.accountInfo?.phone || "—"}
+                        {(isPatientDetailResponse(patient)
+                          ? patient.accountInfo?.phone
+                          : null) ||
+                          patient?.phoneNumber ||
+                          "—"}
                       </p>
                       <p>
                         <span className="font-medium text-gray-900">
                           Verification:
                         </span>{" "}
-                        {patient.accountInfo?.isVerified
+                        {isPatientDetailResponse(patient) &&
+                        patient.accountInfo?.isVerified
                           ? "Verified"
                           : "Pending"}
                       </p>
@@ -426,6 +480,32 @@ function ReceptionistServiceRequestDetailRoute() {
                           ) : null}
                         </div>
                       ))}
+                      <div className="mt-4 rounded-lg border-2 border-primary bg-primary/5 p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-gray-900">
+                            Total Amount:
+                          </span>
+                          <span className="text-lg font-bold text-primary">
+                            {totalAmount > 0
+                              ? new Intl.NumberFormat("vi-VN", {
+                                  style: "currency",
+                                  currency: "VND",
+                                }).format(totalAmount)
+                              : "—"}
+                          </span>
+                        </div>
+                        {totalAmount > 0 && (
+                          <Button
+                            className="mt-3 w-full"
+                            onClick={handleCreatePaymentQR}
+                            disabled={createPaymentQRMutation.isPending}
+                          >
+                            {createPaymentQRMutation.isPending
+                              ? "Generating QR Code..."
+                              : "Create Payment QR Code"}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <p>No line items recorded for this request.</p>
@@ -435,6 +515,97 @@ function ReceptionistServiceRequestDetailRoute() {
             </div>
           </div>
         </div>
+
+        {/* QR Code Modal */}
+        <Modal
+          isOpen={showQRCode}
+          onClose={() => {
+            setShowQRCode(false);
+            setQrCodeData(null);
+            setQrCodeUrl(null);
+            setCreatedTransactionId(null);
+          }}
+          title="Payment QR Code"
+          description="Scan this QR code to complete payment for this service request"
+          size="md"
+        >
+          <div className="space-y-4">
+            {qrCodeUrl || qrCodeData ? (
+              <div className="space-y-4">
+                {qrCodeUrl ? (
+                  <div className="flex justify-center">
+                    <img
+                      src={qrCodeUrl}
+                      alt="Payment QR Code"
+                      className="max-w-full h-auto border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                ) : qrCodeData ? (
+                  <div className="flex justify-center">
+                    <div
+                      className="border border-gray-200 rounded-lg p-4 bg-white"
+                      dangerouslySetInnerHTML={{ __html: qrCodeData }}
+                    />
+                  </div>
+                ) : null}
+                <div className="text-center space-y-2">
+                  <p className="text-sm text-gray-600">
+                    Scan this QR code with your payment app to complete the
+                    transaction.
+                  </p>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <p>
+                      <span className="font-medium">Total Amount:</span>{" "}
+                      {new Intl.NumberFormat("vi-VN", {
+                        style: "currency",
+                        currency: "VND",
+                      }).format(totalAmount)}
+                    </p>
+                    {createdTransactionId && (
+                      <p>
+                        <span className="font-medium">Transaction ID:</span>{" "}
+                        {createdTransactionId.slice(0, 8)}
+                      </p>
+                    )}
+                    <p>
+                      <span className="font-medium">Service Request ID:</span>{" "}
+                      {serviceRequestId.slice(0, 8)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      navigate({
+                        to: "/receptionist/transactions",
+                      });
+                    }}
+                  >
+                    View All Transactions
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setShowQRCode(false);
+                      setQrCodeData(null);
+                      setQrCodeUrl(null);
+                      setCreatedTransactionId(null);
+                    }}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-gray-500">
+                Unable to generate QR code. Please try again.
+              </div>
+            )}
+          </div>
+        </Modal>
       </DashboardLayout>
     </ProtectedRoute>
   );

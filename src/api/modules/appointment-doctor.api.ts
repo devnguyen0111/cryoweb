@@ -20,14 +20,13 @@ const normalizeListParams = (params?: AppointmentDoctorListQuery) => {
     order: params.order ?? params.Order,
     appointmentId: params.appointmentId ?? params.AppointmentId,
     doctorId: params.doctorId ?? params.DoctorId,
-    role: params.role ?? params.Role,
-    searchTerm: params.searchTerm ?? params.SearchTerm,
-    fromDate: params.fromDate ?? params.FromDate,
-    toDate: params.toDate ?? params.ToDate,
+    role: params.Role,
+    searchTerm: params.SearchTerm,
+    fromDate: params.FromDate,
+    toDate: params.ToDate,
   };
 
-  const status =
-    params.status ?? params.Status ?? (params as Record<string, unknown>).status;
+  const status = params.Status;
 
   if (status) {
     mapped.status = ensureAppointmentStatus(status as string);
@@ -42,11 +41,13 @@ const normalizeListParams = (params?: AppointmentDoctorListQuery) => {
   return mapped;
 };
 
-const mapPagingOnly = (params?: PagingModel & { Page?: number; Size?: number }) => {
+const mapPagingOnly = (
+  params?: PagingModel & { Page?: number; Size?: number }
+) => {
   if (!params) return undefined;
   const mapped: Record<string, unknown> = {
-    page: params.page ?? params.Page,
-    size: params.size ?? params.Size,
+    page: (params as any).page ?? params.Page ?? params.pageNumber,
+    size: (params as any).size ?? params.Size ?? params.pageSize,
     sort: (params as any).sort ?? (params as any).Sort,
     order: (params as any).order ?? (params as any).Order,
   };
@@ -70,10 +71,9 @@ export class AppointmentDoctorApi {
   async getAssignments(
     params?: AppointmentDoctorListQuery
   ): Promise<DynamicResponse<AppointmentDoctorAssignment>> {
-    const response = await this.client.get<DynamicResponse<AppointmentDoctorAssignment>>(
-      "/appointmentdoctor",
-      { params: normalizeListParams(params) }
-    );
+    const response = await this.client.get<
+      DynamicResponse<AppointmentDoctorAssignment>
+    >("/appointmentdoctor", { params: normalizeListParams(params) });
     return response.data;
   }
 
@@ -84,9 +84,9 @@ export class AppointmentDoctorApi {
   async getAssignmentById(
     id: string
   ): Promise<BaseResponse<AppointmentDoctorAssignment>> {
-    const response = await this.client.get<BaseResponse<AppointmentDoctorAssignment>>(
-      `/appointmentdoctor/${id}`
-    );
+    const response = await this.client.get<
+      BaseResponse<AppointmentDoctorAssignment>
+    >(`/appointmentdoctor/${id}`);
     return response.data;
   }
 
@@ -97,11 +97,9 @@ export class AppointmentDoctorApi {
   async createAssignment(
     data: CreateAppointmentDoctorRequest
   ): Promise<BaseResponse<AppointmentDoctorAssignment>> {
-    const response =
-      await this.client.post<BaseResponse<AppointmentDoctorAssignment>>(
-        "/appointmentdoctor",
-        data
-      );
+    const response = await this.client.post<
+      BaseResponse<AppointmentDoctorAssignment>
+    >("/appointmentdoctor", data);
     return response.data;
   }
 
@@ -113,11 +111,9 @@ export class AppointmentDoctorApi {
     id: string,
     data: UpdateAppointmentDoctorRequest
   ): Promise<BaseResponse<AppointmentDoctorAssignment>> {
-    const response =
-      await this.client.put<BaseResponse<AppointmentDoctorAssignment>>(
-        `/appointmentdoctor/${id}`,
-        data
-      );
+    const response = await this.client.put<
+      BaseResponse<AppointmentDoctorAssignment>
+    >(`/appointmentdoctor/${id}`, data);
     return response.data;
   }
 
@@ -125,8 +121,8 @@ export class AppointmentDoctorApi {
    * Delete assignment
    * DELETE /api/appointmentdoctor/{id}
    */
-  async deleteAssignment(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(
+  async deleteAssignment(id: string): Promise<BaseResponse<void>> {
+    const response = await this.client.delete<BaseResponse<void>>(
       `/appointmentdoctor/${id}`
     );
     return response.data;
@@ -140,10 +136,11 @@ export class AppointmentDoctorApi {
     appointmentId: string,
     params?: PagingModel
   ): Promise<DynamicResponse<AppointmentDoctorAssignment>> {
-    const response = await this.client.get<DynamicResponse<AppointmentDoctorAssignment>>(
-      `/appointmentdoctor/appointment/${appointmentId}`,
-      { params: mapPagingOnly(params) }
-    );
+    const response = await this.client.get<
+      DynamicResponse<AppointmentDoctorAssignment>
+    >(`/appointmentdoctor/appointment/${appointmentId}`, {
+      params: mapPagingOnly(params),
+    });
     return response.data;
   }
 
@@ -155,11 +152,11 @@ export class AppointmentDoctorApi {
     doctorId: string,
     params?: PagingModel
   ): Promise<DynamicResponse<AppointmentDoctorAssignment>> {
-    const response = await this.client.get<DynamicResponse<AppointmentDoctorAssignment>>(
-      `/appointmentdoctor/doctor/${doctorId}`,
-      { params: mapPagingOnly(params) }
-    );
+    const response = await this.client.get<
+      DynamicResponse<AppointmentDoctorAssignment>
+    >(`/appointmentdoctor/doctor/${doctorId}`, {
+      params: mapPagingOnly(params),
+    });
     return response.data;
   }
 }
-

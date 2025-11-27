@@ -24,8 +24,8 @@ function AdminUsersComponent() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const { data, isLoading } = useQuery({
-    queryKey: ["users", { Page: 1, Size: 20 }],
-    queryFn: () => api.user.getUsers({ Page: 1, Size: 20 }),
+    queryKey: ["users", { pageNumber: 1, pageSize: 20 }],
+    queryFn: () => api.user.getUsers({ pageNumber: 1, pageSize: 20 }),
   });
 
   const users = data?.data ?? [];
@@ -45,7 +45,9 @@ function AdminUsersComponent() {
 
       const matchesStatus =
         statusFilter === "all" ||
-        (statusFilter === "active" ? user.status === true : user.status === false);
+        (statusFilter === "active"
+          ? user.status === true
+          : user.status === false);
 
       return matchesSearch && matchesRole && matchesStatus;
     });
@@ -74,7 +76,10 @@ function AdminUsersComponent() {
             ]}
             actions={
               <>
-                <Button variant="outline" onClick={() => alert("Bulk actions coming soon")}>
+                <Button
+                  variant="outline"
+                  onClick={() => alert("Bulk actions coming soon")}
+                >
                   Bulk actions
                 </Button>
                 <Button
@@ -136,13 +141,16 @@ function AdminUsersComponent() {
                   Active: {users.filter((user) => user.status).length}
                 </Badge>
                 <Badge variant="outline">
-                  Inactive: {users.filter((user) => user.status === false).length}
+                  Inactive:{" "}
+                  {users.filter((user) => user.status === false).length}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {isLoading ? (
-                <div className="py-10 text-center text-sm text-muted-foreground">Loading users…</div>
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  Loading users…
+                </div>
               ) : filteredUsers.length === 0 ? (
                 <EmptyState
                   title="No users found"
@@ -153,10 +161,18 @@ function AdminUsersComponent() {
                   <table className="w-full table-fixed border-collapse text-sm">
                     <thead className="bg-muted/40">
                       <tr>
-                        <th className="p-3 text-left font-medium text-muted-foreground">Name</th>
-                        <th className="p-3 text-left font-medium text-muted-foreground">Email</th>
-                        <th className="p-3 text-left font-medium text-muted-foreground">Role</th>
-                        <th className="p-3 text-left font-medium text-muted-foreground">Status</th>
+                        <th className="p-3 text-left font-medium text-muted-foreground">
+                          Name
+                        </th>
+                        <th className="p-3 text-left font-medium text-muted-foreground">
+                          Email
+                        </th>
+                        <th className="p-3 text-left font-medium text-muted-foreground">
+                          Role
+                        </th>
+                        <th className="p-3 text-left font-medium text-muted-foreground">
+                          Status
+                        </th>
                         <th className="w-24 p-3 text-left font-medium text-muted-foreground">
                           Actions
                         </th>
@@ -164,14 +180,23 @@ function AdminUsersComponent() {
                     </thead>
                     <tbody>
                       {filteredUsers.map((user) => (
-                        <tr key={user.id} className="border-t bg-background hover:bg-muted/30">
+                        <tr
+                          key={user.id}
+                          className="border-t bg-background hover:bg-muted/30"
+                        >
                           <td className="truncate p-3 font-medium text-foreground">
-                            {user.fullName || user.userName || "Unnamed account"}
+                            {user.fullName ||
+                              user.userName ||
+                              "Unnamed account"}
                           </td>
-                          <td className="truncate p-3 text-muted-foreground">{user.email}</td>
+                          <td className="truncate p-3 text-muted-foreground">
+                            {user.email}
+                          </td>
                           <td className="truncate p-3">
                             {user.roleName ? (
-                              <Badge variant="outline">{capitalize(user.roleName)}</Badge>
+                              <Badge variant="outline">
+                                {capitalize(user.roleName)}
+                              </Badge>
                             ) : (
                               "-"
                             )}

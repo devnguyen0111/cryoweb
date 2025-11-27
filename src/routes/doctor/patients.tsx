@@ -11,6 +11,10 @@ import { api } from "@/api/client";
 import type { PaginatedResponse, TreatmentCycle } from "@/api/types";
 import { cn } from "@/utils/cn";
 import { DoctorPatientDetailModal } from "@/features/doctor/patients/DoctorPatientDetailModal";
+import {
+  isPatientDetailResponse,
+  getPatientProperty,
+} from "@/utils/patient-helpers";
 
 const emptyCycleResponse: PaginatedResponse<TreatmentCycle> = {
   code: 200,
@@ -84,7 +88,6 @@ function DoctorPatientsComponent() {
     queryFn: async () => {
       const response = await api.patient.getPatients({
         searchTerm: searchTerm || undefined,
-        bloodType: bloodTypeFilter || undefined,
         isActive:
           statusFilter === ""
             ? undefined
@@ -174,7 +177,7 @@ function DoctorPatientsComponent() {
 
     if (activeCycle?.treatmentType) {
       treatmentStatusByPatient.set(patient.id, activeCycle.treatmentType);
-    } else if (patient.treatmentCount && patient.treatmentCount > 0) {
+    } else if (getPatientProperty(patient, "treatmentCount", 0) > 0) {
       treatmentStatusByPatient.set(patient.id, "In follow-up");
     }
   });
@@ -244,7 +247,7 @@ function DoctorPatientsComponent() {
   const careStatus = selectedPatient
     ? activeCycle?.treatmentType
       ? activeCycle.treatmentType
-      : selectedPatient.treatmentCount
+      : getPatientProperty(selectedPatient, "treatmentCount", 0) > 0
         ? "In follow-up"
         : "Not started"
     : "No patient selected";
@@ -266,7 +269,7 @@ function DoctorPatientsComponent() {
         },
         {
           label: "Relationships on file",
-          value: selectedPatient.relationshipCount ?? 0,
+          value: getPatientProperty(selectedPatient, "relationshipCount", 0),
         },
       ]
     : [];
@@ -279,7 +282,11 @@ function DoctorPatientsComponent() {
   };
 
   const getAccountStatus = (patient: (typeof patients)[number]) => {
-    const isActive = patient.isActive ?? patient.accountInfo?.isActive ?? false;
+    const isDetail = isPatientDetailResponse(patient);
+    const isActive =
+      patient.isActive ??
+      (isDetail ? (patient as any).accountInfo?.isActive : false) ??
+      false;
     return {
       label: isActive ? "Active" : "Inactive",
       tone: isActive ? "text-emerald-600" : "text-gray-500",
@@ -430,17 +437,29 @@ function DoctorPatientsComponent() {
                 ) : patients.length ? (
                   <div className="space-y-3">
                     {patients.map((patient, index) => {
+                      const isDetail = isPatientDetailResponse(patient);
                       const displayName =
-                        patient.accountInfo?.username ||
+                        (isDetail
+                          ? (patient as any).accountInfo?.username
+                          : null) ||
+                        patient.fullName ||
                         patient.patientCode ||
                         "Unnamed patient";
                       const email =
-                        patient.accountInfo?.email || "Email not provided";
+                        (isDetail
+                          ? (patient as any).accountInfo?.email
+                          : null) ||
+                        patient.email ||
+                        "Email not provided";
                       const phone =
-                        patient.accountInfo?.phone || "Phone not provided";
+                        (isDetail
+                          ? (patient as any).accountInfo?.phone
+                          : null) ||
+                        patient.phoneNumber ||
+                        "Phone not provided";
                       const treatmentLabel =
                         treatmentStatusByPatient.get(patient.id) ??
-                        (patient.treatmentCount && patient.treatmentCount > 0
+                        (getPatientProperty(patient, "treatmentCount", 0) > 0
                           ? "In follow-up"
                           : "Not started");
                       const queryState = cycleSnapshots[index];
@@ -495,7 +514,12 @@ function DoctorPatientsComponent() {
                                   : treatmentLabel}
                               </p>
                               <p className="text-xs text-gray-500">
-                                Total cycles: {patient.treatmentCount ?? 0}
+                                Total cycles:{" "}
+                                {getPatientProperty(
+                                  patient,
+                                  "treatmentCount",
+                                  0
+                                )}
                               </p>
                             </div>
                             <div>
@@ -503,7 +527,14 @@ function DoctorPatientsComponent() {
                                 Additional info
                               </p>
                               <p>Blood type: {patient.bloodType || "N/A"}</p>
-                              <p>Lab samples: {patient.labSampleCount ?? 0}</p>
+                              <p>
+                                Lab samples:{" "}
+                                {getPatientProperty(
+                                  patient,
+                                  "labSampleCount",
+                                  0
+                                )}
+                              </p>
                             </div>
                           </div>
                         </button>
@@ -530,7 +561,10 @@ function DoctorPatientsComponent() {
                   <>
                     <div className="flex flex-col gap-2">
                       <h2 className="text-xl font-semibold text-gray-900">
-                        {selectedPatient.accountInfo?.username ||
+                        {(isPatientDetailResponse(selectedPatient)
+                          ? (selectedPatient as any).accountInfo?.username
+                          : null) ||
+                          selectedPatient.fullName ||
                           selectedPatient.patientCode ||
                           "Unnamed patient"}
                       </h2>
@@ -571,29 +605,49 @@ function DoctorPatientsComponent() {
                         <div>
                           <p className="text-gray-500">Email</p>
                           <p>
-                            {selectedPatient.accountInfo?.email ||
+                            {(isPatientDetailResponse(selectedPatient)
+                              ? (selectedPatient as any).accountInfo?.email
+                              : null) ||
+                              selectedPatient.email ||
                               "Not provided"}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Phone</p>
                           <p>
-                            {selectedPatient.accountInfo?.phone ||
+                            {(isPatientDetailResponse(selectedPatient)
+                              ? (selectedPatient as any).accountInfo?.phone
+                              : null) ||
+                              selectedPatient.phoneNumber ||
                               "Not provided"}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Emergency contact</p>
                           <p>
-                            {selectedPatient.emergencyContact || "Not provided"}
+                            {getPatientProperty(
+                              selectedPatient,
+                              "emergencyContact",
+                              "Not provided"
+                            )}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {selectedPatient.emergencyPhone || "—"}
+                            {getPatientProperty(
+                              selectedPatient,
+                              "emergencyPhone",
+                              "—"
+                            )}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Insurance</p>
-                          <p>{selectedPatient.insurance || "Not recorded"}</p>
+                          <p>
+                            {getPatientProperty(
+                              selectedPatient,
+                              "insurance",
+                              "Not recorded"
+                            )}
+                          </p>
                         </div>
                       </div>
                     </section>

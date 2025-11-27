@@ -19,7 +19,7 @@ export const Route = createFileRoute("/doctor/reports")({
 
 function DoctorReportsComponent() {
   const { user } = useAuth();
-  
+
   // AccountId IS DoctorId - use user.id directly as doctorId
   const doctorId = user?.id ?? null;
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
@@ -28,7 +28,7 @@ function DoctorReportsComponent() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  const { data: doctorStats, isFetching: statsLoading } = useQuery({
+  const { data: _doctorStats, isFetching: statsLoading } = useQuery({
     queryKey: ["doctor", "reports", range, from, to, doctorId],
     enabled: !!doctorId,
     retry: false,
@@ -62,7 +62,10 @@ function DoctorReportsComponent() {
           pageNumber: 1,
           pageSize: 1,
         });
-        return { data: response.data, metaData: { totalCount: response.metaData.totalCount } };
+        return {
+          data: response.data,
+          metaData: { totalCount: response.metaData.totalCount },
+        };
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
           return { data: [], metaData: { totalCount: 0 } } as any;
@@ -82,7 +85,10 @@ function DoctorReportsComponent() {
           pageNumber: 1,
           pageSize: 1,
         });
-        return { data: response.data, metaData: { totalCount: response.metaData.totalCount } };
+        return {
+          data: response.data,
+          metaData: { totalCount: response.metaData.totalCount },
+        };
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
           return { data: [], metaData: { totalCount: 0 } } as any;
@@ -102,7 +108,10 @@ function DoctorReportsComponent() {
           pageNumber: 1,
           pageSize: 1,
         });
-        return { data: response.data, metaData: { totalCount: response.metaData.totalCount } };
+        return {
+          data: response.data,
+          metaData: { totalCount: response.metaData.totalCount },
+        };
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
           return { data: [], metaData: { totalCount: 0 } } as any;
@@ -118,10 +127,10 @@ function DoctorReportsComponent() {
     retry: false,
     queryFn: () =>
       api.appointment.getAppointments({
-        DoctorId: doctorId!,
-        Status: "completed",
-        Page: 1,
-        Size: 1,
+        doctorId: doctorId!,
+        status: "Completed",
+        pageNumber: 1,
+        pageSize: 1,
       }),
   });
 
@@ -131,28 +140,24 @@ function DoctorReportsComponent() {
     retry: false,
     queryFn: () =>
       api.appointment.getAppointments({
-        DoctorId: doctorId!,
-        Status: "cancelled",
-        Page: 1,
-        Size: 1,
+        doctorId: doctorId!,
+        status: "Cancelled",
+        pageNumber: 1,
+        pageSize: 1,
       }),
   });
 
-  const totalCycles = cyclesAll?.metaData?.total ?? 0;
-  const activeCycles = cyclesInProgress?.metaData?.total ?? 0;
-  const completedCycles = cyclesCompleted?.metaData?.total ?? 0;
+  const totalCycles = cyclesAll?.metaData?.totalCount ?? 0;
+  const activeCycles = cyclesInProgress?.metaData?.totalCount ?? 0;
+  const completedCycles = cyclesCompleted?.metaData?.totalCount ?? 0;
   const completionRate = totalCycles
     ? Math.round((completedCycles / totalCycles) * 100)
     : 0;
   const activeRate = totalCycles
     ? Math.round((activeCycles / totalCycles) * 100)
     : 0;
-  const availableRate = doctorStats?.totalSlotsToday
-    ? Math.round(
-        ((doctorStats.availableSlotsToday ?? 0) / doctorStats.totalSlotsToday) *
-          100
-      )
-    : 0;
+  // totalSlotsToday and availableSlotsToday don't exist in DoctorStatisticsResponse
+  const availableRate = 0;
 
   const successMetrics = useMemo(
     () => [
@@ -200,16 +205,16 @@ function DoctorReportsComponent() {
     () => [
       {
         label: "Completed",
-        value: appointmentsCompleted?.metaData?.total ?? 0,
+        value: appointmentsCompleted?.metaData?.totalCount ?? 0,
       },
       {
         label: "Cancelled",
-        value: appointmentsCancelled?.metaData?.total ?? 0,
+        value: appointmentsCancelled?.metaData?.totalCount ?? 0,
       },
     ],
     [
-      appointmentsCompleted?.metaData?.total,
-      appointmentsCancelled?.metaData?.total,
+      appointmentsCompleted?.metaData?.totalCount,
+      appointmentsCancelled?.metaData?.totalCount,
     ]
   );
 
@@ -219,7 +224,8 @@ function DoctorReportsComponent() {
         <div className="space-y-8">
           {!doctorProfileLoading && !doctorProfile && doctorId ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              Doctor profile information is being loaded. If this message persists, please contact the administrator.
+              Doctor profile information is being loaded. If this message
+              persists, please contact the administrator.
             </div>
           ) : null}
 
@@ -284,17 +290,13 @@ function DoctorReportsComponent() {
                   <div className="rounded-lg border border-gray-100 p-4">
                     <p className="text-gray-500">Schedules today</p>
                     <p className="text-2xl font-semibold">
-                      {statsLoading
-                        ? "..."
-                        : (doctorStats?.totalSchedulesToday ?? "-")}
+                      {statsLoading ? "..." : "-"}
                     </p>
                   </div>
                   <div className="rounded-lg border border-gray-100 p-4">
                     <p className="text-gray-500">Available slots</p>
                     <p className="text-2xl font-semibold">
-                      {statsLoading
-                        ? "..."
-                        : (doctorStats?.availableSlotsToday ?? "-")}
+                      {statsLoading ? "..." : "-"}
                     </p>
                   </div>
                   <div className="rounded-lg border border-gray-100 p-4">

@@ -247,9 +247,21 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       permission: "canViewAppointments",
     },
     {
+      label: "Service Requests",
+      href: "/doctor/service-requests",
+      icon: "FileCheck",
+      permission: "canManageEncounters",
+    },
+    {
       label: "Encounters",
       href: "/doctor/encounters",
       icon: "ClipboardList",
+      permission: "canManageEncounters",
+    },
+    {
+      label: "Medical Records",
+      href: "/doctor/medical-records",
+      icon: "FileText",
       permission: "canManageEncounters",
     },
     {
@@ -324,6 +336,17 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       href: "/receptionist/appointments",
       icon: "Calendar",
       permission: "canViewAppointments",
+    },
+    {
+      label: "Schedule",
+      href: "/receptionist/schedule",
+      icon: "Clock",
+      permission: "canViewAppointments",
+    },
+    {
+      label: "Transactions",
+      href: "/receptionist/transactions",
+      icon: "CreditCard",
     },
     {
       label: "Reports",

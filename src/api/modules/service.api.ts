@@ -18,16 +18,16 @@ export class ServiceApi {
     }
 
     const mapped: Record<string, unknown> = {
-      page: params.page ?? params.Page,
-      size: params.size ?? params.Size,
-      sort: params.sort ?? params.Sort,
-      order: params.order ?? params.Order,
-      searchTerm: params.searchTerm ?? params.SearchTerm,
-      serviceCategoryId:
-        params.serviceCategoryId ?? params.ServiceCategoryId,
-      isActive: params.isActive ?? params.Status,
-      minPrice: params.minPrice ?? params.MinPrice,
-      maxPrice: params.maxPrice ?? params.MaxPrice,
+      page: (params as any).page ?? (params as any).Page ?? params.pageNumber,
+      size: (params as any).size ?? (params as any).Size ?? params.pageSize,
+      sort: (params as any).sort ?? (params as any).Sort,
+      order: (params as any).order ?? (params as any).Order,
+      searchTerm: params.searchTerm ?? (params as any).SearchTerm,
+      ServiceCategoryId: params.categoryId ?? (params as any).ServiceCategoryId,
+      categoryId: params.categoryId ?? (params as any).ServiceCategoryId,
+      isActive: params.isActive ?? (params as any).IsActive ?? (params as any).Status,
+      minPrice: (params as any).minPrice ?? (params as any).MinPrice,
+      maxPrice: (params as any).maxPrice ?? (params as any).MaxPrice,
     };
 
     Object.keys(mapped).forEach((key) => {
@@ -95,8 +95,8 @@ export class ServiceApi {
    * Delete service
    * DELETE /api/service/{id}
    */
-  async deleteService(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(`/Service/${id}`);
+  async deleteService(id: string): Promise<BaseResponse<void>> {
+    const response = await this.client.delete<BaseResponse<void>>(`/Service/${id}`);
     return response.data;
   }
 
@@ -107,6 +107,35 @@ export class ServiceApi {
   async getActiveServices(): Promise<BaseResponse<Service[]>> {
     const response = await this.client.get<BaseResponse<Service[]>>(
       "/Service/active"
+    );
+    return response.data;
+  }
+
+  /**
+   * Get services by category
+   * GET /api/service/category/{categoryId}
+   */
+  async getServicesByCategory(
+    categoryId: string,
+    params?: ServiceListQuery
+  ): Promise<DynamicResponse<Service>> {
+    const response = await this.client.get<DynamicResponse<Service>>(
+      `/Service/category/${categoryId}`,
+      { params: this.mapServiceListQuery(params) }
+    );
+    return response.data;
+  }
+
+  /**
+   * Search services
+   * GET /api/service/search
+   */
+  async searchServices(
+    params?: ServiceListQuery
+  ): Promise<DynamicResponse<Service>> {
+    const response = await this.client.get<DynamicResponse<Service>>(
+      "/Service/search",
+      { params: this.mapServiceListQuery(params) }
     );
     return response.data;
   }

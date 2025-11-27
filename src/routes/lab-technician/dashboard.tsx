@@ -11,8 +11,8 @@ export const Route = createFileRoute("/lab-technician/dashboard")({
 
 function LabTechnicianDashboardComponent() {
   const { data: samplesData } = useQuery({
-    queryKey: ["samples", { Page: 1, Size: 1 }],
-    queryFn: () => api.sample.getSamples({ Page: 1, Size: 1 }),
+    queryKey: ["samples", { pageNumber: 1, pageSize: 1 }],
+    queryFn: () => api.sample.getSamples({ pageNumber: 1, pageSize: 1 }),
   });
 
   return (
@@ -33,7 +33,7 @@ function LabTechnicianDashboardComponent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {samplesData?.metaData?.total || 0}
+                  {samplesData?.metaData?.totalCount || 0}
                 </div>
               </CardContent>
             </Card>

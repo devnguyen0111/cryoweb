@@ -19,45 +19,43 @@ function ReceptionistDashboardComponent() {
     queryKey: [
       "receptionist",
       "appointments",
-      { Page: 1, Size: 5, Status: "scheduled" },
+      { pageNumber: 1, pageSize: 5, status: "Scheduled" },
     ],
     queryFn: () =>
       api.appointment.getAppointments({
-        Page: 1,
-        Size: 5,
-        Status: "scheduled",
-        Sort: "appointmentDate",
-        Order: "asc",
+        pageNumber: 1,
+        pageSize: 5,
+        status: "Scheduled",
       }),
   });
 
   const { data: patientsData } = useQuery({
-    queryKey: ["receptionist", "patients", { Page: 1, Size: 5 }],
-    queryFn: () => api.patient.getPatients({ Page: 1, Size: 5 }),
+    queryKey: ["receptionist", "patients", { pageNumber: 1, pageSize: 5 }],
+    queryFn: () => api.patient.getPatients({ pageNumber: 1, pageSize: 5 }),
   });
 
   const { data: pendingRequestsData } = useQuery({
     queryKey: [
       "receptionist",
       "service-requests",
-      { Page: 1, Size: 5, Status: "Pending" },
+      { pageNumber: 1, pageSize: 5, status: "Pending" },
     ],
     queryFn: () =>
       api.serviceRequest.getServiceRequests({
-        Page: 1,
-        Size: 5,
-        Status: "Pending",
+        pageNumber: 1,
+        pageSize: 5,
+        status: "Pending",
       }),
   });
 
   const pendingRequests = pendingRequestsData?.data ?? [];
-  const totalPendingRequests = pendingRequestsData?.metaData?.total ?? 0;
+  const totalPendingRequests = pendingRequestsData?.metaData?.totalCount ?? 0;
 
   const upcomingAppointments = appointmentsData?.data ?? [];
-  const totalAppointmentsToday = appointmentsData?.metaData?.total ?? 0;
+  const totalAppointmentsToday = appointmentsData?.metaData?.totalCount ?? 0;
 
   const recentPatients = patientsData?.data ?? [];
-  const totalPatients = patientsData?.metaData?.total ?? 0;
+  const totalPatients = patientsData?.metaData?.totalCount ?? 0;
 
   const statusBadgeClass = (status?: string) => {
     switch (status) {
@@ -128,6 +126,46 @@ function ReceptionistDashboardComponent() {
                 </CardContent>
               </Card>
             ))}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Appointment Schedule
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate({ to: "/receptionist/schedule" })}
+                >
+                  View
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">—</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Manage appointments and assign doctors
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Transactions
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate({ to: "/receptionist/transactions" })}
+                >
+                  View
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">—</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  View and manage payments
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           <div className="grid gap-6 xl:grid-cols-2">
@@ -205,19 +243,18 @@ function ReceptionistDashboardComponent() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-gray-700">
                 {upcomingAppointments.length ? (
-                  upcomingAppointments.map((appointment) => (
+                  upcomingAppointments.map((appointment, index) => (
                     <div
                       key={appointment.id}
                       className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
                     >
                       <div>
                         <p className="font-medium text-gray-900">
-                          {appointment.title || "Untitled appointment"}
+                          {appointment.appointmentCode ||
+                            `appointment #${index + 1}`}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {appointment.appointmentDate || "—"} ·{" "}
-                          {appointment.startTime || "--"} -{" "}
-                          {appointment.endTime || "--"}
+                          {appointment.appointmentDate || "—"}
                         </p>
                       </div>
                       <Button
@@ -264,13 +301,13 @@ function ReceptionistDashboardComponent() {
                   >
                     <div>
                       <p className="font-medium text-gray-900">
-                        {patient.accountInfo?.username ||
+                        {patient.fullName ||
                           patient.patientCode ||
                           `Patient ${patient.id.slice(0, 8)}`}
                       </p>
                       <p className="text-xs text-gray-500">
-                        Email: {patient.accountInfo?.email || "—"} · Phone:{" "}
-                        {patient.accountInfo?.phone || "—"}
+                        Email: {patient.email || "—"} · Phone:{" "}
+                        {patient.phoneNumber || "—"}
                       </p>
                     </div>
                     <Button

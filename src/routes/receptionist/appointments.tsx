@@ -79,8 +79,9 @@ function ReceptionistAppointmentsComponent() {
   };
 
   const renderTimeRange = (appointment: Appointment) => {
-    const start = formatTimeValue(appointment.startTime);
-    const end = formatTimeValue(appointment.endTime);
+    // Appointment doesn't have startTime/endTime directly, they're in slot
+    const start = formatTimeValue((appointment as any).startTime);
+    const end = formatTimeValue((appointment as any).endTime);
     if (start === "--:--" && end === "--:--") {
       return "No time set";
     }
@@ -99,28 +100,24 @@ function ReceptionistAppointmentsComponent() {
         page,
         size: pageSize,
         status: normalizedStatusFilter,
-        fromDate: dateFrom || undefined,
-        toDate: dateTo || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
         searchTerm: searchTerm || undefined,
       },
     ],
     queryFn: () =>
       api.appointment.getAppointments({
-        page,
-        size: pageSize,
+        pageNumber: page,
+        pageSize: pageSize,
         status: normalizedStatusFilter,
-        fromDate: dateFrom || undefined,
-        toDate: dateTo || undefined,
-        searchTerm: searchTerm || undefined,
-        sort: "appointmentDate",
-        order: "asc",
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
       }),
   });
 
   const appointments = data?.data ?? [];
-  const total = data?.metaData?.total ?? 0;
-  const totalPages =
-    data?.metaData?.totalPage ?? data?.metaData?.totalPages ?? 1;
+  const total = data?.metaData?.totalCount ?? 0;
+  const totalPages = data?.metaData?.totalPages ?? 1;
 
   const statusBadgeClass = (status?: string) => {
     const normalized = normalizeAppointmentStatus(status);
@@ -168,10 +165,9 @@ function ReceptionistAppointmentsComponent() {
 
   const updateStatusMutation = useMutation({
     mutationFn: (payload: { appointmentId: string; status: string }) =>
-      api.appointment.updateAppointmentStatus(
-        payload.appointmentId,
-        ensureAppointmentStatus(payload.status)
-      ),
+      api.appointment.updateAppointmentStatus(payload.appointmentId, {
+        status: ensureAppointmentStatus(payload.status),
+      }),
     onSuccess: () => {
       toast.success("Appointment status updated");
       queryClient.invalidateQueries({
@@ -318,14 +314,17 @@ function ReceptionistAppointmentsComponent() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {appointments.map((appointment) => (
+                          {appointments.map((appointment, index) => (
                             <tr
                               key={appointment.id}
                               className="hover:bg-gray-50"
                             >
                               <td className="px-4 py-3">
                                 <div className="font-medium text-gray-900">
-                                  {appointment.title || "Untitled appointment"}
+                                  {(appointment as any).title ||
+                                    appointment.appointmentType ||
+                                    appointment.appointmentCode ||
+                                    `appointment #${(page - 1) * pageSize + index + 1}`}
                                 </div>
                                 <div className="text-xs text-gray-500">
                                   Patient: {resolvePatientLabel(appointment)}

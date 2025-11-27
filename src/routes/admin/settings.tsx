@@ -3,7 +3,13 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,8 +36,9 @@ const DEFAULT_SETTINGS: SystemSettingsForm = {
   centerPhone: "+84 28 1234 5678",
   centerEmail: "admin@fsc.vn",
   reminderEmailTemplate:
-    "Xin chào {{patient_name}}, đây là lời nhắc của bạn cho lịch hẹn ngày {{appointment_date}}.",
-  reminderSmsTemplate: "FSC reminder: appt {{appointment_date}} at {{appointment_time}}.",
+    "Hello {{patient_name}}, this is a reminder for your appointment on {{appointment_date}}.",
+  reminderSmsTemplate:
+    "FSC reminder: appt {{appointment_date}} at {{appointment_time}}.",
   reminderScheduleDays: 3,
   enableMultilingual: true,
   defaultLanguage: "vi",
@@ -66,10 +73,16 @@ function AdminSettingsComponent() {
             ]}
             actions={
               <>
-                <Button variant="outline" onClick={() => toast.info("Test email sent.")}>
+                <Button
+                  variant="outline"
+                  onClick={() => toast.info("Test email sent.")}
+                >
                   Send test email
                 </Button>
-                <Button variant="outline" onClick={() => toast.info("Test SMS sent.")}>
+                <Button
+                  variant="outline"
+                  onClick={() => toast.info("Test SMS sent.")}
+                >
                   Send test SMS
                 </Button>
               </>
@@ -105,7 +118,11 @@ function AdminSettingsComponent() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="centerEmail">Email</Label>
-                  <Input id="centerEmail" type="email" {...register("centerEmail")} />
+                  <Input
+                    id="centerEmail"
+                    type="email"
+                    {...register("centerEmail")}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="defaultLanguage">Default language</Label>
@@ -114,7 +131,7 @@ function AdminSettingsComponent() {
                     className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     {...register("defaultLanguage")}
                   >
-                    <option value="vi">Tiếng Việt</option>
+                    <option value="vi">Vietnamese</option>
                     <option value="en">English</option>
                   </select>
                 </div>
@@ -127,13 +144,17 @@ function AdminSettingsComponent() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="reminderScheduleDays">Reminder lead time (days)</Label>
+                  <Label htmlFor="reminderScheduleDays">
+                    Reminder lead time (days)
+                  </Label>
                   <Input
                     id="reminderScheduleDays"
                     type="number"
                     min={1}
                     max={14}
-                    {...register("reminderScheduleDays", { valueAsNumber: true })}
+                    {...register("reminderScheduleDays", {
+                      valueAsNumber: true,
+                    })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -169,7 +190,9 @@ function AdminSettingsComponent() {
                   <span>Enable multilingual content delivery</span>
                 </label>
                 <div className="space-y-2">
-                  <Label htmlFor="auditRetentionDays">Audit log retention (days)</Label>
+                  <Label htmlFor="auditRetentionDays">
+                    Audit log retention (days)
+                  </Label>
                   <Input
                     id="auditRetentionDays"
                     type="number"
@@ -179,8 +202,8 @@ function AdminSettingsComponent() {
                   />
                 </div>
                 <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
-                  All configuration changes are recorded with admin ID, timestamp, and IP address
-                  per non-functional requirements.
+                  All configuration changes are recorded with admin ID,
+                  timestamp, and IP address per non-functional requirements.
                 </div>
               </CardContent>
             </Card>
@@ -191,20 +214,28 @@ function AdminSettingsComponent() {
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-lg border bg-muted/20 p-4 text-sm">
-                  <h3 className="text-base font-semibold text-foreground">Email preview</h3>
+                  <h3 className="text-base font-semibold text-foreground">
+                    Email preview
+                  </h3>
                   <p className="mt-2 text-muted-foreground whitespace-pre-wrap">
                     {watch("reminderEmailTemplate")}
                   </p>
                 </div>
                 <div className="rounded-lg border bg-muted/20 p-4 text-sm">
-                  <h3 className="text-base font-semibold text-foreground">SMS preview</h3>
+                  <h3 className="text-base font-semibold text-foreground">
+                    SMS preview
+                  </h3>
                   <p className="mt-2 text-muted-foreground whitespace-pre-wrap">
                     {watch("reminderSmsTemplate")}
                   </p>
                 </div>
               </CardContent>
               <CardFooter className="flex justify-end gap-2">
-                <Button variant="outline" type="button" onClick={() => toast.info("Resetting…")}>
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() => toast.info("Resetting…")}
+                >
                   Reset changes
                 </Button>
                 <Button type="submit">Save configuration</Button>

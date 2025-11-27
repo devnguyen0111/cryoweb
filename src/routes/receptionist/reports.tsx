@@ -18,10 +18,8 @@ function ReceptionistReportsRoute() {
     queryKey: ["receptionist", "reports", "appointments-summary"],
     queryFn: () =>
       api.appointment.getAppointments({
-        Page: 1,
-        Size: 200,
-        Sort: "appointmentDate",
-        Order: "desc",
+        pageNumber: 1,
+        pageSize: 200,
       }),
   });
 
@@ -29,8 +27,8 @@ function ReceptionistReportsRoute() {
     queryKey: ["receptionist", "reports", "service-requests"],
     queryFn: () =>
       api.serviceRequest.getServiceRequests({
-        Page: 1,
-        Size: 200,
+        pageNumber: 1,
+        pageSize: 200,
       }),
   });
 
@@ -47,12 +45,12 @@ function ReceptionistReportsRoute() {
       statusCount[appointment.status] =
         (statusCount[appointment.status] || 0) + 1;
       if (
-        appointment.status === "scheduled" ||
-        appointment.status === "confirmed"
+        appointment.status === "Scheduled" ||
+        appointment.status === "Confirmed"
       ) {
         upcoming += 1;
       }
-      if (appointment.status === "no-show") {
+      if (appointment.status === "NoShow") {
         noShows += 1;
       }
     });
@@ -76,7 +74,8 @@ function ReceptionistReportsRoute() {
       const notes = request.notes?.toLowerCase() || "";
       if (
         notes.includes("cryo") ||
-        (request.serviceId && request.serviceId.toLowerCase().includes("cryo"))
+        (request.requestCode &&
+          request.requestCode.toLowerCase().includes("cryo"))
       ) {
         cryoRelated += 1;
       }

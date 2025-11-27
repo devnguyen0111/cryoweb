@@ -64,8 +64,8 @@ export class RelationshipApi {
    * Delete relationship
    * DELETE /api/relationship/{id}
    */
-  async deleteRelationship(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(
+  async deleteRelationship(id: string): Promise<BaseResponse<void>> {
+    const response = await this.client.delete<BaseResponse<void>>(
       `/relationship/${id}`
     );
     return response.data;

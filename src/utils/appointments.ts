@@ -15,7 +15,9 @@ const STATUS_NORMALIZATION_MAP: Record<string, AppointmentStatus> = {
 };
 
 export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
+  Pending: "Pending",
   Scheduled: "Scheduled",
+  Confirmed: "Confirmed",
   CheckedIn: "Checked in",
   InProgress: "In progress",
   Completed: "Completed",

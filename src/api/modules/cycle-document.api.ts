@@ -77,8 +77,8 @@ export class CycleDocumentApi {
   async deleteCycleDocument(
     treatmentCycleId: string,
     id: string
-  ): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(
+  ): Promise<BaseResponse<void>> {
+    const response = await this.client.delete<BaseResponse<void>>(
       `/treatment-cycles/${treatmentCycleId}/documents/${id}`
     );
     return response.data;

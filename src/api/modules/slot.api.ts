@@ -111,4 +111,41 @@ export class SlotApi {
     );
     return response.data;
   }
+
+  /**
+   * Update slot booking status
+   * PATCH /api/slots/{id}/booking-status
+   */
+  async updateSlotBookingStatus(
+    id: string,
+    isBooked: boolean
+  ): Promise<BaseResponse<Slot>> {
+    const response = await this.client.patch<BaseResponse<Slot>>(
+      `/slots/${id}/booking-status`,
+      { isBooked }
+    );
+    return response.data;
+  }
+
+  /**
+   * Delete slot
+   * DELETE /api/slots/{id}
+   */
+  async deleteSlot(id: string): Promise<BaseResponse<void>> {
+    const response = await this.client.delete<BaseResponse<void>>(
+      `/slots/${id}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get slot details
+   * GET /api/slots/{id}/details
+   */
+  async getSlotDetails(id: string): Promise<BaseResponse<SlotDetailResponse>> {
+    const response = await this.client.get<BaseResponse<SlotDetailResponse>>(
+      `/slots/${id}/details`
+    );
+    return response.data;
+  }
 }

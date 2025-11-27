@@ -37,15 +37,14 @@ function DoctorCryobankComponent() {
     queryKey: ["doctor", "cryobank", filters],
     queryFn: () =>
       api.sample.getSamples({
-        Page: page,
-        Size: 10,
-        Status: statusFilter || undefined,
-        SearchTerm: searchTerm || undefined,
+        pageNumber: page,
+        pageSize: 10,
+        status: (statusFilter as any) || undefined,
+        searchTerm: searchTerm || undefined,
       }),
   });
 
-  const totalPages =
-    data?.metaData?.totalPage ?? data?.metaData?.totalPages ?? 1;
+  const totalPages = data?.metaData?.totalPages ?? 1;
 
   const handleAction = (action: "reserve" | "thaw" | "discard") => {
     toast.info(
@@ -71,7 +70,7 @@ function DoctorCryobankComponent() {
                 <div>
                   <CardTitle>Cryobank filters</CardTitle>
                   <p className="text-sm text-gray-500">
-                    Page {page}/{totalPages} - {data?.metaData?.total ?? 0}{" "}
+                    Page {page}/{totalPages} - {data?.metaData?.totalCount ?? 0}{" "}
                     samples
                   </p>
                 </div>

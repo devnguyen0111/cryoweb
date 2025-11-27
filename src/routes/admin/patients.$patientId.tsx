@@ -6,7 +6,9 @@ import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { StructuredNote } from "@/components/StructuredNote";
 import { api } from "@/api/client";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 export const Route = createFileRoute("/admin/patients/$patientId")({
   component: AdminPatientDetail,
@@ -52,7 +54,9 @@ function AdminPatientDetail() {
   }, [isLoading, patient]);
 
   const displayName =
-    patient?.accountInfo?.username || patient?.patientCode || "Patient detail";
+    (isPatientDetailResponse(patient) && patient.accountInfo?.username) ||
+    patient?.patientCode ||
+    "Patient detail";
 
   return (
     <ProtectedRoute allowedRoles={["Admin"]}>
@@ -84,8 +88,14 @@ function AdminPatientDetail() {
                   {patient?.bloodType || "N/A"}
                 </p>
                 <p className="text-sm text-gray-500">
-                  Email: {patient?.accountInfo?.email || "-"} · Phone:{" "}
-                  {patient?.accountInfo?.phone || "-"}
+                  Email:{" "}
+                  {(isPatientDetailResponse(patient) &&
+                    patient.accountInfo?.email) ||
+                    "-"}{" "}
+                  · Phone:{" "}
+                  {(isPatientDetailResponse(patient) &&
+                    patient.accountInfo?.phone) ||
+                    "-"}
                 </p>
                 <p className="text-sm text-gray-500">
                   Status:{" "}
@@ -146,17 +156,22 @@ function AdminPatientDetail() {
                   <span className="font-medium text-gray-900">
                     Emergency contact:
                   </span>{" "}
-                  {patient?.emergencyContact || "Not provided"}
+                  {(isPatientDetailResponse(patient) &&
+                    patient.emergencyContact) ||
+                    "Not provided"}
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">
                     Emergency phone:
                   </span>{" "}
-                  {patient?.emergencyPhone || "-"}
+                  {(isPatientDetailResponse(patient) &&
+                    patient.emergencyPhone) ||
+                    "-"}
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">Insurance:</span>{" "}
-                  {patient?.insurance || "No insurance info"}
+                  {(isPatientDetailResponse(patient) && patient.insurance) ||
+                    "No insurance info"}
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">Created at:</span>{" "}
@@ -170,7 +185,9 @@ function AdminPatientDetail() {
                   <span className="font-medium text-gray-900">
                     Relationships:
                   </span>{" "}
-                  {patient?.relationshipCount ?? 0}
+                  {(isPatientDetailResponse(patient) &&
+                    patient.relationshipCount) ??
+                    0}
                 </p>
               </CardContent>
             </Card>
@@ -182,30 +199,39 @@ function AdminPatientDetail() {
               <CardContent className="space-y-3 text-sm text-gray-700">
                 <p>
                   <span className="font-medium text-gray-900">Height:</span>{" "}
-                  {patient?.height ?? "—"}
+                  {(isPatientDetailResponse(patient) && patient.height) ?? "—"}
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">Weight:</span>{" "}
-                  {patient?.weight ?? "—"}
+                  {(isPatientDetailResponse(patient) && patient.weight) ?? "—"}
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">BMI:</span>{" "}
-                  {patient?.bmi ?? "—"}
+                  {(isPatientDetailResponse(patient) && patient.bmi) ?? "—"}
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">
                     Medical history:
                   </span>{" "}
-                  {patient?.medicalHistory || "Not recorded"}
+                  {(isPatientDetailResponse(patient) &&
+                    patient.medicalHistory) ||
+                    "Not recorded"}
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">Allergies:</span>{" "}
-                  {patient?.allergies || "None reported"}
+                  {(isPatientDetailResponse(patient) && patient.allergies) ||
+                    "None reported"}
                 </p>
-                <p>
-                  <span className="font-medium text-gray-900">Notes:</span>{" "}
-                  {patient?.notes || "No notes"}
-                </p>
+                <div>
+                  <p className="font-medium text-gray-900">Notes:</p>
+                  <div className="mt-1 rounded border border-gray-200 bg-white p-2 text-sm text-gray-700">
+                    {isPatientDetailResponse(patient) && patient.notes ? (
+                      <StructuredNote note={patient.notes} />
+                    ) : (
+                      "No notes"
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>

@@ -17,8 +17,10 @@ import type {
   DoctorStatisticsResponse,
   PaginatedResponse,
   Patient,
+  PatientDetailResponse,
   ServiceRequest,
   TreatmentCycle,
+  MedicalRecord,
 } from "@/api/types";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 
@@ -143,6 +145,75 @@ function DoctorDashboardComponent() {
     },
   });
 
+  const patientIds = useMemo(
+    () =>
+      (activePatients?.data ?? [])
+        .map((patient) => patient.id)
+        .filter((id): id is string => Boolean(id)),
+    [activePatients?.data]
+  );
+
+  const { data: patientDetailsMap } = useQuery<
+    Record<string, PatientDetailResponse | null>
+  >({
+    queryKey: ["doctor-dashboard", "patient-details", patientIds],
+    enabled: patientIds.length > 0,
+    retry: false,
+    queryFn: async () => {
+      const entries = await Promise.all(
+        patientIds.map(async (id) => {
+          try {
+            const response = await api.patient.getPatientDetails(id);
+            return [id, response.data] as const;
+          } catch (error: any) {
+            if (isAxiosError(error) && error.response?.status === 404) {
+              return [id, null] as const;
+            }
+            console.warn(
+              "[DoctorDashboard] Unable to load patient detail",
+              id,
+              error
+            );
+            return [id, null] as const;
+          }
+        })
+      );
+
+      return Object.fromEntries(entries) as Record<
+        string,
+        PatientDetailResponse | null
+      >;
+    },
+  });
+
+  const enrichedPatients = useMemo(() => {
+    const details = patientDetailsMap ?? {};
+    return (activePatients?.data ?? []).map((patient, index) => {
+      const detail = details[patient.id];
+      const displayName =
+        detail?.fullName ||
+        detail?.accountInfo?.username ||
+        patient.fullName ||
+        patient.patientCode ||
+        `Patient #${index + 1}`;
+      const email =
+        detail?.accountInfo?.email || detail?.email || patient.email || "—";
+      const phone =
+        detail?.accountInfo?.phone ||
+        detail?.phoneNumber ||
+        patient.phoneNumber ||
+        "—";
+
+      return {
+        base: patient,
+        detail,
+        displayName,
+        email,
+        phone,
+      };
+    });
+  }, [activePatients?.data, patientDetailsMap]);
+
   // Get treatment cycles filtered by doctorId directly (Backend supports this)
   const { data: treatmentCycles } = useQuery<PaginatedResponse<TreatmentCycle>>(
     {
@@ -220,6 +291,31 @@ function DoctorDashboardComponent() {
           "Unable to load pending prescriptions or requests.";
         toast.error(message);
         return createEmptyResponse<ServiceRequest>();
+      }
+    },
+  });
+
+  const { data: recentMedicalRecords } = useQuery<
+    PaginatedResponse<MedicalRecord>
+  >({
+    queryKey: ["medical-records", "doctor-dashboard"],
+    retry: false,
+    queryFn: async (): Promise<PaginatedResponse<MedicalRecord>> => {
+      try {
+        return await fetchWith404Fallback(() =>
+          api.medicalRecord.getMedicalRecords({
+            Page: 1,
+            Size: 5,
+            Sort: "CreatedAt",
+            Order: "desc",
+          })
+        );
+      } catch (error: any) {
+        const message =
+          error?.response?.data?.message ||
+          "Unable to load recent medical records.";
+        toast.error(message);
+        return createEmptyResponse<MedicalRecord>();
       }
     },
   });
@@ -409,14 +505,15 @@ function DoctorDashboardComponent() {
                   </div>
                 ) : upcomingAppointments?.data?.length ? (
                   <div className="space-y-4">
-                    {upcomingAppointments.data.map((appointment) => (
+                    {upcomingAppointments.data.map((appointment, index) => (
                       <div
                         key={appointment.id}
                         className="flex flex-col gap-2 rounded-lg border border-gray-100 p-4 md:flex-row md:items-center md:justify-between"
                       >
                         <div>
                           <p className="font-medium text-gray-900">
-                            {appointment.appointmentCode || "Unnamed"}
+                            {appointment.appointmentCode ||
+                              `appointment #${index + 1}`}
                           </p>
                           <p className="text-sm text-gray-500">
                             {new Date(
@@ -493,7 +590,7 @@ function DoctorDashboardComponent() {
                 </Button>
               </CardHeader>
               <CardContent>
-                {activePatients?.data?.length ? (
+                {enrichedPatients.length ? (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-100 text-sm">
                       <thead>
@@ -505,21 +602,17 @@ function DoctorDashboardComponent() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {activePatients.data.map((patient) => {
-                          const displayName =
-                            patient.fullName ||
-                            patient.patientCode ||
-                            "Unknown";
-                          return (
+                        {enrichedPatients.map(
+                          ({ base: patient, displayName, email, phone }) => (
                             <tr key={patient.id}>
                               <td className="px-4 py-3 font-medium text-gray-900">
                                 {displayName}
                               </td>
                               <td className="px-4 py-3 text-gray-600">
-                                {patient.email || "-"}
+                                {email}
                               </td>
                               <td className="px-4 py-3 text-gray-600">
-                                {patient.phoneNumber || "-"}
+                                {phone}
                               </td>
                               <td className="px-4 py-3">
                                 <Button
@@ -537,8 +630,8 @@ function DoctorDashboardComponent() {
                                 </Button>
                               </td>
                             </tr>
-                          );
-                        })}
+                          )
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -590,7 +683,7 @@ function DoctorDashboardComponent() {
             </Card>
           </section>
 
-          <section>
+          <section className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Quick treatment workflow</CardTitle>
@@ -645,12 +738,12 @@ function DoctorDashboardComponent() {
                             size="sm"
                             onClick={() =>
                               navigate({
-                                to: "/doctor/treatment-cycles/$cycleId/workflow",
+                                to: "/doctor/treatment-cycles/$cycleId",
                                 params: { cycleId: cycle.id },
-                              })
+                              } as any)
                             }
                           >
-                            Enter workflow
+                            View Timeline
                           </Button>
                         </div>
                       </div>
@@ -659,6 +752,93 @@ function DoctorDashboardComponent() {
                 ) : (
                   <div className="py-10 text-center text-gray-500">
                     No treatment cycles assigned to you yet.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Recent Medical Records</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate({ to: "/doctor/medical-records" })}
+                >
+                  View all
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {recentMedicalRecords?.data?.length ? (
+                  <div className="space-y-4">
+                    {recentMedicalRecords.data.map((record) => (
+                      <div
+                        key={record.id}
+                        className="flex flex-col gap-2 rounded-lg border border-gray-100 p-4"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">
+                              {record.diagnosis
+                                ? record.diagnosis.length > 50
+                                  ? record.diagnosis.substring(0, 50) + "..."
+                                  : record.diagnosis
+                                : "No diagnosis"}
+                            </p>
+                            {record.chiefComplaint && (
+                              <p className="mt-1 text-xs text-gray-500">
+                                {record.chiefComplaint.length > 60
+                                  ? record.chiefComplaint.substring(0, 60) +
+                                    "..."
+                                  : record.chiefComplaint}
+                              </p>
+                            )}
+                            <p className="mt-1 text-xs text-gray-400">
+                              {new Date(record.createdAt).toLocaleDateString(
+                                "en-GB",
+                                {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                }
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              navigate({
+                                to: "/doctor/medical-records",
+                                search: { q: record.id },
+                              })
+                            }
+                          >
+                            View
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              navigate({
+                                to: "/doctor/appointments/$appointmentId",
+                                params: {
+                                  appointmentId: record.appointmentId,
+                                },
+                              })
+                            }
+                          >
+                            Appointment
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-10 text-center text-gray-500">
+                    No recent medical records.
                   </div>
                 )}
               </CardContent>

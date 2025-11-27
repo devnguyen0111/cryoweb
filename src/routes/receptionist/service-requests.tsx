@@ -37,8 +37,8 @@ function ReceptionistServiceRequestsRoute() {
   );
 
   const { data: servicesData } = useQuery({
-    queryKey: ["services", { Page: 1, Size: 100 }],
-    queryFn: () => api.service.getServices({ Page: 1, Size: 100 }),
+    queryKey: ["services", { pageNumber: 1, pageSize: 100 }],
+    queryFn: () => api.service.getServices({ pageNumber: 1, pageSize: 100 }),
   });
 
   const serviceOptions = useMemo(() => {
@@ -60,28 +60,22 @@ function ReceptionistServiceRequestsRoute() {
       "receptionist",
       "service-requests",
       {
-        Page: page,
-        Size: pageSize,
-        Status: filters.status || undefined,
-        ServiceId: filters.serviceId || undefined,
-        DateFrom: filters.dateFrom || undefined,
-        DateTo: filters.dateTo || undefined,
-        SearchTerm: filters.searchTerm || undefined,
+        pageNumber: page,
+        pageSize: pageSize,
+        status: filters.status || undefined,
+        searchTerm: filters.searchTerm || undefined,
       },
     ],
     queryFn: () =>
       api.serviceRequest.getServiceRequests({
-        Page: page,
-        Size: pageSize,
-        Status: filters.status || undefined,
-        ServiceId: filters.serviceId || undefined,
-        SearchTerm: filters.searchTerm || undefined,
-      }),
+        pageNumber: page,
+        pageSize: pageSize,
+        status: filters.status ? (filters.status as any) : undefined,
+      } as any),
   });
 
-  const total = data?.metaData?.total ?? 0;
-  const totalPages =
-    data?.metaData?.totalPage ?? data?.metaData?.totalPages ?? 1;
+  const total = data?.metaData?.totalCount ?? 0;
+  const totalPages = data?.metaData?.totalPages ?? 1;
   const requests = data?.data ?? [];
 
   const filteredRequests = useMemo(() => {
@@ -266,10 +260,7 @@ function ReceptionistServiceRequestsRoute() {
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {filteredRequests.map((request) => {
-                          const serviceName =
-                            serviceOptions.find(
-                              (option) => option.value === request.serviceId
-                            )?.label || "—";
+                          const serviceName = request.requestCode || "—";
                           return (
                             <tr key={request.id} className="hover:bg-gray-50">
                               <td className="px-4 py-3">

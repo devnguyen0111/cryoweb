@@ -15,10 +15,14 @@ import {
   SlotApi,
   TreatmentCycleApi,
   TreatmentApi,
-  TreatmentWorkflowApi,
   CycleDocumentApi,
   RelationshipApi,
   AppointmentDoctorApi,
+  TreatmentIUIApi,
+  TreatmentIVFApi,
+  AgreementApi,
+  MedicalRecordApi,
+  TransactionApi,
 } from "./modules";
 
 const API_BASE_URL =
@@ -114,10 +118,14 @@ export class ApiClient {
   slot: SlotApi;
   treatmentCycle: TreatmentCycleApi;
   treatment: TreatmentApi;
-  treatmentWorkflow: TreatmentWorkflowApi;
   cycleDocument: CycleDocumentApi;
   relationship: RelationshipApi;
   appointmentDoctor: AppointmentDoctorApi;
+  treatmentIUI: TreatmentIUIApi;
+  treatmentIVF: TreatmentIVFApi;
+  agreement: AgreementApi;
+  medicalRecord: MedicalRecordApi;
+  transaction: TransactionApi;
 
   constructor() {
     this.auth = new AuthApi(client);
@@ -134,10 +142,14 @@ export class ApiClient {
     this.slot = new SlotApi(client);
     this.treatmentCycle = new TreatmentCycleApi(client);
     this.treatment = new TreatmentApi(client);
-    this.treatmentWorkflow = new TreatmentWorkflowApi(client);
     this.cycleDocument = new CycleDocumentApi(client);
     this.relationship = new RelationshipApi(client);
     this.appointmentDoctor = new AppointmentDoctorApi(client);
+    this.treatmentIUI = new TreatmentIUIApi(client);
+    this.treatmentIVF = new TreatmentIVFApi(client);
+    this.agreement = new AgreementApi(client);
+    this.medicalRecord = new MedicalRecordApi(client);
+    this.transaction = new TransactionApi(client);
   }
 }
 

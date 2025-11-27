@@ -96,9 +96,20 @@ export class ServiceCategoryApi {
    * Delete service category
    * DELETE /api/servicecategory/{id}
    */
-  async deleteServiceCategory(id: string): Promise<BaseResponse> {
-    const response = await this.client.delete<BaseResponse>(
+  async deleteServiceCategory(id: string): Promise<BaseResponse<void>> {
+    const response = await this.client.delete<BaseResponse<void>>(
       `/ServiceCategory/${id}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Get active service categories
+   * GET /api/servicecategory/active
+   */
+  async getActiveServiceCategories(): Promise<BaseResponse<ServiceCategory[]>> {
+    const response = await this.client.get<BaseResponse<ServiceCategory[]>>(
+      "/ServiceCategory/active"
     );
     return response.data;
   }

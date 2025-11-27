@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 import type { DynamicResponse, Treatment, TreatmentCycle } from "@/api/types";
 import { cn } from "@/utils/cn";
+import {
+  isPatientDetailResponse,
+  getPatientProperty,
+} from "@/utils/patient-helpers";
 
 const tabs = [
   { id: "overview", label: "Overview" },
@@ -20,8 +24,17 @@ const tabs = [
 ] as const;
 
 const emptyList: DynamicResponse<any> = {
+  code: 200,
+  message: "Success",
   data: [],
-  metaData: { page: 1, size: 0, total: 0, totalPages: 0 },
+  metaData: {
+    pageNumber: 1,
+    pageSize: 0,
+    totalCount: 0,
+    totalPages: 0,
+    hasPrevious: false,
+    hasNext: false,
+  },
 };
 
 const formatDate = (value?: string | null) => {
@@ -119,7 +132,7 @@ function DoctorPatientProfile() {
       try {
         return (
           (await api.treatmentCycle.getTreatmentCycles({
-            PatientId: patientId,
+            patientId: patientId,
           })) ?? emptyList
         );
       } catch (error) {
@@ -149,11 +162,9 @@ function DoctorPatientProfile() {
       try {
         return (
           (await api.treatment.getTreatments({
-            PatientId: patientId,
-            Page: 1,
-            Size: 20,
-            Sort: "startDate",
-            Order: "desc",
+            patientId: patientId,
+            pageNumber: 1,
+            pageSize: 20,
           })) ?? emptyList
         );
       } catch (error) {
@@ -183,11 +194,9 @@ function DoctorPatientProfile() {
       try {
         return (
           (await api.appointment.getAppointments({
-            SearchTerm: patientId,
-            Page: 1,
-            Size: 20,
-            Order: "desc",
-            Sort: "appointmentDate",
+            patientId: patientId,
+            pageNumber: 1,
+            pageSize: 20,
           })) ?? emptyList
         );
       } catch (error) {
@@ -255,7 +264,7 @@ function DoctorPatientProfile() {
 
   const careStatus = activeCycle?.treatmentType
     ? activeCycle.treatmentType
-    : patient?.treatmentCount
+    : getPatientProperty(patient, "treatmentCount", 0) > 0
       ? "In follow-up"
       : "Not started";
 
@@ -327,7 +336,11 @@ function DoctorPatientProfile() {
   }
 
   const accountStatus =
-    patient?.accountInfo?.isActive === false ? "Inactive" : "Active";
+    patient &&
+    isPatientDetailResponse(patient) &&
+    patient.accountInfo?.isActive === false
+      ? "Inactive"
+      : "Active";
 
   return (
     <ProtectedRoute allowedRoles={["Doctor"]}>
@@ -337,7 +350,10 @@ function DoctorPatientProfile() {
             <div>
               <p className="text-sm text-gray-500">Patient profile</p>
               <h1 className="text-3xl font-bold text-gray-900">
-                {patient?.accountInfo?.username ||
+                {(patient && isPatientDetailResponse(patient)
+                  ? patient.accountInfo?.username
+                  : null) ||
+                  patient?.fullName ||
                   patient?.patientCode ||
                   "Unnamed patient"}
               </h1>
@@ -364,13 +380,27 @@ function DoctorPatientProfile() {
               <div className="space-y-2">
                 <CardTitle className="text-2xl">Care snapshot</CardTitle>
                 <div className="grid gap-2 text-sm text-gray-600 sm:grid-cols-2">
-                  <p>Email: {patient?.accountInfo?.email || "Not provided"}</p>
-                  <p>Phone: {patient?.accountInfo?.phone || "Not provided"}</p>
+                  <p>
+                    Email:{" "}
+                    {(patient && isPatientDetailResponse(patient)
+                      ? patient.accountInfo?.email
+                      : null) ||
+                      patient?.email ||
+                      "Not provided"}
+                  </p>
+                  <p>
+                    Phone:{" "}
+                    {(patient && isPatientDetailResponse(patient)
+                      ? patient.accountInfo?.phone
+                      : null) ||
+                      patient?.phoneNumber ||
+                      "Not provided"}
+                  </p>
                   <p>National ID: {patient?.nationalId || "Not provided"}</p>
                   <p>
                     Emergency contact:{" "}
-                    {patient?.emergencyContact
-                      ? `${patient.emergencyContact} (${patient.emergencyPhone ?? "—"})`
+                    {getPatientProperty(patient, "emergencyContact", null)
+                      ? `${getPatientProperty(patient, "emergencyContact", "")} (${getPatientProperty(patient, "emergencyPhone", "—")})`
                       : "Not provided"}
                   </p>
                 </div>
@@ -458,7 +488,13 @@ function DoctorPatientProfile() {
                 <CardContent className="grid gap-4 text-sm text-gray-700 md:grid-cols-2">
                   <div>
                     <p className="text-gray-500">Address</p>
-                    <p>{patient?.accountInfo?.address || "Not provided"}</p>
+                    <p>
+                      {(patient && isPatientDetailResponse(patient)
+                        ? patient.accountInfo?.address
+                        : null) ||
+                        patient?.address ||
+                        "Not provided"}
+                    </p>
                   </div>
                   <div>
                     <p className="text-gray-500">Profile created</p>
@@ -466,21 +502,25 @@ function DoctorPatientProfile() {
                   </div>
                   <div>
                     <p className="text-gray-500">Insurance</p>
-                    <p>{patient?.insurance || "Not provided"}</p>
+                    <p>
+                      {getPatientProperty(patient, "insurance", "Not provided")}
+                    </p>
                   </div>
                   <div>
                     <p className="text-gray-500">Notes</p>
-                    <p>{patient?.notes || "No notes yet"}</p>
+                    <p>
+                      {getPatientProperty(patient, "notes", "No notes yet")}
+                    </p>
                   </div>
                   <div>
                     <p className="text-gray-500">Lab samples</p>
-                    <p>{patient?.labSampleCount ?? 0}</p>
+                    <p>{getPatientProperty(patient, "labSampleCount", 0)}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">
                       Relationships (partner/donor)
                     </p>
-                    <p>{patient?.relationshipCount ?? 0}</p>
+                    <p>{getPatientProperty(patient, "relationshipCount", 0)}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -544,13 +584,21 @@ function DoctorPatientProfile() {
                       Medical history
                     </p>
                     <p className="text-base text-gray-800">
-                      {patient?.medicalHistory || "Not recorded"}
+                      {getPatientProperty(
+                        patient,
+                        "medicalHistory",
+                        "Not recorded"
+                      )}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs uppercase text-gray-500">Allergies</p>
                     <p className="text-base text-gray-800">
-                      {patient?.allergies || "None reported"}
+                      {getPatientProperty(
+                        patient,
+                        "allergies",
+                        "None reported"
+                      )}
                     </p>
                   </div>
                   <div>
@@ -558,7 +606,11 @@ function DoctorPatientProfile() {
                       Occupation
                     </p>
                     <p className="text-base text-gray-800">
-                      {patient?.occupation || "Not recorded"}
+                      {getPatientProperty(
+                        patient,
+                        "occupation",
+                        "Not recorded"
+                      )}
                     </p>
                   </div>
                   <p className="text-xs text-gray-500">
@@ -576,23 +628,24 @@ function DoctorPatientProfile() {
                   <div>
                     <p className="text-xs uppercase text-gray-500">Height</p>
                     <p className="text-base text-gray-800">
-                      {patient?.height
-                        ? `${patient.height} cm`
+                      {getPatientProperty(patient, "height", null)
+                        ? `${getPatientProperty(patient, "height", 0)} cm`
                         : "Not captured"}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs uppercase text-gray-500">Weight</p>
                     <p className="text-base text-gray-800">
-                      {patient?.weight
-                        ? `${patient.weight} kg`
+                      {getPatientProperty(patient, "weight", null)
+                        ? `${getPatientProperty(patient, "weight", 0)} kg`
                         : "Not captured"}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs uppercase text-gray-500">BMI</p>
                     <p className="text-base text-gray-800">
-                      {patient?.bmi ?? "Not calculated"}
+                      {getPatientProperty(patient, "bmi", null) ??
+                        "Not calculated"}
                     </p>
                   </div>
                   <div>
@@ -600,7 +653,7 @@ function DoctorPatientProfile() {
                       Clinician notes
                     </p>
                     <p className="text-base text-gray-800">
-                      {patient?.notes || "No notes yet"}
+                      {getPatientProperty(patient, "notes", "No notes yet")}
                     </p>
                   </div>
                 </CardContent>
@@ -679,9 +732,9 @@ function DoctorPatientProfile() {
                             type="button"
                             onClick={() =>
                               navigate({
-                                to: "/doctor/treatment-cycles/$cycleId/workflow",
+                                to: "/doctor/treatment-cycles/$cycleId",
                                 params: { cycleId: cycle.id },
-                              })
+                              } as any)
                             }
                           >
                             Open workflow

@@ -16,6 +16,7 @@ import {
   isPatientDetailResponse,
   getPatientProperty,
 } from "@/utils/patient-helpers";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 const emptyCycleResponse: PaginatedResponse<TreatmentCycle> = {
   code: 200,
@@ -78,6 +79,16 @@ function DoctorPatientsComponent() {
   const [detailModalPatientId, setDetailModalPatientId] = useState<
     string | null
   >(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["doctor", "patients"] }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   const filters = useMemo(
     () => ({ searchTerm, bloodTypeFilter, statusFilter, page }),
@@ -332,14 +343,24 @@ function DoctorPatientsComponent() {
                 encounters or prescriptions.
               </p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-              <p>
-                Showing <strong>{patients.length}</strong> of{" "}
-                <strong>{total}</strong> patients
-              </p>
-              <p className="text-xs text-gray-500">
-                Page {page} of {totalPages}
-              </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                <p>
+                  Showing <strong>{patients.length}</strong> of{" "}
+                  <strong>{total}</strong> patients
+                </p>
+                <p className="text-xs text-gray-500">
+                  Page {page} of {totalPages}
+                </p>
+              </div>
             </div>
           </header>
 
@@ -492,7 +513,7 @@ function DoctorPatientsComponent() {
                                 Patient code: {patient.patientCode ?? "—"}
                               </p>
                               <p className="text-xs text-gray-500">
-                                Account ID: {patient.accountId ?? "—"}
+                                Account ID: {getLast4Chars(patient.accountId)}
                               </p>
                             </div>
                             <span className={cn("text-sm font-medium", tone)}>
@@ -573,7 +594,7 @@ function DoctorPatientsComponent() {
                           "Unnamed patient"}
                       </h2>
                       <p className="text-sm text-gray-600">
-                        Account ID: {selectedPatient.accountId ?? "—"}
+                        Account ID: {getLast4Chars(selectedPatient.accountId)}
                       </p>
                       <div className="flex flex-wrap gap-2 text-xs font-medium">
                         <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">

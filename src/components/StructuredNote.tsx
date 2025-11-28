@@ -161,14 +161,44 @@ export function StructuredNote({
 
       {(() => {
         // Use agreement data if available (more accurate), otherwise use parsed notes data
-        const doctorSigned =
-          agreement?.signedByDoctor ??
-          agreement?.doctorSigned ??
-          parsed.doctorSigned;
-        const patientSigned =
-          agreement?.signedByPatient ??
-          agreement?.patientSigned ??
-          parsed.patientSigned;
+        // Priority: agreement data > parsed notes data
+        // Only use parsed data if agreement doesn't have the field (undefined)
+        // Handle both boolean and string "true"/"false" values
+        const normalizeBoolean = (value: unknown): boolean | undefined => {
+          if (
+            value === true ||
+            value === "true" ||
+            value === 1 ||
+            value === "1"
+          )
+            return true;
+          if (
+            value === false ||
+            value === "false" ||
+            value === 0 ||
+            value === "0" ||
+            value === null
+          )
+            return false;
+          return undefined;
+        };
+
+        // Get values from agreement first (most accurate), then fallback to parsed
+        const doctorSignedValue =
+          agreement?.signedByDoctor !== undefined
+            ? agreement.signedByDoctor
+            : agreement?.doctorSigned !== undefined
+              ? agreement.doctorSigned
+              : parsed.doctorSigned;
+        const patientSignedValue =
+          agreement?.signedByPatient !== undefined
+            ? agreement.signedByPatient
+            : agreement?.patientSigned !== undefined
+              ? agreement.patientSigned
+              : parsed.patientSigned;
+
+        const doctorSigned = normalizeBoolean(doctorSignedValue);
+        const patientSigned = normalizeBoolean(patientSignedValue);
 
         // Only show signature status if we have data from either source
         if (
@@ -184,11 +214,11 @@ export function StructuredNote({
           <div className="text-xs text-gray-500">
             {(doctorSigned !== undefined ||
               parsed.doctorSigned !== undefined) && (
-              <p>Doctor {doctorSigned ? "signed" : "not signed"}.</p>
+              <p>Doctor {doctorSigned === true ? "signed" : "not signed"}.</p>
             )}
             {(patientSigned !== undefined ||
               parsed.patientSigned !== undefined) && (
-              <p>Patient {patientSigned ? "signed" : "not signed"}.</p>
+              <p>Patient {patientSigned === true ? "signed" : "not signed"}.</p>
             )}
           </div>
         );

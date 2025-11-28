@@ -1,6 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,9 +11,10 @@ import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { CreateEncounterForm } from "@/features/doctor/encounters/CreateEncounterForm";
-import { DiagnosisForm } from "@/features/doctor/encounters/DiagnosisForm";
+import { TreatmentViewModal } from "@/features/doctor/encounters/TreatmentViewModal";
 import { isAxiosError } from "axios";
 import { StructuredNote } from "@/components/StructuredNote";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 export const Route = createFileRoute("/doctor/encounters")({
   component: DoctorEncountersComponent,
@@ -20,15 +22,24 @@ export const Route = createFileRoute("/doctor/encounters")({
 });
 
 function DoctorEncountersComponent() {
-  const navigate = useNavigate();
   const search = Route.useSearch();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [diagnosisModalTreatmentId, setDiagnosisModalTreatmentId] = useState<
+  const [viewModalTreatmentId, setViewModalTreatmentId] = useState<
     string | null
   >(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["doctor-treatments"] }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   // Fetch all treatments for this doctor
   const { data: treatmentsData, isLoading } = useQuery({
@@ -237,6 +248,8 @@ function DoctorEncountersComponent() {
       enabled:
         !!treatmentId && (treatmentType === "IUI" || treatmentType === "IVF"),
       retry: false,
+      refetchOnWindowFocus: true, // Refetch when window gains focus to get latest signature status
+      refetchInterval: 3000, // Refetch every 3 seconds to catch signature updates
     });
 
     return (
@@ -287,7 +300,7 @@ function DoctorEncountersComponent() {
       "Unknown";
     const patientCode = patientDetails?.patientCode;
     // Use patientCode if available, otherwise use short ID (last 4 chars)
-    const shortId = patientCode || patientId.slice(-4);
+    const shortId = patientCode || getLast4Chars(patientId);
 
     return (
       <div className="flex items-center gap-2 text-sm">
@@ -313,9 +326,21 @@ function DoctorEncountersComponent() {
                   diagnosis workflow.
                 </p>
               </div>
-              <Button onClick={() => setIsCreateModalOpen(true)}>
-                + Create treatment
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw
+                    className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                  />
+                  Refresh
+                </Button>
+                <Button onClick={() => setIsCreateModalOpen(true)}>
+                  + Create treatment
+                </Button>
+              </div>
             </div>
           </section>
 
@@ -387,7 +412,7 @@ function DoctorEncountersComponent() {
                           <div className="flex items-center gap-3 mb-2 flex-wrap">
                             <h3 className="font-semibold text-lg">
                               {treatment.treatmentCode ||
-                                `Treatment ${treatment.id.slice(0, 8)}`}
+                                `Treatment ${getLast4Chars(treatment.id)}`}
                             </h3>
                             <span
                               className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(
@@ -433,25 +458,14 @@ function DoctorEncountersComponent() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() =>
-                              navigate({
-                                to: "/doctor/encounters/$encounterId",
-                                params: { encounterId: treatment.id },
-                              })
-                            }
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewModalTreatmentId(treatment.id);
+                            }}
                           >
                             View
                           </Button>
-                          {treatment.status === "InProgress" && (
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                setDiagnosisModalTreatmentId(treatment.id)
-                              }
-                            >
-                              Diagnose
-                            </Button>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -493,29 +507,11 @@ function DoctorEncountersComponent() {
           />
         </Modal>
 
-        <Modal
-          isOpen={Boolean(diagnosisModalTreatmentId)}
-          onClose={() => setDiagnosisModalTreatmentId(null)}
-          title="Diagnosis & Treatment Recommendation"
-          description="Evaluate patient factors and recommend appropriate treatment (IVF or IUI)."
-          size="xl"
-        >
-          {diagnosisModalTreatmentId && (
-            <DiagnosisForm
-              treatmentId={diagnosisModalTreatmentId}
-              patientId={
-                filteredTreatments.find(
-                  (t) => t.id === diagnosisModalTreatmentId
-                )?.patientId
-              }
-              layout="modal"
-              onClose={() => setDiagnosisModalTreatmentId(null)}
-              onSaved={() => {
-                setDiagnosisModalTreatmentId(null);
-              }}
-            />
-          )}
-        </Modal>
+        <TreatmentViewModal
+          treatmentId={viewModalTreatmentId}
+          isOpen={Boolean(viewModalTreatmentId)}
+          onClose={() => setViewModalTreatmentId(null)}
+        />
       </DashboardLayout>
     </ProtectedRoute>
   );

@@ -69,6 +69,12 @@ export function TreatmentPlanForm({
     notes: "",
   });
 
+  // Patient search state
+  const [patientSearch, setPatientSearch] = useState("");
+  const [showPatientSelector, setShowPatientSelector] = useState(
+    !formState.patientId
+  );
+
   // Sync patientId from props to formState when it changes
   useEffect(() => {
     if (patientId && patientId !== formState.patientId) {
@@ -76,8 +82,22 @@ export function TreatmentPlanForm({
         ...prev,
         patientId: patientId,
       }));
+      setShowPatientSelector(false);
     }
   }, [patientId, formState.patientId]);
+
+  // Search patients
+  const { data: patientsData } = useQuery({
+    queryKey: ["patients", patientSearch],
+    queryFn: async () => {
+      if (!patientSearch || patientSearch.length < 2) return { data: [] };
+      return await api.patient.getPatients({
+        searchTerm: patientSearch,
+        pageSize: 10,
+      });
+    },
+    enabled: patientSearch.length >= 2 && showPatientSelector,
+  });
   const [showSignatureStep, setShowSignatureStep] = useState(false);
   const [createdTreatmentId, setCreatedTreatmentId] = useState<string | null>(
     null
@@ -85,6 +105,50 @@ export function TreatmentPlanForm({
   const [createdAgreementId, setCreatedAgreementId] = useState<string | null>(
     null
   );
+
+  // Fetch patient details to check gender for IVF validation
+  const { data: patientDetails } = useQuery({
+    queryKey: ["patient-details", formState.patientId],
+    queryFn: async () => {
+      if (!formState.patientId) return null;
+      try {
+        const response = await api.patient.getPatientDetails(
+          formState.patientId
+        );
+        return response.data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!formState.patientId,
+  });
+
+  const { data: userDetails } = useQuery({
+    queryKey: ["user-details", formState.patientId],
+    queryFn: async () => {
+      if (!formState.patientId) return null;
+      try {
+        const response = await api.user.getUserDetails(formState.patientId);
+        return response.data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!formState.patientId,
+  });
+
+  // Helper function to check if patient is male
+  const isPatientMale = (): boolean => {
+    const patientGender =
+      patientDetails?.gender ||
+      (userDetails?.gender !== undefined
+        ? userDetails.gender
+          ? "Male"
+          : "Female"
+        : null);
+
+    return patientGender === "Male";
+  };
 
   // Load existing treatment if treatmentId provided
   const { data: existingTreatment } = useQuery({
@@ -152,6 +216,40 @@ export function TreatmentPlanForm({
     mutationFn: async (data: TreatmentPlanFormValues) => {
       if (!doctorId || !data.patientId) {
         throw new Error("Doctor ID and Patient ID are required");
+      }
+
+      // Validate: IVF treatment can only be created for female patients
+      if (data.treatmentType === "IVF") {
+        // Fetch patient details to verify gender
+        try {
+          const patientResponse = await api.patient.getPatientDetails(
+            data.patientId
+          );
+          const patientData = patientResponse.data;
+          const userResponse = await api.user.getUserDetails(data.patientId);
+          const userData = userResponse.data;
+
+          const patientGender =
+            patientData?.gender ||
+            (userData?.gender !== undefined
+              ? userData.gender
+                ? "Male"
+                : "Female"
+              : null);
+
+          if (patientGender === "Male") {
+            throw new Error(
+              "IVF treatment can only be created for female patients. Male patients are not eligible for IVF treatment."
+            );
+          }
+        } catch (error: any) {
+          // If it's our validation error, re-throw it
+          if (error?.message?.includes("IVF treatment can only be created")) {
+            throw error;
+          }
+          // Otherwise, log and continue (patient data might not be available, but frontend validation should catch it)
+          console.warn("Could not verify patient gender:", error);
+        }
       }
 
       // Create main treatment record
@@ -239,7 +337,6 @@ export function TreatmentPlanForm({
           notes: "",
           outcome: "",
           complications: "",
-          usedICSI: false,
           status: "Planned",
         };
       }
@@ -279,6 +376,7 @@ export function TreatmentPlanForm({
         const agreementData = agreementResponse.data;
 
         // Auto-sign as doctor (only if not already signed)
+        let finalAgreementData = agreementData;
         if (agreementData?.id && doctorId) {
           try {
             // Check if already signed before attempting to sign
@@ -288,10 +386,15 @@ export function TreatmentPlanForm({
               false;
 
             if (!isAlreadySigned) {
-              await api.agreement.signAgreement(agreementData.id, {
-                signedByDoctor: true,
-                signedByPatient: false,
-              });
+              const signResponse = await api.agreement.signAgreement(
+                agreementData.id,
+                {
+                  signedByDoctor: true,
+                  signedByPatient: false,
+                }
+              );
+              // Use the signed agreement data
+              finalAgreementData = signResponse.data || agreementData;
             }
           } catch (error: any) {
             // If agreement is already signed, treat it as success
@@ -305,6 +408,16 @@ export function TreatmentPlanForm({
               console.log(
                 "Agreement already signed by doctor, skipping auto-sign"
               );
+              // Try to refetch to get the latest state
+              try {
+                const refetchResponse = await api.agreement.getAgreementById(
+                  agreementData.id
+                );
+                finalAgreementData = refetchResponse.data || agreementData;
+              } catch {
+                // If refetch fails, use original data
+                finalAgreementData = agreementData;
+              }
             } else {
               // Re-throw other errors
               throw error;
@@ -314,7 +427,7 @@ export function TreatmentPlanForm({
 
         return {
           treatment: treatmentData,
-          agreement: agreementData,
+          agreement: finalAgreementData,
         };
       }
 
@@ -328,6 +441,18 @@ export function TreatmentPlanForm({
       queryClient.invalidateQueries({
         queryKey: ["doctor-treatments"],
       });
+
+      // Invalidate agreement queries to ensure fresh data
+      if (result.agreement?.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["agreement", result.agreement.id],
+        });
+      }
+      if (result.treatment?.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["agreement", result.treatment.id],
+        });
+      }
 
       // If treatmentId was provided (updating existing), don't show signature step
       // Signature will be handled by parent component (CreateEncounterForm)
@@ -468,6 +593,14 @@ export function TreatmentPlanForm({
       return;
     }
 
+    // Validate: IVF treatment can only be created for female patients
+    if (formState.treatmentType === "IVF" && isPatientMale()) {
+      toast.error(
+        "IVF treatment can only be created for female patients. Male patients are not eligible for IVF treatment."
+      );
+      return;
+    }
+
     if (treatmentId) {
       updateTreatmentMutation.mutate(formState);
     } else {
@@ -496,6 +629,14 @@ export function TreatmentPlanForm({
         toast.error("Please select a start date");
         return;
       }
+      return;
+    }
+
+    // Validate: IVF treatment can only be created for female patients
+    if (formState.treatmentType === "IVF" && isPatientMale()) {
+      toast.error(
+        "IVF treatment can only be created for female patients. Male patients are not eligible for IVF treatment."
+      );
       return;
     }
 
@@ -535,7 +676,7 @@ export function TreatmentPlanForm({
     } else if (treatmentType === "IVF") {
       return `In Vitro Fertilization (IVF) Treatment Goals:
 - Stimulate optimal ovarian response for egg retrieval
-- Achieve successful fertilization through IVF or ICSI
+- Achieve successful fertilization through IVF
 - Cultivate high-quality embryos for transfer
 - Maximize implantation and pregnancy success rates
 - Provide comprehensive monitoring and support throughout the process
@@ -666,14 +807,14 @@ export function TreatmentPlanForm({
           name: "Phase 4: Sperm Collection & Preparation",
           type: "IVF" as const,
           durationDays: 1, // Same day
-          description: `Sperm collection and preparation: (1) Male partner provides semen sample or surgical procedure (TESA/PESA/Micro-TESE) if needed. (2) Laboratory washing and selection of progressive motile sperm. Sperm quality assessment: Volume ≥1.4ml, concentration ≥16 million/ml, progressive motility (PR) ≥30%, normal morphology ≥4%, viability ≥58%. If severe abnormalities → indicate ICSI.`,
-          goals: `Obtain quality sperm sample, wash and select best progressive motile sperm, accurately assess sperm quality, and determine appropriate fertilization method (conventional IVF or ICSI).`,
+          description: `Sperm collection and preparation: (1) Male partner provides semen sample or surgical procedure (TESA/PESA/Micro-TESE) if needed. (2) Laboratory washing and selection of progressive motile sperm. Sperm quality assessment: Volume ≥1.4ml, concentration ≥16 million/ml, progressive motility (PR) ≥30%, normal morphology ≥4%, viability ≥58%.`,
+          goals: `Obtain quality sperm sample, wash and select best progressive motile sperm, accurately assess sperm quality, and prepare for fertilization.`,
         },
         {
           name: "Phase 5: In Vitro Fertilization",
           type: "IVF" as const,
           durationDays: 1, // Same day
-          description: `In vitro fertilization: (1) Conventional IVF: mix oocytes and sperm in culture dish. (2) ICSI: direct injection of sperm into oocyte (applied when sperm is too few/weak). (3) After 16-18 hours → check fertilization (appearance of 2 pronuclei – PN). Ensure optimal culture conditions, monitor fertilization process, and confirm zygote formation.`,
+          description: `In vitro fertilization: (1) Conventional IVF: mix oocytes and sperm in culture dish. (2) After 16-18 hours → check fertilization (appearance of 2 pronuclei – PN). Ensure optimal culture conditions, monitor fertilization process, and confirm zygote formation.`,
           goals: `Achieve high fertilization rate (target: 70-80%), ensure good zygote quality, and prepare for subsequent embryo culture phase.`,
         },
         {
@@ -761,6 +902,14 @@ export function TreatmentPlanForm({
     );
   }
 
+  // Get patient name for display
+  const patientName =
+    patientDetails?.accountInfo?.username ||
+    userDetails?.fullName ||
+    userDetails?.userName ||
+    patientDetails?.fullName ||
+    "Unknown";
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -769,6 +918,247 @@ export function TreatmentPlanForm({
       }
       style={layout === "modal" ? { maxHeight: "70vh" } : undefined}
     >
+      {/* Patient Selection */}
+      {showPatientSelector ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Patient</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Search Patient (by name, code, or national ID)
+              </label>
+              <Input
+                placeholder="Enter at least 2 characters to search..."
+                value={patientSearch}
+                onChange={(e) => setPatientSearch(e.target.value)}
+              />
+            </div>
+
+            {patientsData?.data && patientsData.data.length > 0 && (
+              <div className="rounded-lg border">
+                <div className="max-h-64 overflow-y-auto">
+                  {patientsData.data.map((patient: any) => (
+                    <button
+                      key={patient.id}
+                      type="button"
+                      onClick={() => {
+                        handleFieldChange("patientId", patient.id);
+                        setPatientSearch(
+                          `${patient.fullName} (${patient.patientCode})`
+                        );
+                        setShowPatientSelector(false);
+                        // Reset treatment type if it was IVF and new patient is male
+                        if (formState.treatmentType === "IVF") {
+                          const newPatientGender =
+                            patient.gender ||
+                            (patient.gender === true ? "Male" : "Female");
+                          if (newPatientGender === "Male") {
+                            handleFieldChange("treatmentType", "");
+                            toast.error(
+                              "IVF treatment is not available for male patients. Please select a different treatment type."
+                            );
+                          }
+                        }
+                      }}
+                      className={`w-full border-b p-3 text-left transition last:border-b-0 hover:bg-gray-50 ${
+                        formState.patientId === patient.id ? "bg-primary/5" : ""
+                      }`}
+                    >
+                      <p className="font-medium">{patient.fullName}</p>
+                      <p className="text-sm text-gray-600">
+                        {patient.patientCode} • {patient.nationalId} •{" "}
+                        {patient.gender}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {formState.patientId && (
+              <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
+                ✓ Patient selected: {patientName} (
+                {patientDetails?.patientCode || ""})
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : formState.patientId ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Patient Information</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowPatientSelector(true);
+                setPatientSearch("");
+              }}
+            >
+              Change Patient
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-gray-500">Full Name</p>
+                <p className="text-base font-semibold">{patientName}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-gray-500">
+                  Patient Code
+                </p>
+                <p className="text-base">
+                  {patientDetails?.patientCode || "N/A"}
+                </p>
+              </div>
+              {patientDetails?.nationalId && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-500">
+                    National ID
+                  </p>
+                  <p className="text-base">{patientDetails.nationalId}</p>
+                </div>
+              )}
+              {(() => {
+                const patientGender =
+                  patientDetails?.gender ||
+                  (userDetails?.gender !== undefined
+                    ? userDetails.gender
+                      ? "Male"
+                      : "Female"
+                    : null);
+                return patientGender ? (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-gray-500">Gender</p>
+                    <p className="text-base">{patientGender}</p>
+                  </div>
+                ) : null;
+              })()}
+              {(() => {
+                const dateOfBirth = userDetails?.dob
+                  ? new Date(userDetails.dob).toLocaleDateString("vi-VN")
+                  : patientDetails?.dateOfBirth
+                    ? new Date(patientDetails.dateOfBirth).toLocaleDateString(
+                        "vi-VN"
+                      )
+                    : null;
+                const age = userDetails?.age ?? null;
+                return dateOfBirth ? (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-gray-500">
+                      Date of Birth
+                    </p>
+                    <p className="text-base">
+                      {dateOfBirth}
+                      {age && ` (${age} years old)`}
+                    </p>
+                  </div>
+                ) : null;
+              })()}
+              {(() => {
+                const phone =
+                  patientDetails?.accountInfo?.phone ||
+                  userDetails?.phone ||
+                  userDetails?.phoneNumber ||
+                  patientDetails?.phoneNumber ||
+                  null;
+                return phone ? (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-gray-500">Phone</p>
+                    <p className="text-base">{phone}</p>
+                  </div>
+                ) : null;
+              })()}
+              {(() => {
+                const email =
+                  patientDetails?.accountInfo?.email ||
+                  userDetails?.email ||
+                  patientDetails?.email ||
+                  null;
+                return email ? (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-gray-500">Email</p>
+                    <p className="text-base">{email}</p>
+                  </div>
+                ) : null;
+              })()}
+              {patientDetails?.bloodType && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-500">
+                    Blood Type
+                  </p>
+                  <p className="text-base">{patientDetails.bloodType}</p>
+                </div>
+              )}
+              {(() => {
+                const address =
+                  patientDetails?.accountInfo?.address ||
+                  userDetails?.location ||
+                  patientDetails?.address ||
+                  null;
+                return address ? (
+                  <div className="space-y-1 md:col-span-2">
+                    <p className="text-sm font-medium text-gray-500">Address</p>
+                    <p className="text-base">{address}</p>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Patient</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Search Patient (by name, code, or national ID)
+              </label>
+              <Input
+                placeholder="Enter at least 2 characters to search..."
+                value={patientSearch}
+                onChange={(e) => setPatientSearch(e.target.value)}
+              />
+            </div>
+
+            {patientsData?.data && patientsData.data.length > 0 && (
+              <div className="rounded-lg border">
+                <div className="max-h-64 overflow-y-auto">
+                  {patientsData.data.map((patient: any) => (
+                    <button
+                      key={patient.id}
+                      type="button"
+                      onClick={() => {
+                        handleFieldChange("patientId", patient.id);
+                        setPatientSearch(
+                          `${patient.fullName} (${patient.patientCode})`
+                        );
+                        setShowPatientSelector(false);
+                      }}
+                      className={`w-full border-b p-3 text-left transition last:border-b-0 hover:bg-gray-50 ${
+                        formState.patientId === patient.id ? "bg-primary/5" : ""
+                      }`}
+                    >
+                      <p className="font-medium">{patient.fullName}</p>
+                      <p className="text-sm text-gray-600">
+                        {patient.patientCode} • {patient.nationalId} •{" "}
+                        {patient.gender}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Basic Information */}
       <Card>
         <CardHeader>
@@ -798,12 +1188,34 @@ export function TreatmentPlanForm({
                   handleFieldChange("treatmentType", e.target.value)
                 }
                 required
+                disabled={
+                  !!(
+                    formState.patientId &&
+                    isPatientMale() &&
+                    formState.treatmentType === "IVF"
+                  )
+                }
               >
                 <option value="">Select type</option>
-                <option value="IVF">IVF (In Vitro Fertilization)</option>
+                <option
+                  value="IVF"
+                  disabled={!!(formState.patientId && isPatientMale())}
+                >
+                  IVF (In Vitro Fertilization)
+                  {formState.patientId &&
+                    isPatientMale() &&
+                    " (Not available for male patients)"}
+                </option>
                 <option value="IUI">IUI (Intrauterine Insemination)</option>
                 <option value="Other">Other</option>
               </select>
+              {formState.patientId &&
+                isPatientMale() &&
+                formState.treatmentType === "IVF" && (
+                  <p className="text-sm text-red-500 mt-1">
+                    IVF treatment is only available for female patients.
+                  </p>
+                )}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">

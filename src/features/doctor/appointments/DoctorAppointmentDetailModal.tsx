@@ -20,6 +20,7 @@ import { cn } from "@/utils/cn";
 import { StructuredNote } from "@/components/StructuredNote";
 import { HorizontalTreatmentTimeline } from "@/features/doctor/treatment-cycles/HorizontalTreatmentTimeline";
 import { normalizeTreatmentCycleStatus } from "@/api/types";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 interface DoctorAppointmentDetailModalProps {
   appointmentId: string | null;
@@ -1207,7 +1208,7 @@ export function DoctorAppointmentDetailModal({
                         </h3>
                         <p className="text-sm text-gray-600">
                           {(patient?.patientCode || patient?.id) &&
-                            `Patient ID: ${patient.patientCode || patient.id}`}
+                            `Patient ID: ${patient.patientCode || getLast4Chars(patient.id)}`}
                           {patient?.gender && ` • ${patient.gender}`}
                           {patient?.bloodType &&
                             ` • Blood: ${patient.bloodType}`}
@@ -1243,7 +1244,7 @@ export function DoctorAppointmentDetailModal({
                       Appointment ID
                     </p>
                     <p className="mt-0.5 text-base font-semibold text-gray-900">
-                      {appointment.id || "—"}
+                      {getLast4Chars(appointment.id)}
                     </p>
                   </div>
                 </div>
@@ -1472,19 +1473,95 @@ export function DoctorAppointmentDetailModal({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4">
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {(appointment as any).serviceRequests.map(
                         (request: any, index: number) => (
                           <div
-                            key={index}
-                            className="rounded border border-gray-200 bg-gray-50 p-3"
+                            key={request.id || index}
+                            className="rounded-lg border border-gray-200 bg-white p-4 hover:border-gray-300 transition-colors"
                           >
-                            <p className="text-sm font-medium text-gray-900">
-                              Service Request #{index + 1}
-                            </p>
-                            <p className="mt-1 text-xs text-gray-600">
-                              {JSON.stringify(request)}
-                            </p>
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <p className="text-sm font-semibold text-gray-900">
+                                    Service Request #{index + 1}
+                                  </p>
+                                  {request.requestCode && (
+                                    <span className="text-xs text-gray-500">
+                                      ({request.requestCode})
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 mt-3">
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500 mb-1">
+                                      Request Date
+                                    </p>
+                                    <p className="text-sm text-gray-900">
+                                      {formatDateTime(
+                                        request.requestDate ||
+                                          request.requestedDate
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500 mb-1">
+                                      Status
+                                    </p>
+                                    <Badge
+                                      variant={
+                                        request.status === "Approved"
+                                          ? "default"
+                                          : request.status === "Pending"
+                                            ? "secondary"
+                                            : request.status === "Rejected"
+                                              ? "destructive"
+                                              : request.status === "Completed"
+                                                ? "default"
+                                                : "outline"
+                                      }
+                                      className="mt-0.5"
+                                    >
+                                      {request.status || "Pending"}
+                                    </Badge>
+                                  </div>
+                                  {request.totalAmount !== undefined &&
+                                    request.totalAmount !== null && (
+                                      <div>
+                                        <p className="text-xs font-medium text-gray-500 mb-1">
+                                          Total Amount
+                                        </p>
+                                        <p className="text-sm font-semibold text-gray-900">
+                                          {new Intl.NumberFormat("vi-VN", {
+                                            style: "currency",
+                                            currency: "VND",
+                                          }).format(request.totalAmount)}
+                                        </p>
+                                      </div>
+                                    )}
+                                  {request.id && (
+                                    <div>
+                                      <p className="text-xs font-medium text-gray-500 mb-1">
+                                        Request ID
+                                      </p>
+                                      <p className="text-xs text-gray-600 font-mono">
+                                        {getLast4Chars(request.id)}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                                {request.notes && (
+                                  <div className="mt-3 pt-3 border-t border-gray-100">
+                                    <p className="text-xs font-medium text-gray-500 mb-1">
+                                      Notes
+                                    </p>
+                                    <p className="text-sm text-gray-700">
+                                      {request.notes}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         )
                       )}
@@ -2373,7 +2450,7 @@ export function DoctorAppointmentDetailModal({
                                   Cycle Code
                                 </p>
                                 <p className="mt-1 text-sm font-medium text-gray-900">
-                                  {activeCycle.id || "—"}
+                                  {getLast4Chars(activeCycle.id)}
                                 </p>
                               </div>
                               {activeCycle.cycleNumber && (
@@ -2394,7 +2471,7 @@ export function DoctorAppointmentDetailModal({
                                 Treatment ID
                               </p>
                               <p className="mt-1 text-sm font-medium text-gray-900">
-                                {activeTreatment.data.id || "—"}
+                                {getLast4Chars(activeTreatment.data.id)}
                               </p>
                             </div>
                           )}

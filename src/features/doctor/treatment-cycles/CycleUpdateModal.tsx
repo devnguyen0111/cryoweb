@@ -24,7 +24,7 @@ export function CycleUpdateModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="relative w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-lg bg-white shadow-xl">
+      <div className="relative w-full max-w-7xl max-h-[95vh] overflow-hidden rounded-lg bg-white shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
           <div>
@@ -49,7 +49,7 @@ export function CycleUpdateModal({
         {/* Content */}
         <div
           className="overflow-y-auto p-6"
-          style={{ maxHeight: "calc(90vh - 100px)" }}
+          style={{ maxHeight: "calc(95vh - 100px)" }}
         >
           <CycleUpdateForm
             cycle={cycle}

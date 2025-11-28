@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
 import { cn } from "@/utils/cn";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -265,11 +266,11 @@ function ReceptionistServiceRequestsRoute() {
                             <tr key={request.id} className="hover:bg-gray-50">
                               <td className="px-4 py-3">
                                 <div className="font-medium text-gray-900">
-                                  #{request.id.slice(0, 8)}
+                                  #{getLast4Chars(request.id)}
                                 </div>
                                 <div className="text-xs text-gray-500">
                                   Patient ID:{" "}
-                                  {request.patientId || "Unassigned"}
+                                  {request.patientId ? getLast4Chars(request.patientId) : "Unassigned"}
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-gray-600">

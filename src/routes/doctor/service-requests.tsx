@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -13,6 +14,7 @@ import type { ServiceRequestStatus, Appointment, Patient } from "@/api/types";
 import { ServiceRequestDetailModal } from "@/features/doctor/service-requests/ServiceRequestDetailModal";
 import { CreateServiceRequestModal } from "@/features/doctor/service-requests/CreateServiceRequestModal";
 import { ServiceRequestActionModal } from "@/features/doctor/service-requests/ServiceRequestActionModal";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 export const Route = createFileRoute("/doctor/service-requests")({
   component: DoctorServiceRequestsComponent,
@@ -38,6 +40,15 @@ function DoctorServiceRequestsComponent() {
     requestId: null,
     action: null,
   });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["doctor", "service-requests"] }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   const statusParam = (statusFilter || undefined) as
     | ServiceRequestStatus
@@ -290,9 +301,19 @@ function DoctorServiceRequestsComponent() {
                 Manage service requests for patient appointments.
               </p>
             </div>
-            <Button onClick={() => setIsCreateModalOpen(true)}>
-              Create Service Request
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <Button onClick={() => setIsCreateModalOpen(true)}>
+                Create Service Request
+              </Button>
+            </div>
           </section>
 
           <Card>
@@ -384,8 +405,8 @@ function DoctorServiceRequestsComponent() {
                             >
                               <td className="px-4 py-3 text-sm">
                                 {request.requestCode
-                                  ? request.requestCode.slice(-8)
-                                  : request.id.slice(-8)}
+                                  ? getLast4Chars(request.requestCode)
+                                  : getLast4Chars(request.id)}
                               </td>
                               <td className="px-4 py-3 text-sm">
                                 {patient
@@ -395,8 +416,8 @@ function DoctorServiceRequestsComponent() {
                               <td className="px-4 py-3 text-sm">
                                 {appointment
                                   ? appointment.appointmentCode
-                                    ? appointment.appointmentCode.slice(-8)
-                                    : appointment.id.slice(-8)
+                                    ? getLast4Chars(appointment.appointmentCode)
+                                    : getLast4Chars(appointment.id)
                                   : "—"}
                               </td>
                               <td className="px-4 py-3">

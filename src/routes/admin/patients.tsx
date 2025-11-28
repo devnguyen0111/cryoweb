@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 export const Route = createFileRoute("/admin/patients")({
   component: AdminPatientsComponent,
@@ -59,7 +60,7 @@ function AdminPatientsComponent() {
                             return (
                               <tr key={patient.id} className="border-b">
                                 <td className="p-2 text-xs text-gray-500">
-                                  {patient.id}
+                                  {getLast4Chars(patient.id)}
                                 </td>
                                 <td className="p-2">
                                   <div className="font-medium text-gray-900">
@@ -69,7 +70,7 @@ function AdminPatientsComponent() {
                                     Patient code: {patient.patientCode || "N/A"}
                                   </div>
                                   <div className="text-xs text-gray-500">
-                                    Account ID: {patient.accountId || "—"}
+                                    Account ID: {getLast4Chars(patient.accountId)}
                                   </div>
                                 </td>
                                 <td className="p-2 text-sm text-gray-600">

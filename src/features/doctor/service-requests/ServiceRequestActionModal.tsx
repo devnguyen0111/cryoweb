@@ -1,6 +1,7 @@
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import type { ServiceRequest } from "@/api/types";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 interface ServiceRequestActionModalProps {
   isOpen: boolean;
@@ -74,7 +75,7 @@ export function ServiceRequestActionModal({
             <div>
               <span className="font-medium text-gray-700">Request Code:</span>{" "}
               <span className="text-gray-900">
-                {request.requestCode ?? request.id.slice(0, 8)}
+                {request.requestCode ?? getLast4Chars(request.id)}
               </span>
             </div>
             <div>

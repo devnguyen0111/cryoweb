@@ -3,6 +3,7 @@ import { isAxiosError } from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -383,13 +384,18 @@ function DoctorScheduleComponent() {
     }
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     if (!doctorId) {
       return;
     }
-    queryClient.invalidateQueries({
-      queryKey: ["doctor", "appointments", doctorId, selectedDate],
-    });
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "appointments", doctorId, selectedDate],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "appointments", "calendar", doctorId],
+      }),
+    ]);
   };
 
   const handleAppointmentClick = (appointment: Appointment) => {
@@ -606,6 +612,7 @@ function DoctorScheduleComponent() {
       isWeekend: boolean;
       hasAppointments: boolean;
       appointmentCount: number;
+      isFull: boolean; // True if all 4 slots are booked
     }> = [];
 
     // Add empty cells for days before the first day of the month
@@ -618,6 +625,7 @@ function DoctorScheduleComponent() {
         isWeekend: false,
         hasAppointments: false,
         appointmentCount: 0,
+        isFull: false,
       });
     }
 
@@ -630,6 +638,7 @@ function DoctorScheduleComponent() {
       const isToday = dateStr === today;
       const appointments = appointmentsByDate[dateStr] || [];
       const hasAppointments = appointments.length > 0 && !isWeekend;
+      const isFull = appointments.length >= 4 && !isWeekend; // Full if 4 or more appointments
 
       days.push({
         date: dateStr,
@@ -639,6 +648,7 @@ function DoctorScheduleComponent() {
         isWeekend,
         hasAppointments,
         appointmentCount: appointments.length,
+        isFull,
       });
     }
 
@@ -671,292 +681,359 @@ function DoctorScheduleComponent() {
           ) : null}
 
           <section className="flex flex-col gap-2">
-            <h1 className="text-3xl font-bold">My Schedule</h1>
-            <p className="text-gray-600">
-              Manage your daily schedule, view appointments, and handle patient
-              check-ins and check-outs.
-            </p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="text-3xl font-bold">My Schedule</h1>
+                <p className="text-gray-600 mt-1">
+                  Manage your daily schedule, view appointments, and handle patient
+                  check-ins and check-outs.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isLoadingAppointments}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingAppointments ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
           </section>
 
-          <Card>
-            <CardHeader className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <CardTitle>Select Date</CardTitle>
-                <p className="text-sm text-gray-500">{humanDateLabel}</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleShiftDay(-1)}
-                >
-                  Previous Day
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleShiftDay(1)}
-                >
-                  Next Day
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleResetToday}
-                  disabled={selectedDate === today}
-                >
-                  Today
-                </Button>
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(event) => {
-                    setSelectedDate(event.target.value);
-                  }}
-                  className="w-[160px]"
-                />
+          {/* Date Selection and Summary - Improved UX/UI */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="border-primary/20 shadow-sm">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-semibold">Selected Date</CardTitle>
+                  {selectedDate === today && (
+                    <Badge variant="secondary" className="text-xs">
+                      Today
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-2">
+                  <p className="text-lg font-bold text-primary">{humanDateLabel}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {isWeekend ? "Weekend - No schedules" : `${appointments.length} appointment${appointments.length !== 1 ? 's' : ''} scheduled`}
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Navigation Controls */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleShiftDay(-1)}
+                    className="flex-1 h-9 font-medium"
+                    title="Previous day"
+                  >
+                    <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleShiftDay(1)}
+                    className="flex-1 h-9 font-medium"
+                    title="Next day"
+                  >
+                    Next
+                    <svg className="h-4 w-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Button>
+                  <Button
+                    variant={selectedDate === today ? "default" : "ghost"}
+                    size="sm"
+                    onClick={handleResetToday}
+                    disabled={selectedDate === today}
+                    className="h-9 px-3"
+                    title="Go to today"
+                  >
+                    Today
+                  </Button>
+                </div>
+                
+                {/* Date Picker */}
+                <div className="relative">
+                  <Input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(event) => {
+                      setSelectedDate(event.target.value);
+                    }}
+                    className="w-full h-10 cursor-pointer pr-10"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Quick Stats */}
+            {!isWeekend && !isLoadingAppointments && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Today's Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Total Slots</p>
+                      <p className="text-xl font-bold text-gray-900">
+                        {totalSlots}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Available</p>
+                      <p className="text-xl font-bold text-green-600">
+                        {availableSlots}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Booked</p>
+                      <p className="text-xl font-bold text-red-600">
+                        {bookedSlots}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Appointments</p>
+                      <p className="text-xl font-bold text-gray-900">
+                        {appointments.length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Quick Actions */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleRefresh}
                   disabled={isLoadingAppointments}
+                  className="w-full"
                 >
-                  {isLoadingAppointments ? "Refreshing..." : "Refresh"}
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingAppointments ? "animate-spin" : ""}`} />
+                  Refresh
                 </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-gray-600">
-              {isWeekend ? (
-                <div className="py-6 text-center text-gray-500">
-                  <p className="font-medium text-gray-900 mb-2">
-                    Weekend - No schedules available
-                  </p>
-                  <p className="text-sm">
-                    Schedules are typically available Monday through Friday.
-                  </p>
-                </div>
-              ) : isLoadingAppointments ? (
-                <div className="py-6 text-center text-gray-500">
-                  Loading appointments...
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-4">
-                    <div>
-                      <p className="font-medium text-gray-900">Total Slots</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {totalSlots}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-green-700">Available</p>
-                      <p className="text-2xl font-bold text-green-600">
-                        {availableSlots}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-red-700">Booked</p>
-                      <p className="text-2xl font-bold text-red-600">
-                        {bookedSlots}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-700">Appointments</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {appointments.length}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="w-full"
+                  disabled={!doctorId || isWeekend}
+                >
+                  Create Appointment
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate({ to: "/doctor/appointments" })}
+                  className="w-full"
+                >
+                  View All Appointments
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
 
-          {/* Calendar View */}
-          <Card>
-            <CardHeader className="pb-2 pt-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle className="text-base">Schedule Calendar</CardTitle>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 px-1.5 text-[10px]"
-                    onClick={() => handleCalendarMonthChange(-1)}
-                  >
-                    ←
-                  </Button>
-                  <span className="min-w-[100px] text-center text-xs font-medium">
-                    {new Date(calendarStartDate).toLocaleDateString("en-US", {
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 px-1.5 text-[10px]"
-                    onClick={() => handleCalendarMonthChange(1)}
-                  >
-                    →
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-1.5 text-[10px]"
-                    onClick={() => {
-                      const now = new Date();
-                      setCalendarMonth(
-                        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-                      );
-                      setSelectedDate(today);
-                    }}
-                  >
-                    Today
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0 pb-3">
-              <div className="space-y-2">
-                {/* Calendar Legend - Very Compact */}
-                <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                  <div className="flex items-center gap-1">
-                    <div className="h-2.5 w-2.5 rounded border border-green-300 bg-green-100"></div>
-                    <span className="text-gray-600">Available</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="h-2.5 w-2.5 rounded border border-blue-300 bg-blue-100"></div>
-                    <span className="text-gray-600">Booked</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="h-2.5 w-2.5 rounded border border-gray-300 bg-gray-100"></div>
-                    <span className="text-gray-600">Weekend</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="h-2.5 w-2.5 rounded border border-primary bg-primary/20"></div>
-                    <span className="text-gray-600">Selected</span>
-                  </div>
-                </div>
-
-                {/* Calendar Grid - Very Compact */}
-                <div className="rounded border border-gray-200 bg-white p-1.5">
-                  {/* Weekday Headers */}
-                  <div className="grid grid-cols-7 gap-0.5 mb-0.5">
-                    {["S", "M", "T", "W", "T", "F", "S"].map((day, idx) => (
-                      <div
-                        key={`${day}-${idx}`}
-                        className="p-0.5 text-center text-[9px] font-semibold text-gray-500"
-                      >
-                        {day}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Calendar Days */}
-                  <div className="grid grid-cols-7 gap-0.5">
-                    {calendarDays.map((day, index) => {
-                      if (!day.isCurrentMonth) {
-                        return (
-                          <div
-                            key={`empty-${index}`}
-                            className="aspect-square"
-                          />
+          {/* Calendar and Daily Schedule - Side by Side Layout */}
+          <div className="grid gap-6 lg:grid-cols-[600px,1fr]">
+            {/* Calendar View - Left Side */}
+            <Card>
+              <CardHeader className="pb-3 pt-4">
+                <div className="flex flex-col gap-3">
+                  <CardTitle className="text-lg font-semibold">Schedule Calendar</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-sm"
+                      onClick={() => handleCalendarMonthChange(-1)}
+                    >
+                      ←
+                    </Button>
+                    <span className="flex-1 text-center text-sm font-semibold text-gray-900">
+                      {new Date(calendarStartDate).toLocaleDateString("en-US", {
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-sm"
+                      onClick={() => handleCalendarMonthChange(1)}
+                    >
+                      →
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-3 text-sm"
+                      onClick={() => {
+                        const now = new Date();
+                        setCalendarMonth(
+                          `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
                         );
-                      }
+                        setSelectedDate(today);
+                      }}
+                    >
+                      Today
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0 pb-4">
+                <div className="space-y-3">
+                  {/* Calendar Legend */}
+                  <div className="flex flex-wrap items-center gap-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded border border-green-400 bg-green-100"></div>
+                      <span className="text-gray-600">Available</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded border border-blue-400 bg-blue-100"></div>
+                      <span className="text-gray-600">Booked</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded border border-purple-400 bg-purple-100"></div>
+                      <span className="text-gray-600">Full (4 slots)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded border border-gray-300 bg-gray-100"></div>
+                      <span className="text-gray-600">Weekend</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded border border-primary bg-primary/20"></div>
+                      <span className="text-gray-600">Selected</span>
+                    </div>
+                  </div>
 
-                      return (
-                        <button
-                          key={day.date}
-                          type="button"
-                          onClick={() => handleCalendarDateClick(day.date)}
-                          disabled={day.isWeekend}
-                          className={cn(
-                            "aspect-square rounded border text-[10px] transition-all hover:scale-105",
-                            day.isWeekend
-                              ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
-                              : day.date === selectedDate
-                                ? "border-primary bg-primary/20 font-semibold text-primary shadow-sm"
-                                : day.hasAppointments
-                                  ? "border-blue-300 bg-blue-100 text-blue-900 hover:border-blue-400 hover:bg-blue-200"
-                                  : "border-green-200 bg-green-50 text-gray-700 hover:border-green-300 hover:bg-green-100",
-                            day.isToday && "ring-1 ring-primary/50"
-                          )}
+                  {/* Calendar Grid - Larger */}
+                  <div className="rounded-lg border border-gray-200 bg-white p-3">
+                    {/* Weekday Headers */}
+                    <div className="grid grid-cols-7 gap-2 mb-2">
+                      {["S", "M", "T", "W", "T", "F", "S"].map((day, idx) => (
+                        <div
+                          key={`${day}-${idx}`}
+                          className="p-1 text-center text-xs font-semibold text-gray-600"
                         >
-                          <div className="flex h-full flex-col items-center justify-center">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Calendar Days */}
+                    <div className="grid grid-cols-7 gap-2">
+                      {calendarDays.map((day, index) => {
+                        if (!day.isCurrentMonth) {
+                          return (
+                            <div
+                              key={`empty-${index}`}
+                              className="aspect-square rounded border border-transparent"
+                            />
+                          );
+                        }
+
+                        return (
+                          <button
+                            key={day.date}
+                            type="button"
+                            onClick={() => handleCalendarDateClick(day.date)}
+                            disabled={day.isWeekend}
+                            className={cn(
+                              "aspect-square rounded-md border text-sm transition-all duration-200 flex flex-col items-center justify-center",
+                              "hover:scale-105 hover:shadow-md",
+                              day.isWeekend
+                                ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400 hover:scale-100 hover:shadow-none"
+                                : day.date === selectedDate
+                                  ? day.isFull
+                                    ? "border-purple-600 bg-purple-200 font-semibold text-purple-900 shadow-md ring-2 ring-purple-400"
+                                    : "border-primary bg-primary/20 font-semibold text-primary shadow-md ring-2 ring-primary/30"
+                                  : day.isFull
+                                    ? "border-purple-500 bg-purple-100 text-purple-900 hover:border-purple-600 hover:bg-purple-200 font-semibold"
+                                    : day.hasAppointments
+                                      ? "border-blue-400 bg-blue-100 text-blue-900 hover:border-blue-500 hover:bg-blue-200 font-medium"
+                                      : "border-green-300 bg-green-50 text-gray-800 hover:border-green-400 hover:bg-green-100",
+                              day.isToday && !day.isWeekend && day.date !== selectedDate && "ring-2 ring-primary/50"
+                            )}
+                          >
                             <span
                               className={cn(
-                                day.isToday && "font-bold text-[11px]",
-                                day.date === selectedDate && "text-primary"
+                                "text-base",
+                                day.isToday && "font-bold",
+                                day.date === selectedDate && day.isFull && "text-purple-900 text-lg",
+                                day.date === selectedDate && !day.isFull && "text-primary text-lg"
                               )}
                             >
                               {day.day}
                             </span>
                             {day.hasAppointments && (
-                              <span className="mt-0.5 text-[8px] font-medium text-blue-700 leading-none">
+                              <span className={cn(
+                                "mt-1 text-[10px] font-semibold leading-tight px-1.5 py-0.5 rounded-full",
+                                day.date === selectedDate && day.isFull
+                                  ? "bg-purple-700 text-white"
+                                  : day.date === selectedDate
+                                    ? "bg-primary text-white"
+                                    : day.isFull
+                                      ? "bg-purple-600 text-white"
+                                      : "bg-blue-600 text-white"
+                              )}>
                                 {day.appointmentCount}
                               </span>
                             )}
-                          </div>
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <section className="grid gap-6 lg:grid-cols-[1.5fr,1fr]">
-            <div className="space-y-6">
-              {/* Daily Schedule Timeline */}
+            {/* Daily Schedule - Right Side - Compact */}
+            <div className="space-y-4">
               {!isWeekend && (
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Daily Schedule - {humanDateLabel}</CardTitle>
-                    <p className="text-sm text-gray-500">
-                      {isWeekend
-                        ? "Slots are only available Monday through Friday."
-                        : `Viewing ${totalSlots} time slot(s) for ${humanDateLabel}. ${bookedSlots} booked, ${availableSlots} available.`}
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Daily Schedule</CardTitle>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {isLoadingAppointments
+                        ? "Loading..."
+                        : `${totalSlots} slots • ${bookedSlots} booked, ${availableSlots} available`}
                     </p>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-2">
                     {isLoadingAppointments ? (
-                      <div className="py-12 text-center text-gray-500">
-                        <p className="mb-2">Loading appointments...</p>
-                        <p className="text-sm">
-                          Please wait while we fetch your appointments for this
-                          day.
-                        </p>
+                      <div className="py-6 text-center text-gray-500 text-sm">
+                        <p>Loading...</p>
                       </div>
                     ) : slotsWithStatus.length === 0 ? (
-                      <div className="py-12 text-center">
-                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
-                          <svg
-                            className="h-8 w-8 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                            />
-                          </svg>
-                        </div>
-                        <p className="mb-2 text-lg font-semibold text-gray-900">
-                          Weekend - No Slots Available
+                      <div className="py-6 text-center text-gray-500 text-sm">
+                        <p className="font-medium text-gray-900 mb-1">
+                          No slots available
                         </p>
-                        <p className="mb-4 text-sm text-gray-500">
-                          Slots are only available Monday through Friday.
+                        <p className="text-xs text-gray-500">
+                          Monday through Friday only.
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-2">
                         {slotsWithStatus.map((slot) => {
                           const appointment = slot.appointment;
                           const isBooked = slot.isBooked || !!appointment;
@@ -965,32 +1042,30 @@ function DoctorScheduleComponent() {
                             <div
                               key={slot.id}
                               className={cn(
-                                "rounded-lg border-2 p-4 transition-all",
+                                "rounded-md border p-3 transition-all",
                                 isBooked
-                                  ? "border-red-300 bg-red-50/80 shadow-sm"
-                                  : "border-green-200 bg-green-50/50 hover:border-green-300"
+                                  ? "border-red-300 bg-red-50/80"
+                                  : "border-green-200 bg-green-50/50"
                               )}
                             >
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <div className="flex items-center gap-2">
-                                      <div
-                                        className={cn(
-                                          "h-3 w-3 rounded-full",
-                                          isBooked
-                                            ? "bg-red-500"
-                                            : "bg-green-500"
-                                        )}
-                                      />
-                                      <p className="font-semibold text-lg text-gray-900">
-                                        {formatTime(slot.startTime)} -{" "}
-                                        {formatTime(slot.endTime)}
-                                      </p>
-                                    </div>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1.5">
+                                    <div
+                                      className={cn(
+                                        "h-2 w-2 rounded-full flex-shrink-0",
+                                        isBooked
+                                          ? "bg-red-500"
+                                          : "bg-green-500"
+                                      )}
+                                    />
+                                    <p className="font-semibold text-sm text-gray-900">
+                                      {formatTime(slot.startTime)} -{" "}
+                                      {formatTime(slot.endTime)}
+                                    </p>
                                     <Badge
                                       className={cn(
-                                        "border font-medium",
+                                        "text-[10px] px-1.5 py-0 border",
                                         isBooked
                                           ? "bg-red-100 text-red-700 border-red-300"
                                           : "bg-green-100 text-green-700 border-green-300"
@@ -1001,31 +1076,28 @@ function DoctorScheduleComponent() {
                                   </div>
 
                                   {slot.notes && (
-                                    <div className="mb-2 text-sm text-gray-600">
-                                      <span className="text-gray-500">
-                                        {slot.notes}
-                                      </span>
-                                    </div>
+                                    <p className="text-xs text-gray-500 mb-1.5">
+                                      {slot.notes}
+                                    </p>
                                   )}
 
                                   {appointment ? (
-                                    <div className="mt-3 space-y-2 rounded-md bg-white p-3 border border-gray-200">
-                                      <div className="flex items-center justify-between">
-                                        <div>
-                                          <p className="font-semibold text-gray-900">
-                                            Appointment:{" "}
+                                    <div className="mt-2 space-y-1.5 rounded bg-white p-2 border border-gray-200">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="min-w-0 flex-1">
+                                          <p className="font-medium text-xs text-gray-900 truncate">
                                             {appointment.appointmentCode ||
                                               appointment.id.slice(0, 8)}
                                           </p>
                                           {(appointment as any).type && (
-                                            <p className="text-sm text-gray-600">
-                                              Type: {(appointment as any).type}
+                                            <p className="text-[10px] text-gray-600">
+                                              {(appointment as any).type}
                                             </p>
                                           )}
                                         </div>
                                         <Badge
                                           className={cn(
-                                            "border",
+                                            "text-[10px] px-1.5 py-0 border flex-shrink-0",
                                             getStatusBadgeClass(
                                               appointment.status
                                             )
@@ -1044,24 +1116,25 @@ function DoctorScheduleComponent() {
                                         </Badge>
                                       </div>
                                       {appointment.notes && (
-                                        <p className="text-sm text-gray-600 line-clamp-2">
+                                        <p className="text-xs text-gray-600 line-clamp-1">
                                           {appointment.notes}
                                         </p>
                                       )}
-                                      <div className="flex items-center gap-2 pt-2 border-t">
+                                      <div className="flex items-center gap-1.5 pt-1.5 border-t">
                                         <Button
                                           variant="outline"
                                           size="sm"
+                                          className="h-7 px-2 text-xs"
                                           onClick={() =>
                                             handleAppointmentClick(appointment)
                                           }
                                         >
-                                          View Details
+                                          Details
                                         </Button>
                                         {canCheckIn(appointment.status) && (
                                           <Button
                                             size="sm"
-                                            className="bg-blue-600 hover:bg-blue-700"
+                                            className="h-7 px-2 text-xs bg-blue-600 hover:bg-blue-700"
                                             disabled={checkInMutation.isPending}
                                             onClick={() =>
                                               checkInMutation.mutate(
@@ -1076,6 +1149,7 @@ function DoctorScheduleComponent() {
                                           <Button
                                             size="sm"
                                             variant="secondary"
+                                            className="h-7 px-2 text-xs"
                                             disabled={
                                               checkOutMutation.isPending
                                             }
@@ -1091,7 +1165,7 @@ function DoctorScheduleComponent() {
                                         {canComplete(appointment.status) && (
                                           <Button
                                             size="sm"
-                                            className="bg-emerald-600 hover:bg-emerald-700"
+                                            className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700"
                                             disabled={
                                               updateStatusMutation.isPending
                                             }
@@ -1108,9 +1182,9 @@ function DoctorScheduleComponent() {
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="mt-2 text-sm text-gray-500 italic">
-                                      Slot available - No appointment scheduled
-                                    </div>
+                                    <p className="text-xs text-gray-500 italic">
+                                      No appointment
+                                    </p>
                                   )}
                                 </div>
                               </div>
@@ -1122,73 +1196,21 @@ function DoctorScheduleComponent() {
                   </CardContent>
                 </Card>
               )}
-            </div>
 
-            {/* Right Sidebar */}
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => navigate({ to: "/doctor/appointments" })}
-                  >
-                    View All Appointments
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setIsCreateModalOpen(true)}
-                  >
-                    Create New Appointment
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Daily Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
-                  <div className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
-                    <span className="font-medium text-gray-900">
-                      Total Slots
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900">
-                      {totalSlots}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-md border border-green-200 bg-green-50 px-3 py-2">
-                    <span className="font-medium text-gray-900">
-                      Available Slots
-                    </span>
-                    <span className="text-sm font-semibold text-green-600">
-                      {availableSlots}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-3 py-2">
-                    <span className="font-medium text-gray-900">
-                      Booked Slots
-                    </span>
-                    <span className="text-sm font-semibold text-red-600">
-                      {bookedSlots}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
-                    <span className="font-medium text-gray-900">
-                      Appointments
-                    </span>
-                    <span className="text-sm font-semibold text-blue-600">
-                      {appointments.length}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+              {isWeekend && (
+                <Card>
+                  <CardContent className="py-6 text-center text-gray-500">
+                    <p className="font-medium text-sm text-gray-900 mb-1">
+                      Weekend - No schedules
+                    </p>
+                    <p className="text-xs">
+                      Available Monday through Friday.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
-          </section>
+          </div>
         </div>
 
         {/* Appointment Detail Modal */}

@@ -394,7 +394,17 @@ export type AppointmentStatus =
   | "Completed"
   | "Cancelled"
   | "NoShow";
-export type AppointmentType = "Consultation" | "Treatment" | "FollowUp";
+// Backend enum: Consultation = 1, Ultrasound = 2, BloodTest = 3, OPU = 4, ET = 5, IUI = 6, FollowUp = 7, Injection = 8, Booking = 9
+export type AppointmentType =
+  | "Consultation"
+  | "Ultrasound"
+  | "BloodTest"
+  | "OPU"
+  | "ET"
+  | "IUI"
+  | "FollowUp"
+  | "Injection"
+  | "Booking";
 
 export interface Appointment {
   id: string;

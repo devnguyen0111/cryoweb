@@ -3,7 +3,7 @@
  * View detailed information for IUI/IVF treatments
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,10 @@ import { TreatmentPlanSignature } from "@/features/doctor/treatment-cycles/Treat
 import type {
   TreatmentIUICreateUpdateRequest,
   IUICycleStatus,
+  IVFStep,
+  IUIStep,
 } from "@/api/types";
+import { normalizeTreatmentCycleStatus as normalizeStatus } from "@/api/types";
 
 interface TreatmentDetailFormProps {
   treatmentId: string;
@@ -77,30 +80,182 @@ function DateField({
   );
 }
 
-// IUI Workflow Steps - using IUICycleStatus enum values
-const IUI_STEPS = [
-  { id: "planning", label: "Planning", status: "Planning" },
+// IUI Step definitions (7 steps matching backend TreatmentStepType enum) - same as HorizontalTreatmentTimeline
+const IUI_STEPS: Array<{ id: IUIStep; label: string }> = [
   {
-    id: "monitoring",
-    label: "Monitoring & Ovulation Induction",
-    status: "Monitoring",
+    id: "step0_pre_cycle_prep",
+    label: "Pre-Cycle Preparation",
   },
-  { id: "insemination", label: "IUI Insemination", status: "Insemination" },
-  { id: "completed", label: "Completed", status: "Completed" },
+  {
+    id: "step1_day2_3_assessment",
+    label: "Assessment",
+  },
+  {
+    id: "step2_follicle_monitoring",
+    label: "Follicle Monitoring",
+  },
+  {
+    id: "step3_trigger",
+    label: "Trigger",
+  },
+  {
+    id: "step4_iui_procedure",
+    label: "IUI Procedure",
+  },
+  {
+    id: "step5_post_iui",
+    label: "Post-IUI Monitoring",
+  },
+  {
+    id: "step6_beta_hcg",
+    label: "Beta HCG Test",
+  },
 ];
 
-// IVF Workflow Steps
-const IVF_STEPS = [
-  { id: "planning", label: "Planning", status: "Planned" },
-  { id: "stimulation", label: "Ovarian Stimulation (COS)", status: "COS" },
-  { id: "opu", label: "Oocyte Retrieval (OPU)", status: "OPU" },
-  { id: "fertilization", label: "Fertilization", status: "Fert" },
-  { id: "culture", label: "Embryo Culture", status: "Culture" },
-  { id: "transfer", label: "Embryo Transfer (ET)", status: "ET" },
-  { id: "luteal", label: "Luteal Support", status: "InProgress" },
-  { id: "pregnancy", label: "Pregnancy Test", status: "Preg+" },
-  { id: "completed", label: "Completed", status: "Completed" },
+// IVF Step definitions (8 steps matching backend TreatmentStepType enum) - same as HorizontalTreatmentTimeline
+const IVF_STEPS: Array<{ id: IVFStep; label: string }> = [
+  {
+    id: "step0_pre_cycle_prep",
+    label: "Pre-Cycle Preparation",
+  },
+  {
+    id: "step1_stimulation",
+    label: "Controlled Ovarian Stimulation",
+  },
+  {
+    id: "step2_monitoring",
+    label: "Mid-Stimulation Monitoring",
+  },
+  {
+    id: "step3_trigger",
+    label: "Ovulation Trigger",
+  },
+  {
+    id: "step4_opu",
+    label: "Oocyte Pick-Up (OPU)",
+  },
+  {
+    id: "step5_fertilization",
+    label: "Fertilization/Lab",
+  },
+  {
+    id: "step6_embryo_culture",
+    label: "Embryo Culture",
+  },
+  {
+    id: "step7_embryo_transfer",
+    label: "Embryo Transfer",
+  },
 ];
+
+// Map stepType enum from backend to frontend step IDs (same as HorizontalTreatmentTimeline)
+function mapStepTypeToStepId(
+  stepType: string | number | undefined,
+  treatmentType: "IUI" | "IVF" | undefined
+): IVFStep | IUIStep | null {
+  if (!stepType || !treatmentType) return null;
+
+  const stepTypeStr = String(stepType).toUpperCase();
+
+  if (treatmentType === "IUI") {
+    if (
+      stepTypeStr === "IUI_PRECYCLEPREPARATION" ||
+      stepTypeStr.includes("PRECYCLE")
+    ) {
+      return "step0_pre_cycle_prep";
+    }
+    if (
+      stepTypeStr === "IUI_DAY2_3_ASSESSMENT" ||
+      stepTypeStr.includes("DAY2_3") ||
+      stepTypeStr.includes("ASSESSMENT")
+    ) {
+      return "step1_day2_3_assessment";
+    }
+    if (
+      stepTypeStr === "IUI_DAY7_10_FOLLICLEMONITORING" ||
+      stepTypeStr.includes("DAY7_10") ||
+      stepTypeStr.includes("FOLLICLE")
+    ) {
+      return "step2_follicle_monitoring";
+    }
+    if (
+      stepTypeStr === "IUI_DAY10_12_TRIGGER" ||
+      stepTypeStr.includes("DAY10_12") ||
+      (stepTypeStr.includes("TRIGGER") && !stepTypeStr.includes("PREGNANCY"))
+    ) {
+      return "step3_trigger";
+    }
+    if (stepTypeStr === "IUI_PROCEDURE" || stepTypeStr.includes("PROCEDURE")) {
+      return "step4_iui_procedure";
+    }
+    if (
+      stepTypeStr === "IUI_POSTIUI" ||
+      stepTypeStr.includes("POSTIUI") ||
+      stepTypeStr.includes("POST_IUI")
+    ) {
+      return "step5_post_iui";
+    }
+    if (
+      stepTypeStr === "IUI_BETAHCGTEST" ||
+      stepTypeStr.includes("BETAHCG") ||
+      stepTypeStr.includes("BETA_HCG")
+    ) {
+      return "step6_beta_hcg";
+    }
+  } else if (treatmentType === "IVF") {
+    if (
+      stepTypeStr === "IVF_PRECYCLEPREPARATION" ||
+      stepTypeStr.includes("PRECYCLE")
+    ) {
+      return "step0_pre_cycle_prep";
+    }
+    if (
+      stepTypeStr === "IVF_STIMULATIONSTART" ||
+      stepTypeStr.includes("STIMULATION") ||
+      stepTypeStr.includes("COS")
+    ) {
+      return "step1_stimulation";
+    }
+    if (
+      stepTypeStr === "IVF_MONITORING" ||
+      (stepTypeStr.includes("MONITORING") && !stepTypeStr.includes("POST"))
+    ) {
+      return "step2_monitoring";
+    }
+    if (stepTypeStr === "IVF_TRIGGER" || stepTypeStr.includes("TRIGGER")) {
+      return "step3_trigger";
+    }
+    if (
+      stepTypeStr === "IVF_OPU" ||
+      stepTypeStr.includes("OPU") ||
+      stepTypeStr.includes("OOCYTE")
+    ) {
+      return "step4_opu";
+    }
+    if (
+      stepTypeStr === "IVF_FERTILIZATION" ||
+      stepTypeStr.includes("FERTILIZATION")
+    ) {
+      return "step5_fertilization";
+    }
+    if (
+      stepTypeStr === "IVF_EMBRYOCULTURE" ||
+      stepTypeStr.includes("EMBRYOCULTURE") ||
+      stepTypeStr.includes("CULTURE")
+    ) {
+      return "step6_embryo_culture";
+    }
+    if (
+      stepTypeStr === "IVF_EMBRYOTRANSFER" ||
+      stepTypeStr.includes("EMBRYOTRANSFER") ||
+      stepTypeStr.includes("TRANSFER")
+    ) {
+      return "step7_embryo_transfer";
+    }
+  }
+
+  return null;
+}
 
 export function TreatmentDetailForm({
   treatmentId,
@@ -182,6 +337,50 @@ export function TreatmentDetailForm({
   const isLoading = treatmentLoading || iuiLoading || ivfLoading;
   const treatmentType = treatmentData?.treatmentType;
 
+  // Fetch all cycles for this treatment to show progress (same as HorizontalTreatmentTimeline)
+  const { data: allCycles } = useQuery({
+    queryKey: ["treatment-cycles", "treatment", treatmentId],
+    queryFn: async () => {
+      if (!treatmentId) return [];
+      try {
+        const response = await api.treatmentCycle.getTreatmentCycles({
+          TreatmentId: treatmentId,
+          Page: 1,
+          Size: 100,
+        });
+        return response.data || [];
+      } catch {
+        return [];
+      }
+    },
+    enabled:
+      !!treatmentId && (treatmentType === "IUI" || treatmentType === "IVF"),
+    retry: false,
+  });
+
+  // Fetch current step from backend API (most accurate source) - same as HorizontalTreatmentTimeline
+  const { data: currentStepFromApi } = useQuery({
+    queryKey: ["treatment-current-step", treatmentId, treatmentType],
+    queryFn: async () => {
+      if (!treatmentId || !treatmentType) return null;
+      try {
+        if (treatmentType === "IUI") {
+          const response = await api.treatmentIUI.getCurrentStep(treatmentId);
+          return response.data ?? null;
+        } else if (treatmentType === "IVF") {
+          const response = await api.treatmentIVF.getCurrentStep(treatmentId);
+          return response.data ?? null;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    enabled:
+      !!treatmentId && (treatmentType === "IUI" || treatmentType === "IVF"),
+    staleTime: 30000, // Cache for 30 seconds
+  });
+
   // Fetch agreement for treatment plan signature status (for IUI/IVF)
   const { data: agreement, isLoading: agreementLoading } = useQuery({
     queryKey: ["agreement", treatmentId],
@@ -211,6 +410,8 @@ export function TreatmentDetailForm({
     enabled:
       !!treatmentId && (treatmentType === "IUI" || treatmentType === "IVF"),
     retry: false,
+    refetchOnWindowFocus: true, // Refetch when window gains focus
+    refetchInterval: 3000, // Refetch every 3 seconds to catch signature updates
   });
 
   // Check if treatment plan is signed (for IUI/IVF)
@@ -239,37 +440,178 @@ export function TreatmentDetailForm({
   const agreementPatientSigned =
     agreement?.signedByPatient ?? agreement?.patientSigned ?? false;
 
-  // Determine current workflow step based on treatment status
-  const getCurrentStepIndex = () => {
-    if (!treatmentData) return 0;
-
-    if (treatmentType === "IUI") {
-      // Check IUI specific status first (status or cycleStatus), then fallback to treatment status
-      const iuiStatus =
-        (iuiData as any)?.status ||
-        (iuiData as any)?.cycleStatus ||
-        treatmentData.status;
-      const stepIndex = IUI_STEPS.findIndex(
-        (step) => step.status === iuiStatus
-      );
-      return stepIndex >= 0 ? stepIndex : 0;
-    } else if (treatmentType === "IVF") {
-      const ivfStatus = (ivfData as any)?.status || treatmentData.status;
-      const stepIndex = IVF_STEPS.findIndex(
-        (step) => step.status === ivfStatus
-      );
-      return stepIndex >= 0 ? stepIndex : 0;
-    }
-    return 0;
-  };
-
-  const currentStepIndex = getCurrentStepIndex();
   const workflowSteps =
     treatmentType === "IUI"
       ? IUI_STEPS
       : treatmentType === "IVF"
         ? IVF_STEPS
         : [];
+
+  // Helper to convert step number from API to step ID (same as HorizontalTreatmentTimeline)
+  const getStepIdFromNumber = (
+    stepNumber: number | null | undefined,
+    steps: Array<{ id: IVFStep | IUIStep; label: string }>
+  ): IVFStep | IUIStep | undefined => {
+    if (stepNumber === null || stepNumber === undefined) return undefined;
+    // API returns 0-based index: 0 = step0, 1 = step1, 2 = step2, etc.
+    if (stepNumber >= 0 && stepNumber < steps.length) {
+      return steps[stepNumber].id;
+    }
+    return undefined;
+  };
+
+  // Calculate current step and completed steps (same logic as HorizontalTreatmentTimeline)
+  const { currentStep, completedSteps } = useMemo(() => {
+    const steps = workflowSteps;
+    if (steps.length === 0) {
+      return { currentStep: undefined, completedSteps: [] };
+    }
+
+    const treatmentCycles = allCycles || [];
+
+    // Determine current step FIRST (before collecting completed steps)
+    let currentStepValue: IVFStep | IUIStep | undefined = undefined;
+
+    // PRIORITY 1: Use current step from backend API (most accurate)
+    if (currentStepFromApi !== null && currentStepFromApi !== undefined) {
+      const stepFromApi = getStepIdFromNumber(currentStepFromApi, steps);
+      if (stepFromApi) {
+        currentStepValue = stepFromApi;
+      }
+    }
+
+    // Now collect completed steps, but EXCLUDE current step
+    const completedStepsSet = new Set<IVFStep | IUIStep>();
+
+    // Collect completed steps from cycles with status "Completed"
+    for (const treatmentCycle of treatmentCycles) {
+      const cycleStatus = normalizeStatus(treatmentCycle.status);
+      if (cycleStatus === "Completed") {
+        // PRIORITY: Use stepType if available (most accurate)
+        let stepId: IVFStep | IUIStep | null = null;
+        if (treatmentCycle.stepType) {
+          const cycleTreatmentType = treatmentCycle.treatmentType;
+          if (cycleTreatmentType === "IUI" || cycleTreatmentType === "IVF") {
+            stepId = mapStepTypeToStepId(
+              treatmentCycle.stepType,
+              cycleTreatmentType
+            );
+          } else if (treatmentType === "IUI" || treatmentType === "IVF") {
+            stepId = mapStepTypeToStepId(
+              treatmentCycle.stepType,
+              treatmentType
+            );
+          }
+        }
+        if (stepId) {
+          completedStepsSet.add(stepId);
+        }
+      }
+    }
+
+    // PRIORITY 2: Check cycles with Scheduled or InProgress status for current step
+    if (!currentStepValue) {
+      const sortedCycles = [...treatmentCycles].sort((a, b) => {
+        const aOrder = a.orderIndex ?? a.cycleNumber ?? 0;
+        const bOrder = b.orderIndex ?? b.cycleNumber ?? 0;
+        return bOrder - aOrder;
+      });
+
+      // First, look for Scheduled cycles
+      const scheduledCycles = sortedCycles.filter((c) => {
+        const status = normalizeStatus(c.status);
+        return status === "Scheduled";
+      });
+
+      if (scheduledCycles.length > 0) {
+        for (const scheduledCycle of scheduledCycles) {
+          if (scheduledCycle.stepType) {
+            const cycleTreatmentType = scheduledCycle.treatmentType;
+            let stepId: IVFStep | IUIStep | null = null;
+            if (cycleTreatmentType === "IUI" || cycleTreatmentType === "IVF") {
+              stepId = mapStepTypeToStepId(
+                scheduledCycle.stepType,
+                cycleTreatmentType
+              );
+            } else if (treatmentType === "IUI" || treatmentType === "IVF") {
+              stepId = mapStepTypeToStepId(
+                scheduledCycle.stepType,
+                treatmentType
+              );
+            }
+            if (stepId) {
+              currentStepValue = stepId;
+              break;
+            }
+          }
+        }
+      }
+
+      // If no Scheduled, look for InProgress cycles
+      if (!currentStepValue) {
+        const inProgressCycles = sortedCycles.filter((c) => {
+          const status = normalizeStatus(c.status);
+          return status === "InProgress";
+        });
+
+        if (inProgressCycles.length > 0) {
+          for (const inProgressCycle of inProgressCycles) {
+            if (inProgressCycle.stepType) {
+              const cycleTreatmentType = inProgressCycle.treatmentType;
+              let stepId: IVFStep | IUIStep | null = null;
+              if (
+                cycleTreatmentType === "IUI" ||
+                cycleTreatmentType === "IVF"
+              ) {
+                stepId = mapStepTypeToStepId(
+                  inProgressCycle.stepType,
+                  cycleTreatmentType
+                );
+              } else if (treatmentType === "IUI" || treatmentType === "IVF") {
+                stepId = mapStepTypeToStepId(
+                  inProgressCycle.stepType,
+                  treatmentType
+                );
+              }
+              if (stepId) {
+                currentStepValue = stepId;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // PRIORITY 3: Use cycle.currentStep if available
+      if (!currentStepValue) {
+        for (const cycle of sortedCycles) {
+          if (cycle.currentStep) {
+            currentStepValue = cycle.currentStep;
+            break;
+          }
+        }
+      }
+    }
+
+    // Ensure current step is not marked as completed
+    if (currentStepValue) {
+      completedStepsSet.delete(currentStepValue);
+    }
+
+    return {
+      currentStep: currentStepValue,
+      completedSteps: Array.from(completedStepsSet),
+    };
+  }, [allCycles, treatmentType, currentStepFromApi, workflowSteps]);
+
+  const currentStepIndex = useMemo(() => {
+    if (!currentStep) return -1;
+    return workflowSteps.findIndex((step) => step.id === currentStep);
+  }, [currentStep, workflowSteps]);
+
+  const completedStepsSet = useMemo(() => {
+    return new Set(completedSteps);
+  }, [completedSteps]);
 
   // Mutation to update treatment status - MUST be called before any early returns
   const updateStatusMutation = useMutation({
@@ -412,23 +754,8 @@ export function TreatmentDetailForm({
     },
   });
 
-  const handleNextStep = () => {
-    // Check if treatment plan is signed before allowing workflow progression
-    if (!treatmentPlanSigned) {
-      toast.error(
-        "Treatment plan must be signed by both doctor and patient before proceeding with workflow."
-      );
-      return;
-    }
-
-    if (currentStepIndex < workflowSteps.length - 1) {
-      const nextStep = workflowSteps[currentStepIndex + 1];
-      updateStatusMutation.mutate(nextStep.status);
-    }
-  };
-
-  const canProceedToNext =
-    currentStepIndex < workflowSteps.length - 1 && treatmentPlanSigned;
+  // Note: Step progression should be handled through treatment cycles, not directly through treatment status
+  // This form is for viewing only. To update steps, use the treatment cycles page.
 
   // Early returns AFTER all hooks have been called
   if (finalIsLoading) {
@@ -612,81 +939,92 @@ export function TreatmentDetailForm({
                   </div>
                 </div>
               )}
-              {/* Progress Indicator */}
+              {/* Progress Indicator - same style as HorizontalTreatmentTimeline */}
               <div className="relative">
-                <div className="flex items-center justify-between">
+                {/* Background timeline line */}
+                <div className="absolute left-0 right-0 top-6 h-1 bg-gray-200" />
+                {/* Progress line */}
+                {currentStepIndex >= 0 && (
+                  <div
+                    className="absolute left-0 top-6 h-1 bg-blue-500 transition-all duration-500 ease-out"
+                    style={{
+                      width: `${((completedStepsSet.size + 1) / workflowSteps.length) * 100}%`,
+                    }}
+                  />
+                )}
+
+                {/* Steps container */}
+                <div className="relative flex items-start">
                   {workflowSteps.map((step, index) => {
-                    const isActive = index === currentStepIndex;
-                    const isCompleted = index < currentStepIndex;
+                    const isCompleted = completedStepsSet.has(step.id);
+                    const isCurrent = currentStep === step.id;
+                    const isPast =
+                      currentStepIndex >= 0 &&
+                      index < currentStepIndex &&
+                      !isCompleted;
+
+                    // Determine step state
+                    const stepState = isCompleted
+                      ? "completed"
+                      : isCurrent
+                        ? "current"
+                        : isPast
+                          ? "past"
+                          : "pending";
 
                     return (
                       <div
                         key={step.id}
-                        className="flex flex-col items-center flex-1"
+                        className="relative z-10 flex flex-1 flex-col items-center"
                       >
-                        <div className="flex items-center w-full">
-                          {/* Step Circle */}
-                          <div
-                            className={cn(
-                              "relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium",
-                              isCompleted
-                                ? "border-green-500 bg-green-500 text-white"
-                                : isActive
-                                  ? "border-primary bg-primary text-white"
-                                  : "border-gray-300 bg-white text-gray-500"
-                            )}
-                          >
-                            {isCompleted ? (
-                              <svg
-                                className="h-6 w-6"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M5 13l4 4L19 7"
-                                />
-                              </svg>
-                            ) : (
-                              <span>{index + 1}</span>
-                            )}
-                          </div>
-                          {/* Connector Line */}
-                          {index < workflowSteps.length - 1 && (
-                            <div
-                              className={cn(
-                                "absolute top-5 left-1/2 h-0.5 w-full -translate-x-1/2",
-                                isCompleted ? "bg-green-500" : "bg-gray-300"
-                              )}
-                              style={{
-                                width: "calc(100% - 2.5rem)",
-                                left: "calc(50% + 1.25rem)",
-                              }}
-                            />
+                        {/* Step circle */}
+                        <div
+                          className={cn(
+                            "relative mb-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 transition-all",
+                            stepState === "completed"
+                              ? "border-green-500 bg-green-500 text-white shadow-md"
+                              : stepState === "current"
+                                ? "border-blue-500 bg-blue-500 text-white shadow-lg ring-2 ring-blue-200"
+                                : stepState === "past"
+                                  ? "border-green-500 bg-green-500 text-white"
+                                  : "border-gray-300 bg-white text-gray-400"
+                          )}
+                        >
+                          {stepState === "completed" || stepState === "past" ? (
+                            <svg
+                              className="h-6 w-6"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 13l4 4L19 7"
+                              />
+                            </svg>
+                          ) : (
+                            <span className="text-sm font-semibold">
+                              {index + 1}
+                            </span>
                           )}
                         </div>
-                        {/* Step Label */}
-                        <div className="mt-2 text-center">
+
+                        {/* Step label */}
+                        <div className="mt-1 text-center">
                           <p
                             className={cn(
-                              "text-xs font-medium",
-                              isActive
-                                ? "text-primary"
-                                : isCompleted
-                                  ? "text-green-600"
+                              "text-xs font-medium leading-tight",
+                              stepState === "completed" || stepState === "past"
+                                ? "text-green-700"
+                                : stepState === "current"
+                                  ? "text-blue-700 font-semibold"
                                   : "text-gray-500"
                             )}
                           >
                             {step.label}
                           </p>
-                          {isActive && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              In Progress
-                            </p>
-                          )}
                         </div>
                       </div>
                     );
@@ -699,25 +1037,18 @@ export function TreatmentDetailForm({
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold text-gray-900">
-                      Current Stage: {workflowSteps[currentStepIndex]?.label}
+                      Current Stage:{" "}
+                      {currentStepIndex >= 0
+                        ? workflowSteps[currentStepIndex]?.label
+                        : "Not Started"}
                     </h3>
                     <p className="text-sm text-gray-600 mt-1">
-                      Status: {workflowSteps[currentStepIndex]?.status}
+                      {currentStepIndex >= 0
+                        ? `Step ${currentStepIndex + 1} of ${workflowSteps.length}`
+                        : "Treatment workflow not started"}
                     </p>
                   </div>
-                  {canProceedToNext && (
-                    <Button
-                      onClick={handleNextStep}
-                      disabled={
-                        updateStatusMutation.isPending || !treatmentPlanSigned
-                      }
-                      className="ml-4"
-                    >
-                      {updateStatusMutation.isPending
-                        ? "Updating..."
-                        : `Move to ${workflowSteps[currentStepIndex + 1]?.label}`}
-                    </Button>
-                  )}
+                  {/* Step progression should be handled through treatment cycles page */}
                   {!treatmentPlanSigned && (
                     <Button
                       onClick={() => setActiveTab("overview")}
@@ -746,6 +1077,10 @@ export function TreatmentDetailForm({
                 agreementId={agreement?.id}
                 onSigned={() => {
                   setShowSignatureModal(false);
+                  // Invalidate all agreement queries to refresh UI everywhere
+                  queryClient.invalidateQueries({
+                    queryKey: ["agreement"],
+                  });
                   queryClient.invalidateQueries({
                     queryKey: ["agreement", treatmentId],
                   });
@@ -922,7 +1257,13 @@ export function TreatmentDetailForm({
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <DetailField
                   label="Treatment Code"
-                  value={treatmentData.treatmentCode}
+                  value={(() => {
+                    const code =
+                      treatmentData.treatmentCode || treatmentData.id;
+                    if (!code) return null;
+                    // Get last 4 characters
+                    return code.length >= 4 ? code.slice(-4) : code;
+                  })()}
                 />
                 <DetailField
                   label="Treatment Name"
@@ -955,7 +1296,10 @@ export function TreatmentDetailForm({
                     <p className="text-xs font-medium text-gray-500 mb-1">
                       Notes
                     </p>
-                    <StructuredNote note={treatmentData.notes} />
+                    <StructuredNote
+                      note={treatmentData.notes}
+                      agreement={agreement || undefined}
+                    />
                   </div>
                 )}
               </div>
@@ -1025,7 +1369,10 @@ export function TreatmentDetailForm({
                         <p className="text-xs font-medium text-gray-500 mb-1">
                           Notes
                         </p>
-                        <StructuredNote note={iuiData.notes} />
+                        <StructuredNote
+                          note={iuiData.notes}
+                          agreement={agreement || undefined}
+                        />
                       </div>
                     )}
                   </div>
@@ -1127,7 +1474,10 @@ export function TreatmentDetailForm({
                         <p className="text-xs font-medium text-gray-500 mb-1">
                           Notes
                         </p>
-                        <StructuredNote note={ivfData.notes} />
+                        <StructuredNote
+                          note={ivfData.notes}
+                          agreement={agreement || undefined}
+                        />
                       </div>
                     )}
                   </div>

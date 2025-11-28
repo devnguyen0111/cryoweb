@@ -7,13 +7,15 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   children: React.ReactNode;
-  size?: "md" | "lg" | "xl";
+  size?: "md" | "lg" | "xl" | "2xl" | "full";
 }
 
 const sizeClassMap: Record<NonNullable<ModalProps["size"]>, string> = {
   md: "max-w-2xl",
   lg: "max-w-3xl",
   xl: "max-w-5xl",
+  "2xl": "max-w-7xl",
+  full: "max-w-[95vw]",
 };
 
 export function Modal({
@@ -66,7 +68,15 @@ export function Modal({
             Close
           </Button>
         </div>
-        <div className="max-h-[80vh] overflow-y-auto px-6 py-6">{children}</div>
+        <div
+          className={`overflow-y-auto px-6 py-6 ${
+            size === "2xl" || size === "full"
+              ? "max-h-[85vh]"
+              : "max-h-[80vh]"
+          }`}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

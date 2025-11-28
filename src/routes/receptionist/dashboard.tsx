@@ -1,12 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 import { cn } from "@/utils/cn";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 export const Route = createFileRoute("/receptionist/dashboard")({
   component: ReceptionistDashboardComponent,
@@ -14,6 +16,19 @@ export const Route = createFileRoute("/receptionist/dashboard")({
 
 function ReceptionistDashboardComponent() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    // Invalidate all queries to refresh dashboard data
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["receptionist", "appointments"] }),
+      queryClient.invalidateQueries({ queryKey: ["receptionist", "patients"] }),
+      queryClient.invalidateQueries({ queryKey: ["receptionist", "service-requests"] }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   const { data: appointmentsData } = useQuery({
     queryKey: [
@@ -99,12 +114,22 @@ function ReceptionistDashboardComponent() {
     <ProtectedRoute allowedRoles={["Receptionist"]}>
       <DashboardLayout>
         <div className="space-y-8">
-          <div>
-            <h1 className="text-3xl font-bold">Dashboard - Receptionist</h1>
-            <p className="text-gray-600 mt-2">
-              Track service requests, appointments, and new patient
-              registrations.
-            </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold">Dashboard - Receptionist</h1>
+              <p className="text-gray-600 mt-2">
+                Track service requests, appointments, and new patient
+                registrations.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -191,7 +216,7 @@ function ReceptionistDashboardComponent() {
                     >
                       <div>
                         <p className="font-medium text-gray-900">
-                          #{request.id.slice(0, 8)}
+                          #{getLast4Chars(request.id)}
                         </p>
                         <p className="text-xs text-gray-500">
                           Patient ID: {request.patientId || "—"} · Preferred
@@ -303,7 +328,7 @@ function ReceptionistDashboardComponent() {
                       <p className="font-medium text-gray-900">
                         {patient.fullName ||
                           patient.patientCode ||
-                          `Patient ${patient.id.slice(0, 8)}`}
+                          `Patient ${getLast4Chars(patient.id)}`}
                       </p>
                       <p className="text-xs text-gray-500">
                         Email: {patient.email || "—"} · Phone:{" "}

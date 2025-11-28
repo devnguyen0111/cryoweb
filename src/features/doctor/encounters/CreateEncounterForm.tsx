@@ -67,10 +67,10 @@ export function CreateEncounterForm({
   const [selectedPatientId, setSelectedPatientId] = useState(
     defaultPatientId || ""
   );
-  // Step management for IUI/IVF: plan -> signature -> encounter
+  // Step management for IUI/IVF: plan -> signature -> summary
   // If initialTreatmentType or startWithPlan is provided, start with "plan", otherwise start with "encounter"
   const [currentStep, setCurrentStep] = useState<
-    "encounter" | "plan" | "signature"
+    "encounter" | "plan" | "signature" | "summary"
   >(initialTreatmentType || startWithPlan ? "plan" : "encounter");
   const [planTreatmentType, setPlanTreatmentType] = useState<
     "IUI" | "IVF" | null
@@ -196,6 +196,39 @@ export function CreateEncounterForm({
       doctorId: string;
       patientId: string;
     }) => {
+      // Validate: IVF treatment can only be created for female patients
+      if (values.treatmentType === "IVF") {
+        // Fetch patient details to verify gender
+        try {
+          const patientResponse =
+            await api.patient.getPatientDetails(patientId);
+          const patientData = patientResponse.data;
+          const userResponse = await api.user.getUserDetails(patientId);
+          const userData = userResponse.data;
+
+          const patientGender =
+            patientData?.gender ||
+            (userData?.gender !== undefined
+              ? userData.gender
+                ? "Male"
+                : "Female"
+              : null);
+
+          if (patientGender === "Male") {
+            throw new Error(
+              "IVF treatment can only be created for female patients. Male patients are not eligible for IVF treatment."
+            );
+          }
+        } catch (error: any) {
+          // If it's our validation error, re-throw it
+          if (error?.message?.includes("IVF treatment can only be created")) {
+            throw error;
+          }
+          // Otherwise, log and continue (patient data might not be available, but frontend validation should catch it)
+          console.warn("Could not verify patient gender:", error);
+        }
+      }
+
       // Format dates
       const startDate = new Date(`${values.visitDate}T00:00:00`).toISOString();
       const endDate = new Date(`${values.visitDate}T23:59:59`).toISOString();
@@ -276,7 +309,6 @@ export function CreateEncounterForm({
           notes: "",
           outcome: "",
           complications: "",
-          usedICSI: false,
           status: "Planned",
         };
 
@@ -432,6 +464,19 @@ export function CreateEncounterForm({
     },
   });
 
+  // Helper function to check if patient is male
+  const isPatientMale = (): boolean => {
+    const patientGender =
+      selectedPatientData?.gender ||
+      (userDetails?.gender !== undefined
+        ? userDetails.gender
+          ? "Male"
+          : "Female"
+        : null);
+
+    return patientGender === "Male";
+  };
+
   const onSubmit = (values: EncounterFormValues) => {
     const patientId = selectedPatientId || defaultPatientId;
 
@@ -443,6 +488,14 @@ export function CreateEncounterForm({
     if (!doctorId) {
       toast.error(
         "Unable to find doctor information. Please contact the administrator."
+      );
+      return;
+    }
+
+    // Validate: IVF treatment can only be created for female patients
+    if (values.treatmentType === "IVF" && isPatientMale()) {
+      toast.error(
+        "IVF treatment can only be created for female patients. Male patients are not eligible for IVF treatment."
       );
       return;
     }
@@ -505,10 +558,10 @@ export function CreateEncounterForm({
     enabled: !!planPatientId && currentStep === "plan",
   });
 
-  // Show step indicator if we're in encounter step after signature
+  // Show step indicator if we're in summary step after signature
   // This MUST be defined before useQuery hooks that use it
-  const showEncounterStepIndicator =
-    createdTreatmentId && currentStep === "encounter";
+  const showSummaryStepIndicator =
+    createdTreatmentId && currentStep === "summary";
 
   // Fetch treatment data to get treatment type if we started from plan step
   // This hook MUST be called before any early returns to follow Rules of Hooks
@@ -519,8 +572,21 @@ export function CreateEncounterForm({
       const response = await api.treatment.getTreatmentById(createdTreatmentId);
       return response.data;
     },
-    enabled: !!createdTreatmentId && !pendingTreatmentData,
+    enabled: !!createdTreatmentId,
+    retry: 1,
   });
+
+  // Update planTreatmentType from createdTreatmentData when available
+  useEffect(() => {
+    if (
+      createdTreatmentData?.treatmentType &&
+      (createdTreatmentData.treatmentType === "IUI" ||
+        createdTreatmentData.treatmentType === "IVF") &&
+      !planTreatmentType
+    ) {
+      setPlanTreatmentType(createdTreatmentData.treatmentType as "IUI" | "IVF");
+    }
+  }, [createdTreatmentData, planTreatmentType]);
 
   // Get patient ID for step 3 from treatment data
   const encounterPatientId =
@@ -567,7 +633,7 @@ export function CreateEncounterForm({
     },
     enabled:
       (!!createdTreatmentId || !!encounterPatientId) &&
-      !!showEncounterStepIndicator,
+      !!showSummaryStepIndicator,
   });
 
   // Fetch patient details for step 3
@@ -583,7 +649,7 @@ export function CreateEncounterForm({
         return null;
       }
     },
-    enabled: !!encounterPatientId && !!showEncounterStepIndicator,
+    enabled: !!encounterPatientId && !!showSummaryStepIndicator,
   });
 
   // Fetch user details for step 3
@@ -598,53 +664,81 @@ export function CreateEncounterForm({
         return null;
       }
     },
-    enabled: !!encounterPatientId && !!showEncounterStepIndicator,
+    enabled: !!encounterPatientId && !!showSummaryStepIndicator,
   });
 
   // Step 1: Treatment Plan Form (for IUI/IVF)
-  // Show if: (1) coming from encounter form with IUI/IVF, (2) starting directly with initialTreatmentType, or (3) startWithPlan is true
+  // Show if: (1) coming from encounter form with IUI/IVF, (2) starting directly with initialTreatmentType, or (3) startWithPlan is true, or (4) has a patient selected
   if (
     currentStep === "plan" &&
-    (pendingTreatmentData || planTreatmentType || startWithPlan)
+    (pendingTreatmentData ||
+      planTreatmentType ||
+      startWithPlan ||
+      planPatientId)
   ) {
-    // Get patient information
-    const planPatientName =
-      planPatientDetails?.accountInfo?.username ||
-      planUserDetails?.fullName ||
-      planUserDetails?.userName ||
-      planPatientDetails?.fullName ||
-      "Unknown";
-    const planPatientCode = planPatientDetails?.patientCode || "";
-    const planNationalId = planPatientDetails?.nationalId || "";
-    const planDateOfBirth = planUserDetails?.dob
-      ? new Date(planUserDetails.dob).toLocaleDateString("vi-VN")
-      : planPatientDetails?.dateOfBirth
-        ? new Date(planPatientDetails.dateOfBirth).toLocaleDateString("vi-VN")
-        : null;
+    // Get patient gender for IVF validation
     const planGender =
       planUserDetails?.gender !== undefined
         ? planUserDetails.gender
           ? "Male"
           : "Female"
         : planPatientDetails?.gender || null;
-    const planAge = planUserDetails?.age ?? null;
-    const planPhone =
-      planPatientDetails?.accountInfo?.phone ||
-      planUserDetails?.phone ||
-      planUserDetails?.phoneNumber ||
-      planPatientDetails?.phoneNumber ||
-      null;
-    const planEmail =
-      planPatientDetails?.accountInfo?.email ||
-      planUserDetails?.email ||
-      planPatientDetails?.email ||
-      null;
-    const planAddress =
-      planPatientDetails?.accountInfo?.address ||
-      planUserDetails?.location ||
-      planPatientDetails?.address ||
-      null;
-    const planBloodType = planPatientDetails?.bloodType || null;
+
+    // Check if patient is male for IVF validation
+    const isPlanPatientMale =
+      planGender === "Male" ||
+      planUserDetails?.gender === true ||
+      planPatientDetails?.gender === "Male";
+
+    // Validate: If trying to create IVF for male patient, show error and prevent
+    const treatmentTypeToCheck =
+      pendingTreatmentData?.values.treatmentType || planTreatmentType;
+    if (treatmentTypeToCheck === "IVF" && isPlanPatientMale) {
+      return (
+        <div className="space-y-6">
+          <div className="rounded-md border border-red-200 bg-red-50 p-4">
+            <div className="flex items-start gap-3">
+              <svg
+                className="h-5 w-5 text-red-600 mt-0.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-red-800">
+                  Cannot Create IVF Treatment
+                </h3>
+                <p className="mt-1 text-sm text-red-700">
+                  IVF treatment can only be created for female patients. This
+                  patient is male and is not eligible for IVF treatment.
+                </p>
+                <div className="mt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setCurrentStep("encounter");
+                      setPendingTreatmentData(null);
+                      setPlanTreatmentType(null);
+                      form.setValue("treatmentType", "Consultation");
+                    }}
+                  >
+                    Go Back
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="space-y-6">
@@ -670,140 +764,11 @@ export function CreateEncounterForm({
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-300 text-gray-600 text-sm font-medium">
               3
             </div>
-            <span className="text-sm text-gray-500">3. Encounter Created</span>
+            <span className="text-sm text-gray-500">3. Summary & Complete</span>
           </div>
         </div>
 
-        {/* Patient Selector - show if no patientId yet */}
-        {!planPatientId && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Select Patient</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Search Patient (by name, code, or national ID)
-                </label>
-                <Input
-                  placeholder="Enter at least 2 characters to search..."
-                  value={patientSearch}
-                  onChange={(e) => setPatientSearch(e.target.value)}
-                />
-              </div>
-
-              {patientsData?.data && patientsData.data.length > 0 && (
-                <div className="rounded-lg border">
-                  <div className="max-h-64 overflow-y-auto">
-                    {patientsData.data.map((patient: any) => (
-                      <button
-                        key={patient.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedPatientId(patient.id);
-                          setPatientSearch(
-                            `${patient.fullName} (${patient.patientCode})`
-                          );
-                        }}
-                        className={`w-full border-b p-3 text-left transition last:border-b-0 hover:bg-gray-50 ${
-                          selectedPatientId === patient.id ? "bg-primary/5" : ""
-                        }`}
-                      >
-                        <p className="font-medium">{patient.fullName}</p>
-                        <p className="text-sm text-gray-600">
-                          {patient.patientCode} • {patient.nationalId} •{" "}
-                          {patient.gender}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {selectedPatientId && (
-                <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
-                  ✓ Patient selected: {patientName} (
-                  {selectedPatientData?.patientCode || ""})
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Patient Information Card - show after patient is selected */}
-        {planPatientId && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Patient Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-500">Full Name</p>
-                  <p className="text-base font-semibold">{planPatientName}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-500">
-                    Patient Code
-                  </p>
-                  <p className="text-base">{planPatientCode || "N/A"}</p>
-                </div>
-                {planNationalId && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-gray-500">
-                      National ID
-                    </p>
-                    <p className="text-base">{planNationalId}</p>
-                  </div>
-                )}
-                {planDateOfBirth && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-gray-500">
-                      Date of Birth
-                    </p>
-                    <p className="text-base">
-                      {planDateOfBirth}
-                      {planAge && ` (${planAge} years old)`}
-                    </p>
-                  </div>
-                )}
-                {planGender && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-gray-500">Gender</p>
-                    <p className="text-base">{planGender}</p>
-                  </div>
-                )}
-                {planPhone && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-gray-500">Phone</p>
-                    <p className="text-base">{planPhone}</p>
-                  </div>
-                )}
-                {planEmail && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-gray-500">Email</p>
-                    <p className="text-base">{planEmail}</p>
-                  </div>
-                )}
-                {planAddress && (
-                  <div className="space-y-1 md:col-span-2">
-                    <p className="text-sm font-medium text-gray-500">Address</p>
-                    <p className="text-base">{planAddress}</p>
-                  </div>
-                )}
-                {planBloodType && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-gray-500">
-                      Blood Type
-                    </p>
-                    <p className="text-base">{planBloodType}</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
+        {/* Note: Patient selection and information display is now handled inside TreatmentPlanForm component */}
         <TreatmentPlanForm
           patientId={planPatientId || undefined}
           layout={layout}
@@ -839,11 +804,7 @@ export function CreateEncounterForm({
   }
 
   // Step 2: Signature (for IUI/IVF)
-  if (
-    currentStep === "signature" &&
-    createdTreatmentId &&
-    (pendingTreatmentData || planTreatmentType || createdTreatmentData)
-  ) {
+  if (currentStep === "signature" && createdTreatmentId) {
     const treatmentType =
       pendingTreatmentData?.values.treatmentType ||
       planTreatmentType ||
@@ -852,7 +813,21 @@ export function CreateEncounterForm({
       pendingTreatmentData?.patientId ||
       selectedPatientId ||
       defaultPatientId ||
+      createdTreatmentData?.patientId ||
       "";
+
+    // If we don't have treatment type yet but have treatment ID, wait for data to load
+    if (!treatmentType && !createdTreatmentData) {
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center justify-center p-8">
+            <p className="text-sm text-gray-500">
+              Loading treatment information...
+            </p>
+          </div>
+        </div>
+      );
+    }
 
     if (
       !treatmentType ||
@@ -886,7 +861,7 @@ export function CreateEncounterForm({
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-300 text-gray-600 text-sm font-medium">
               3
             </div>
-            <span className="text-sm text-gray-500">3. Encounter Created</span>
+            <span className="text-sm text-gray-500">3. Summary & Complete</span>
           </div>
         </div>
 
@@ -896,25 +871,8 @@ export function CreateEncounterForm({
           treatmentType={treatmentType as "IUI" | "IVF"}
           agreementId={createdAgreementId || undefined}
           onSigned={() => {
-            // After signature, if we have pendingTreatmentData (from encounter form), update immediately
-            // Otherwise, we need to show encounter form to collect data
-            if (pendingTreatmentData && doctorId) {
-              updateTreatmentWithEncounterDataMutation.mutate({
-                treatmentId: createdTreatmentId,
-                values: pendingTreatmentData.values,
-                doctorId,
-                patientId: pendingTreatmentData.patientId,
-              });
-            } else {
-              // Started from plan step - need to collect encounter data
-              // Set form values to match treatment type and move to encounter form
-              form.setValue("treatmentType", treatmentType);
-              form.setValue(
-                "visitDate",
-                new Date().toISOString().split("T")[0]
-              );
-              setCurrentStep("encounter");
-            }
+            // After signature, move to summary step
+            setCurrentStep("summary");
           }}
           onClose={() => {
             setCurrentStep("plan");
@@ -934,9 +892,519 @@ export function CreateEncounterForm({
         </div>
       ) : null}
 
-      {/* Step Indicator for Encounter step after signature */}
-      {showEncounterStepIndicator && (
+      {/* Step 3: Summary (for IUI/IVF) */}
+      {currentStep === "summary" &&
+        createdTreatmentId &&
+        (() => {
+          const summaryTreatmentType =
+            pendingTreatmentData?.values.treatmentType ||
+            planTreatmentType ||
+            (createdTreatmentData?.treatmentType as "IUI" | "IVF" | null);
+
+          // If we don't have treatment type yet but have treatment ID, wait for data to load
+          if (!summaryTreatmentType && !createdTreatmentData) {
+            return (
+              <div className="space-y-6">
+                <div className="flex items-center justify-center p-8">
+                  <p className="text-sm text-gray-500">
+                    Loading treatment information...
+                  </p>
+                </div>
+              </div>
+            );
+          }
+
+          if (
+            !summaryTreatmentType ||
+            (summaryTreatmentType !== "IUI" && summaryTreatmentType !== "IVF")
+          ) {
+            return null;
+          }
+
+          return (
+            <div className="space-y-6">
+              {/* Step Indicator */}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500 text-white text-sm font-medium">
+                    ✓
+                  </div>
+                  <span className="text-sm text-gray-600">
+                    1. Treatment Plan
+                  </span>
+                </div>
+                <div className="h-px flex-1 bg-gray-300"></div>
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500 text-white text-sm font-medium">
+                    ✓
+                  </div>
+                  <span className="text-sm text-gray-600">2. Signature</span>
+                </div>
+                <div className="h-px flex-1 bg-gray-300"></div>
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-sm font-medium">
+                    3
+                  </div>
+                  <span className="text-sm font-medium text-primary">
+                    3. Summary & Complete
+                  </span>
+                </div>
+              </div>
+
+              {/* Patient Information Card */}
+              {encounterPatientId && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Patient Information</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const encounterPatientName =
+                        encounterPatientDetails?.accountInfo?.username ||
+                        encounterUserDetails?.fullName ||
+                        encounterUserDetails?.userName ||
+                        encounterPatientDetails?.fullName ||
+                        "Unknown";
+                      const encounterPatientCode =
+                        encounterPatientDetails?.patientCode || "";
+                      const encounterNationalId =
+                        encounterPatientDetails?.nationalId || "";
+                      const encounterDateOfBirth = encounterUserDetails?.dob
+                        ? new Date(encounterUserDetails.dob).toLocaleDateString(
+                            "en-US"
+                          )
+                        : encounterPatientDetails?.dateOfBirth
+                          ? new Date(
+                              encounterPatientDetails.dateOfBirth
+                            ).toLocaleDateString("en-US")
+                          : null;
+                      const encounterGender =
+                        encounterUserDetails?.gender !== undefined
+                          ? encounterUserDetails.gender
+                            ? "Male"
+                            : "Female"
+                          : encounterPatientDetails?.gender || null;
+                      const encounterAge = encounterUserDetails?.age ?? null;
+                      const encounterPhone =
+                        encounterPatientDetails?.accountInfo?.phone ||
+                        encounterUserDetails?.phone ||
+                        encounterUserDetails?.phoneNumber ||
+                        encounterPatientDetails?.phoneNumber ||
+                        null;
+                      const encounterEmail =
+                        encounterPatientDetails?.accountInfo?.email ||
+                        encounterUserDetails?.email ||
+                        encounterPatientDetails?.email ||
+                        null;
+                      const encounterAddress =
+                        encounterPatientDetails?.accountInfo?.address ||
+                        encounterUserDetails?.location ||
+                        encounterPatientDetails?.address ||
+                        null;
+                      const encounterBloodType =
+                        encounterPatientDetails?.bloodType || null;
+
+                      return (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-gray-500">
+                              Full Name
+                            </p>
+                            <p className="text-base font-semibold">
+                              {encounterPatientName}
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-gray-500">
+                              Patient Code
+                            </p>
+                            <p className="text-base">
+                              {encounterPatientCode || "N/A"}
+                            </p>
+                          </div>
+                          {encounterNationalId && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-gray-500">
+                                National ID
+                              </p>
+                              <p className="text-base">{encounterNationalId}</p>
+                            </div>
+                          )}
+                          {encounterDateOfBirth && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-gray-500">
+                                Date of Birth
+                              </p>
+                              <p className="text-base">
+                                {encounterDateOfBirth}
+                                {encounterAge && ` (${encounterAge} years old)`}
+                              </p>
+                            </div>
+                          )}
+                          {encounterGender && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-gray-500">
+                                Gender
+                              </p>
+                              <p className="text-base">{encounterGender}</p>
+                            </div>
+                          )}
+                          {encounterPhone && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-gray-500">
+                                Phone
+                              </p>
+                              <p className="text-base">{encounterPhone}</p>
+                            </div>
+                          )}
+                          {encounterEmail && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-gray-500">
+                                Email
+                              </p>
+                              <p className="text-base">{encounterEmail}</p>
+                            </div>
+                          )}
+                          {encounterAddress && (
+                            <div className="space-y-1 md:col-span-2">
+                              <p className="text-sm font-medium text-gray-500">
+                                Address
+                              </p>
+                              <p className="text-base">{encounterAddress}</p>
+                            </div>
+                          )}
+                          {encounterBloodType && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-gray-500">
+                                Blood Type
+                              </p>
+                              <p className="text-base">{encounterBloodType}</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Summary of Previous Steps */}
+              {createdTreatmentData && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* Treatment Plan Summary */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Treatment Plan Summary</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {(() => {
+                        try {
+                          const notesData = createdTreatmentData.notes
+                            ? JSON.parse(createdTreatmentData.notes)
+                            : null;
+                          return (
+                            <>
+                              <div>
+                                <p className="text-sm font-medium text-gray-500">
+                                  Plan Name
+                                </p>
+                                <p className="text-base font-semibold">
+                                  {createdTreatmentData.treatmentName ||
+                                    notesData?.planName ||
+                                    "N/A"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-500">
+                                  Treatment Type
+                                </p>
+                                <p className="text-base">
+                                  {createdTreatmentData.treatmentType || "N/A"}
+                                </p>
+                              </div>
+                              {createdTreatmentData.startDate && (
+                                <div>
+                                  <p className="text-sm font-medium text-gray-500">
+                                    Start Date
+                                  </p>
+                                  <p className="text-base">
+                                    {new Date(
+                                      createdTreatmentData.startDate
+                                    ).toLocaleDateString("en-US")}
+                                  </p>
+                                </div>
+                              )}
+                              {notesData?.estimatedDuration && (
+                                <div>
+                                  <p className="text-sm font-medium text-gray-500">
+                                    Estimated Duration
+                                  </p>
+                                  <p className="text-base">
+                                    {notesData.estimatedDuration} months
+                                  </p>
+                                </div>
+                              )}
+                              {notesData?.phases &&
+                                Array.isArray(notesData.phases) && (
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-500">
+                                      Phases
+                                    </p>
+                                    <p className="text-base">
+                                      {notesData.phases.length} phase(s) planned
+                                    </p>
+                                  </div>
+                                )}
+                              {createdTreatmentData.goals && (
+                                <div>
+                                  <p className="text-sm font-medium text-gray-500">
+                                    Overall Goals
+                                  </p>
+                                  <p className="text-sm text-gray-700 line-clamp-3">
+                                    {createdTreatmentData.goals}
+                                  </p>
+                                </div>
+                              )}
+                            </>
+                          );
+                        } catch {
+                          return (
+                            <div>
+                              <p className="text-sm font-medium text-gray-500">
+                                Treatment Name
+                              </p>
+                              <p className="text-base">
+                                {createdTreatmentData.treatmentName || "N/A"}
+                              </p>
+                            </div>
+                          );
+                        }
+                      })()}
+                    </CardContent>
+                  </Card>
+
+                  {/* Signature Summary */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Signature Status</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {createdAgreementData ? (
+                        <>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">
+                              Agreement Status
+                            </p>
+                            <p className="text-base">
+                              {(createdAgreementData as any).statusName ||
+                                (createdAgreementData as any).status ||
+                                "N/A"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">
+                              Doctor Signature
+                            </p>
+                            <div className="flex items-center gap-2">
+                              {((createdAgreementData as any).signedByDoctor ??
+                              (createdAgreementData as any).doctorSigned) ? (
+                                <>
+                                  <svg
+                                    className="h-5 w-5 text-green-600"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                  <span className="text-base font-medium text-green-700">
+                                    Signed
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <svg
+                                    className="h-5 w-5 text-amber-600"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                    />
+                                  </svg>
+                                  <span className="text-base text-amber-700">
+                                    Pending
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">
+                              Patient Signature
+                            </p>
+                            <div className="flex items-center gap-2">
+                              {((createdAgreementData as any).signedByPatient ??
+                              (createdAgreementData as any).patientSigned) ? (
+                                <>
+                                  <svg
+                                    className="h-5 w-5 text-green-600"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                  <span className="text-base font-medium text-green-700">
+                                    Signed
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <svg
+                                    className="h-5 w-5 text-amber-600"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                    />
+                                  </svg>
+                                  <span className="text-base text-amber-700">
+                                    Pending
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {(createdAgreementData as any).startDate && (
+                            <div>
+                              <p className="text-sm font-medium text-gray-500">
+                                Agreement Start Date
+                              </p>
+                              <p className="text-base">
+                                {new Date(
+                                  (createdAgreementData as any).startDate
+                                ).toLocaleDateString("en-US")}
+                              </p>
+                            </div>
+                          )}
+                          {(createdAgreementData as any).endDate && (
+                            <div>
+                              <p className="text-sm font-medium text-gray-500">
+                                Agreement End Date
+                              </p>
+                              <p className="text-base">
+                                {new Date(
+                                  (createdAgreementData as any).endDate
+                                ).toLocaleDateString("en-US")}
+                              </p>
+                            </div>
+                          )}
+                          {(createdAgreementData as any).agreementCode && (
+                            <div>
+                              <p className="text-sm font-medium text-gray-500">
+                                Agreement Code
+                              </p>
+                              <p className="text-base text-sm">
+                                {(createdAgreementData as any).agreementCode}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-500">
+                          Loading agreement information...
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Complete Button for Step 3 */}
+              <div className="flex flex-wrap justify-end gap-2 pt-4">
+                {layout === "modal" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (onClose) {
+                        onClose();
+                      }
+                    }}
+                  >
+                    Close
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      navigate({ to: "/doctor/encounters" });
+                    }}
+                  >
+                    Back to Encounters
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  onClick={() => {
+                    // Navigate to treatment cycles if treatment is IUI/IVF
+                    if (
+                      createdTreatmentData?.treatmentType === "IUI" ||
+                      createdTreatmentData?.treatmentType === "IVF"
+                    ) {
+                      navigate({ to: "/doctor/treatment-cycles" });
+                    } else {
+                      // Otherwise go to encounters
+                      navigate({ to: "/doctor/encounters" });
+                    }
+
+                    // Call onCreated callback if provided
+                    if (onCreated && createdTreatmentId) {
+                      onCreated(createdTreatmentId);
+                    }
+
+                    // Close modal if in modal layout
+                    if (layout === "modal" && onClose) {
+                      onClose();
+                    }
+                  }}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  ✓ Complete
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
+
+      {/* Legacy encounter step (for non-IUI/IVF treatments) */}
+      {(!currentStep ||
+        (currentStep !== "plan" &&
+          currentStep !== "signature" &&
+          currentStep !== "summary")) && (
         <>
+          {/* Step Indicator */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500 text-white text-sm font-medium">
@@ -957,12 +1425,13 @@ export function CreateEncounterForm({
                 3
               </div>
               <span className="text-sm font-medium text-primary">
-                3. Encounter Created
+                3. Summary & Complete
               </span>
             </div>
           </div>
 
-          {/* Patient Information Card - same as step 1 */}
+          {/* Summary Content */}
+          {/* Patient Information Card */}
           {encounterPatientId && (
             <Card>
               <CardHeader>
@@ -982,12 +1451,12 @@ export function CreateEncounterForm({
                     encounterPatientDetails?.nationalId || "";
                   const encounterDateOfBirth = encounterUserDetails?.dob
                     ? new Date(encounterUserDetails.dob).toLocaleDateString(
-                        "vi-VN"
+                        "en-US"
                       )
                     : encounterPatientDetails?.dateOfBirth
                       ? new Date(
                           encounterPatientDetails.dateOfBirth
-                        ).toLocaleDateString("vi-VN")
+                        ).toLocaleDateString("en-US")
                       : null;
                   const encounterGender =
                     encounterUserDetails?.gender !== undefined
@@ -1141,7 +1610,7 @@ export function CreateEncounterForm({
                               <p className="text-base">
                                 {new Date(
                                   createdTreatmentData.startDate
-                                ).toLocaleDateString("vi-VN")}
+                                ).toLocaleDateString("en-US")}
                               </p>
                             </div>
                           )}
@@ -1218,7 +1687,7 @@ export function CreateEncounterForm({
                         </p>
                         <div className="flex items-center gap-2">
                           {((createdAgreementData as any).signedByDoctor ??
-                            (createdAgreementData as any).doctorSigned) ? (
+                          (createdAgreementData as any).doctorSigned) ? (
                             <>
                               <svg
                                 className="h-5 w-5 text-green-600"
@@ -1265,7 +1734,7 @@ export function CreateEncounterForm({
                         </p>
                         <div className="flex items-center gap-2">
                           {((createdAgreementData as any).signedByPatient ??
-                            (createdAgreementData as any).patientSigned) ? (
+                          (createdAgreementData as any).patientSigned) ? (
                             <>
                               <svg
                                 className="h-5 w-5 text-green-600"
@@ -1314,7 +1783,7 @@ export function CreateEncounterForm({
                           <p className="text-base">
                             {new Date(
                               (createdAgreementData as any).startDate
-                            ).toLocaleDateString("vi-VN")}
+                            ).toLocaleDateString("en-US")}
                           </p>
                         </div>
                       )}
@@ -1326,7 +1795,7 @@ export function CreateEncounterForm({
                           <p className="text-base">
                             {new Date(
                               (createdAgreementData as any).endDate
-                            ).toLocaleDateString("vi-VN")}
+                            ).toLocaleDateString("en-US")}
                           </p>
                         </div>
                       )}
@@ -1352,463 +1821,564 @@ export function CreateEncounterForm({
           )}
 
           {/* Complete Button for Step 3 */}
-          {showEncounterStepIndicator && (
-            <div className="flex flex-wrap justify-end gap-2 pt-4">
-              {layout === "modal" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    if (onClose) {
-                      onClose();
-                    }
-                  }}
-                >
-                  Close
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    navigate({ to: "/doctor/encounters" });
-                  }}
-                >
-                  Back to Encounters
-                </Button>
-              )}
+          <div className="flex flex-wrap justify-end gap-2 pt-4">
+            {layout === "modal" ? (
               <Button
                 type="button"
+                variant="outline"
                 onClick={() => {
-                  // Navigate to treatment cycles if treatment is IUI/IVF
-                  if (
-                    createdTreatmentData?.treatmentType === "IUI" ||
-                    createdTreatmentData?.treatmentType === "IVF"
-                  ) {
-                    navigate({ to: "/doctor/treatment-cycles" });
-                  } else {
-                    // Otherwise go to encounters
-                    navigate({ to: "/doctor/encounters" });
-                  }
-
-                  // Call onCreated callback if provided
-                  if (onCreated && createdTreatmentId) {
-                    onCreated(createdTreatmentId);
-                  }
-
-                  // Call onClose if provided (for modal)
                   if (onClose) {
                     onClose();
                   }
                 }}
-                className="bg-green-600 hover:bg-green-700"
               >
-                ✓ Complete
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-
-      {layout === "page" && !showEncounterStepIndicator && (
-        <section className="flex flex-col gap-1">
-          <h1 className="text-3xl font-bold">Create encounter</h1>
-          <p className="text-gray-600">
-            Patient:{" "}
-            <span className="font-semibold">
-              {selectedPatientId || defaultPatientId || "Not selected"}
-            </span>
-            {defaultAppointmentId && (
-              <span className="ml-3 text-sm text-gray-500">
-                - Linked appointment {defaultAppointmentId}
-              </span>
-            )}
-          </p>
-        </section>
-      )}
-
-      {!defaultPatientId && !showEncounterStepIndicator && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Select Patient</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Search Patient (by name, code, or national ID)
-              </label>
-              <Input
-                placeholder="Enter at least 2 characters to search..."
-                value={
-                  (selectedPatientData || userDetails) &&
-                  currentPatientId &&
-                  !patientSearch
-                    ? `${patientName} (${selectedPatientData?.patientCode || ""})`
-                    : patientSearch
-                }
-                onChange={(e) => setPatientSearch(e.target.value)}
-                disabled={!!defaultPatientId}
-              />
-            </div>
-
-            {patientsData?.data && patientsData.data.length > 0 && (
-              <div className="rounded-lg border">
-                <div className="max-h-64 overflow-y-auto">
-                  {patientsData.data.map((patient: any) => (
-                    <button
-                      key={patient.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPatientId(patient.id);
-                        setPatientSearch(
-                          `${patient.fullName} (${patient.patientCode})`
-                        );
-                      }}
-                      className={`w-full border-b p-3 text-left transition last:border-b-0 hover:bg-gray-50 ${
-                        selectedPatientId === patient.id ? "bg-primary/5" : ""
-                      }`}
-                    >
-                      <p className="font-medium">{patient.fullName}</p>
-                      <p className="text-sm text-gray-600">
-                        {patient.patientCode} • {patient.nationalId} •{" "}
-                        {patient.gender}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {(selectedPatientId || defaultPatientId) && (
-              <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
-                ✓ Patient selected: {patientName} (
-                {selectedPatientData?.patientCode || ""})
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {!showEncounterStepIndicator && (
-        <form
-          onSubmit={form.handleSubmit(onSubmit)}
-          className={
-            layout === "modal" ? "space-y-6 overflow-y-auto pr-1" : "space-y-6"
-          }
-          style={layout === "modal" ? { maxHeight: "70vh" } : undefined}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle>Visit information</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Visit date
-                </label>
-                <Input
-                  type="date"
-                  {...form.register("visitDate", { required: true })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Treatment Type <span className="text-red-500">*</span>
-                </label>
-                <select
-                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  {...form.register("treatmentType", { required: true })}
-                >
-                  <option value="Consultation">Consultation</option>
-                  <option value="IUI">IUI (Intrauterine Insemination)</option>
-                  <option value="IVF">IVF (In Vitro Fertilization)</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Chief complaint / Treatment name
-                </label>
-                <Input
-                  placeholder="Example: Post-IVF follow-up or IUI Cycle 1"
-                  {...form.register("chiefComplaint", { required: true })}
-                />
-              </div>
-              <div className="md:col-span-2 space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Medical history / Diagnosis
-                </label>
-                <textarea
-                  className="min-h-[120px] w-full rounded-md border border-gray-200 p-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="Summarize obstetric history, underlying conditions, prior treatments..."
-                  {...form.register("history")}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* IUI Specific Fields */}
-          {selectedTreatmentType === "IUI" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>IUI Treatment Details</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Protocol <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    {...form.register("iuiProtocol", {
-                      required: "Protocol is required for IUI treatment",
-                      validate: (value) => {
-                        if (
-                          selectedTreatmentType === "IUI" &&
-                          (!value || value.trim() === "")
-                        ) {
-                          return "Protocol is required";
-                        }
-                        if (
-                          value === "Other" &&
-                          !form.watch("iuiProtocolOther")?.trim()
-                        ) {
-                          return true; // Validation for "Other" is handled by iuiProtocolOther field
-                        }
-                        return true;
-                      },
-                    })}
-                  >
-                    <option value="">Select protocol...</option>
-                    <option value="Natural cycle">Natural cycle</option>
-                    <option value="Clomid (Clomiphene)">
-                      Clomid (Clomiphene)
-                    </option>
-                    <option value="Letrozole">Letrozole</option>
-                    <option value="FSH injections">FSH injections</option>
-                    <option value="Gonadotropins">Gonadotropins</option>
-                    <option value="Combination (Clomid + FSH)">
-                      Combination (Clomid + FSH)
-                    </option>
-                    <option value="Other">Other</option>
-                  </select>
-                  {form.watch("iuiProtocol") === "Other" && (
-                    <div className="mt-2">
-                      <Input
-                        placeholder="Specify protocol..."
-                        {...form.register("iuiProtocolOther", {
-                          required: "Please specify the protocol",
-                          validate: (value) => {
-                            if (
-                              form.watch("iuiProtocol") === "Other" &&
-                              (!value || value.trim() === "")
-                            ) {
-                              return "Please specify the protocol";
-                            }
-                            return true;
-                          },
-                        })}
-                      />
-                      {form.formState.errors.iuiProtocolOther && (
-                        <p className="text-sm text-red-500 mt-1">
-                          {form.formState.errors.iuiProtocolOther.message}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {form.formState.errors.iuiProtocol && (
-                    <p className="text-sm text-red-500">
-                      {form.formState.errors.iuiProtocol.message}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Medications
-                  </label>
-                  <Input
-                    placeholder="e.g., Clomiphene 50mg, FSH injections"
-                    {...form.register("iuiMedications")}
-                  />
-                </div>
-                <div className="md:col-span-2 space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Monitoring Plan
-                  </label>
-                  <textarea
-                    className="min-h-[80px] w-full rounded-md border border-gray-200 p-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="Ultrasound monitoring schedule, hormone levels tracking..."
-                    {...form.register("iuiMonitoring")}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* IVF Specific Fields */}
-          {selectedTreatmentType === "IVF" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>IVF Treatment Details</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Protocol
-                  </label>
-                  <select
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    {...form.register("ivfProtocol")}
-                  >
-                    <option value="">Select protocol...</option>
-                    <option value="Long Protocol">Long Protocol</option>
-                    <option value="Short Protocol">Short Protocol</option>
-                    <option value="Antagonist Protocol">
-                      Antagonist Protocol
-                    </option>
-                    <option value="Mini IVF">Mini IVF</option>
-                    <option value="Natural Cycle">Natural Cycle</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  {form.watch("ivfProtocol") === "Other" && (
-                    <div className="mt-2">
-                      <Input
-                        placeholder="Specify protocol..."
-                        {...form.register("ivfProtocolOther", {
-                          validate: (value) => {
-                            if (
-                              form.watch("ivfProtocol") === "Other" &&
-                              (!value || value.trim() === "")
-                            ) {
-                              return "Please specify the protocol";
-                            }
-                            return true;
-                          },
-                        })}
-                      />
-                      {form.formState.errors.ivfProtocolOther && (
-                        <p className="text-sm text-red-500 mt-1">
-                          {form.formState.errors.ivfProtocolOther.message}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {form.formState.errors.ivfProtocol && (
-                    <p className="text-sm text-red-500">
-                      {form.formState.errors.ivfProtocol.message}
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Vital signs</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Blood pressure
-                </label>
-                <Input
-                  placeholder="120/80 mmHg"
-                  {...form.register("vitals.bloodPressure")}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Heart rate
-                </label>
-                <Input
-                  placeholder="80 bpm"
-                  {...form.register("vitals.heartRate")}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Temperature
-                </label>
-                <Input
-                  placeholder="36.5 C"
-                  {...form.register("vitals.temperature")}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Weight
-                </label>
-                <Input
-                  placeholder="58 kg"
-                  {...form.register("vitals.weight")}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Physical exam &amp; notes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Physical examination
-                </label>
-                <textarea
-                  className="min-h-[160px] w-full rounded-md border border-gray-200 p-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="Document clinical assessments, ultrasound findings, clinic lab results..."
-                  {...form.register("physicalExam")}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Internal notes
-                </label>
-                <textarea
-                  className="min-h-[120px] w-full rounded-md border border-gray-200 p-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="Information for the clinical team only; hidden from patients."
-                  {...form.register("notes")}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="flex flex-wrap justify-end gap-2">
-            {layout === "modal" ? (
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
+                Close
               </Button>
             ) : (
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate({ to: "/doctor/encounters" })}
+                onClick={() => {
+                  navigate({ to: "/doctor/encounters" });
+                }}
               >
-                Cancel
+                Back to Encounters
               </Button>
             )}
             <Button
-              type="submit"
-              disabled={
-                createTreatmentMutation.isPending ||
-                (!selectedPatientId && !defaultPatientId)
-              }
+              type="button"
+              onClick={() => {
+                // Navigate to treatment cycles if treatment is IUI/IVF
+                if (
+                  createdTreatmentData?.treatmentType === "IUI" ||
+                  createdTreatmentData?.treatmentType === "IVF"
+                ) {
+                  navigate({ to: "/doctor/treatment-cycles" });
+                } else {
+                  // Otherwise go to encounters
+                  navigate({ to: "/doctor/encounters" });
+                }
+
+                // Call onCreated callback if provided
+                if (onCreated && createdTreatmentId) {
+                  onCreated(createdTreatmentId);
+                }
+
+                // Close modal if in modal layout
+                if (layout === "modal" && onClose) {
+                  onClose();
+                }
+              }}
+              className="bg-green-600 hover:bg-green-700"
             >
-              {createTreatmentMutation.isPending
-                ? "Saving..."
-                : selectedTreatmentType === "Consultation"
-                  ? "Save encounter"
-                  : selectedTreatmentType === "IUI"
-                    ? "Create IUI treatment"
-                    : selectedTreatmentType === "IVF"
-                      ? "Create IVF treatment"
-                      : "Save treatment"}
+              ✓ Complete
             </Button>
           </div>
-        </form>
+        </>
       )}
+
+      {/* Legacy encounter step (for non-IUI/IVF treatments) */}
+      {/* Show step indicator if we're in encounter step after signature */}
+      {(() => {
+        const showEncounterStepIndicator =
+          createdTreatmentId && currentStep === "encounter";
+
+        return (
+          <div className="space-y-6">
+            {!doctorProfileLoading && !doctorProfile && doctorId ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                Doctor profile information is being loaded. If this message
+                persists, please contact the administrator.
+              </div>
+            ) : null}
+
+            {/* Step Indicator for Encounter step after signature */}
+            {showEncounterStepIndicator && (
+              <>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500 text-white text-sm font-medium">
+                      ✓
+                    </div>
+                    <span className="text-sm text-gray-600">
+                      1. Treatment Plan
+                    </span>
+                  </div>
+                  <div className="h-px flex-1 bg-gray-300"></div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500 text-white text-sm font-medium">
+                      ✓
+                    </div>
+                    <span className="text-sm text-gray-600">2. Signature</span>
+                  </div>
+                  <div className="h-px flex-1 bg-gray-300"></div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-sm font-medium">
+                      3
+                    </div>
+                    <span className="text-sm font-medium text-primary">
+                      3. Summary & Complete
+                    </span>
+                  </div>
+                </div>
+
+                {/* Patient Information Card - same as step 1 */}
+                {encounterPatientId && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Patient Information</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {(() => {
+                        const encounterPatientName =
+                          encounterPatientDetails?.accountInfo?.username ||
+                          encounterUserDetails?.fullName ||
+                          encounterUserDetails?.userName ||
+                          encounterPatientDetails?.fullName ||
+                          "Unknown";
+                        const encounterPatientCode =
+                          encounterPatientDetails?.patientCode || "";
+                        const encounterNationalId =
+                          encounterPatientDetails?.nationalId || "";
+                        const encounterDateOfBirth = encounterUserDetails?.dob
+                          ? new Date(
+                              encounterUserDetails.dob
+                            ).toLocaleDateString("vi-VN")
+                          : encounterPatientDetails?.dateOfBirth
+                            ? new Date(
+                                encounterPatientDetails.dateOfBirth
+                              ).toLocaleDateString("vi-VN")
+                            : null;
+                        const encounterGender =
+                          encounterUserDetails?.gender !== undefined
+                            ? encounterUserDetails.gender
+                              ? "Male"
+                              : "Female"
+                            : encounterPatientDetails?.gender || null;
+                        const encounterAge = encounterUserDetails?.age ?? null;
+                        const encounterPhone =
+                          encounterPatientDetails?.accountInfo?.phone ||
+                          encounterUserDetails?.phone ||
+                          encounterUserDetails?.phoneNumber ||
+                          encounterPatientDetails?.phoneNumber ||
+                          null;
+                        const encounterEmail =
+                          encounterPatientDetails?.accountInfo?.email ||
+                          encounterUserDetails?.email ||
+                          encounterPatientDetails?.email ||
+                          null;
+                        const encounterAddress =
+                          encounterPatientDetails?.accountInfo?.address ||
+                          encounterUserDetails?.location ||
+                          encounterPatientDetails?.address ||
+                          null;
+                        const encounterBloodType =
+                          encounterPatientDetails?.bloodType || null;
+
+                        return (
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-gray-500">
+                                Full Name
+                              </p>
+                              <p className="text-base font-semibold">
+                                {encounterPatientName}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-gray-500">
+                                Patient Code
+                              </p>
+                              <p className="text-base">
+                                {encounterPatientCode || "N/A"}
+                              </p>
+                            </div>
+                            {encounterNationalId && (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-gray-500">
+                                  National ID
+                                </p>
+                                <p className="text-base">
+                                  {encounterNationalId}
+                                </p>
+                              </div>
+                            )}
+                            {encounterDateOfBirth && (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-gray-500">
+                                  Date of Birth
+                                </p>
+                                <p className="text-base">
+                                  {encounterDateOfBirth}
+                                  {encounterAge &&
+                                    ` (${encounterAge} years old)`}
+                                </p>
+                              </div>
+                            )}
+                            {encounterGender && (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-gray-500">
+                                  Gender
+                                </p>
+                                <p className="text-base">{encounterGender}</p>
+                              </div>
+                            )}
+                            {encounterPhone && (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-gray-500">
+                                  Phone
+                                </p>
+                                <p className="text-base">{encounterPhone}</p>
+                              </div>
+                            )}
+                            {encounterEmail && (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-gray-500">
+                                  Email
+                                </p>
+                                <p className="text-base">{encounterEmail}</p>
+                              </div>
+                            )}
+                            {encounterAddress && (
+                              <div className="space-y-1 md:col-span-2">
+                                <p className="text-sm font-medium text-gray-500">
+                                  Address
+                                </p>
+                                <p className="text-base">{encounterAddress}</p>
+                              </div>
+                            )}
+                            {encounterBloodType && (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-gray-500">
+                                  Blood Type
+                                </p>
+                                <p className="text-base">
+                                  {encounterBloodType}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Summary of Previous Steps */}
+                {createdTreatmentData && (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Treatment Plan Summary */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Treatment Plan Summary</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {(() => {
+                          try {
+                            const notesData = createdTreatmentData.notes
+                              ? JSON.parse(createdTreatmentData.notes)
+                              : null;
+                            return (
+                              <>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-500">
+                                    Plan Name
+                                  </p>
+                                  <p className="text-base font-semibold">
+                                    {createdTreatmentData.treatmentName ||
+                                      notesData?.planName ||
+                                      "N/A"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-500">
+                                    Treatment Type
+                                  </p>
+                                  <p className="text-base">
+                                    {createdTreatmentData.treatmentType ||
+                                      "N/A"}
+                                  </p>
+                                </div>
+                                {createdTreatmentData.startDate && (
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-500">
+                                      Start Date
+                                    </p>
+                                    <p className="text-base">
+                                      {new Date(
+                                        createdTreatmentData.startDate
+                                      ).toLocaleDateString("vi-VN")}
+                                    </p>
+                                  </div>
+                                )}
+                                {notesData?.estimatedDuration && (
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-500">
+                                      Estimated Duration
+                                    </p>
+                                    <p className="text-base">
+                                      {notesData.estimatedDuration} months
+                                    </p>
+                                  </div>
+                                )}
+                                {notesData?.phases &&
+                                  Array.isArray(notesData.phases) && (
+                                    <div>
+                                      <p className="text-sm font-medium text-gray-500">
+                                        Phases
+                                      </p>
+                                      <p className="text-base">
+                                        {notesData.phases.length} phase(s)
+                                        planned
+                                      </p>
+                                    </div>
+                                  )}
+                                {createdTreatmentData.goals && (
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-500">
+                                      Overall Goals
+                                    </p>
+                                    <p className="text-sm text-gray-700 line-clamp-3">
+                                      {createdTreatmentData.goals}
+                                    </p>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          } catch {
+                            return (
+                              <div>
+                                <p className="text-sm font-medium text-gray-500">
+                                  Treatment Name
+                                </p>
+                                <p className="text-base">
+                                  {createdTreatmentData.treatmentName || "N/A"}
+                                </p>
+                              </div>
+                            );
+                          }
+                        })()}
+                      </CardContent>
+                    </Card>
+
+                    {/* Signature Summary */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Signature Status</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {createdAgreementData ? (
+                          <>
+                            <div>
+                              <p className="text-sm font-medium text-gray-500">
+                                Agreement Status
+                              </p>
+                              <p className="text-base">
+                                {(createdAgreementData as any).statusName ||
+                                  (createdAgreementData as any).status ||
+                                  "N/A"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-500">
+                                Doctor Signature
+                              </p>
+                              <div className="flex items-center gap-2">
+                                {((createdAgreementData as any)
+                                  .signedByDoctor ??
+                                (createdAgreementData as any).doctorSigned) ? (
+                                  <>
+                                    <svg
+                                      className="h-5 w-5 text-green-600"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M5 13l4 4L19 7"
+                                      />
+                                    </svg>
+                                    <span className="text-base font-medium text-green-700">
+                                      Signed
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg
+                                      className="h-5 w-5 text-amber-600"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                      />
+                                    </svg>
+                                    <span className="text-base text-amber-700">
+                                      Pending
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-500">
+                                Patient Signature
+                              </p>
+                              <div className="flex items-center gap-2">
+                                {((createdAgreementData as any)
+                                  .signedByPatient ??
+                                (createdAgreementData as any).patientSigned) ? (
+                                  <>
+                                    <svg
+                                      className="h-5 w-5 text-green-600"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M5 13l4 4L19 7"
+                                      />
+                                    </svg>
+                                    <span className="text-base font-medium text-green-700">
+                                      Signed
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg
+                                      className="h-5 w-5 text-amber-600"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                      />
+                                    </svg>
+                                    <span className="text-base text-amber-700">
+                                      Pending
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            {(createdAgreementData as any).startDate && (
+                              <div>
+                                <p className="text-sm font-medium text-gray-500">
+                                  Agreement Start Date
+                                </p>
+                                <p className="text-base">
+                                  {new Date(
+                                    (createdAgreementData as any).startDate
+                                  ).toLocaleDateString("vi-VN")}
+                                </p>
+                              </div>
+                            )}
+                            {(createdAgreementData as any).endDate && (
+                              <div>
+                                <p className="text-sm font-medium text-gray-500">
+                                  Agreement End Date
+                                </p>
+                                <p className="text-base">
+                                  {new Date(
+                                    (createdAgreementData as any).endDate
+                                  ).toLocaleDateString("vi-VN")}
+                                </p>
+                              </div>
+                            )}
+                            {(createdAgreementData as any).agreementCode && (
+                              <div>
+                                <p className="text-sm font-medium text-gray-500">
+                                  Agreement Code
+                                </p>
+                                <p className="text-base text-sm">
+                                  {(createdAgreementData as any).agreementCode}
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-sm text-gray-500">
+                            Loading agreement information...
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Complete Button for Step 3 */}
+                <div className="flex flex-wrap justify-end gap-2 pt-4">
+                  {layout === "modal" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        if (onClose) {
+                          onClose();
+                        }
+                      }}
+                    >
+                      Close
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        navigate({ to: "/doctor/encounters" });
+                      }}
+                    >
+                      Back to Encounters
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      // Navigate to treatment cycles if treatment is IUI/IVF
+                      if (
+                        createdTreatmentData?.treatmentType === "IUI" ||
+                        createdTreatmentData?.treatmentType === "IVF"
+                      ) {
+                        navigate({ to: "/doctor/treatment-cycles" });
+                      } else {
+                        // Otherwise go to encounters
+                        navigate({ to: "/doctor/encounters" });
+                      }
+
+                      // Call onCreated callback if provided
+                      if (onCreated && createdTreatmentId) {
+                        onCreated(createdTreatmentId);
+                      }
+
+                      // Close modal if in modal layout
+                      if (layout === "modal" && onClose) {
+                        onClose();
+                      }
+                    }}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    ✓ Complete
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

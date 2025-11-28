@@ -7,15 +7,18 @@ import type {
   AppointmentType,
   AppointmentStatus,
   CreateAppointmentRequest,
+  Slot,
   PaginatedResponse,
   Appointment,
-  Slot,
+  Doctor,
+  BaseResponse,
 } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getLast4Chars } from "@/utils/id-helpers";
 
-// Default slots from database (Slots table) - same as in doctor schedule
+// Default slots - 4 fixed slots (2 morning, 2 afternoon) - same as in doctor schedule
 const DEFAULT_SLOTS: (Slot & { notes?: string })[] = [
   {
     id: "00000000-0000-0000-0000-000000000001",
@@ -56,14 +59,25 @@ interface DoctorCreateAppointmentFormProps {
   doctorName?: string | null;
   layout?: "page" | "modal";
   defaultPatientId?: string;
+  disablePatientSelection?: boolean; // Lock patient when creating from treatment cycle
+  defaultAppointmentDate?: string; // Default appointment date (YYYY-MM-DD)
+  defaultAppointmentType?: AppointmentType; // Default appointment type
+  treatmentCycleId?: string; // Treatment cycle ID if creating appointment during treatment
   onClose?: () => void;
   onCreated?: (appointmentId: string) => void;
 }
 
+// Appointment types matching backend enum
 const APPOINTMENT_TYPES: { value: AppointmentType; label: string }[] = [
   { value: "Consultation", label: "Consultation" },
-  { value: "Treatment", label: "Treatment" },
+  { value: "Ultrasound", label: "Ultrasound" },
+  { value: "BloodTest", label: "Blood Test" },
+  { value: "OPU", label: "OPU (Oocyte Pick Up)" },
+  { value: "ET", label: "ET (Embryo Transfer)" },
+  { value: "IUI", label: "IUI (Intrauterine Insemination)" },
   { value: "FollowUp", label: "Follow-up visit" },
+  { value: "Injection", label: "Injection" },
+  { value: "Booking", label: "Booking" },
 ];
 
 export function DoctorCreateAppointmentForm({
@@ -71,26 +85,76 @@ export function DoctorCreateAppointmentForm({
   doctorName,
   layout = "modal",
   defaultPatientId,
+  disablePatientSelection = false,
+  defaultAppointmentDate,
+  defaultAppointmentType,
+  treatmentCycleId,
   onClose,
   onCreated,
 }: DoctorCreateAppointmentFormProps) {
   const queryClient = useQueryClient();
   const [patientSearch, setPatientSearch] = useState("");
 
+  // Fetch doctor details to get full name if not provided
+  const { data: doctorData } = useQuery<BaseResponse<Doctor>>({
+    queryKey: ["doctor", doctorId],
+    enabled: !!doctorId && !doctorName,
+    retry: false,
+    queryFn: async () => {
+      if (!doctorId) {
+        throw new Error("Doctor ID is required");
+      }
+      try {
+        const response = await api.doctor.getDoctorById(doctorId);
+        return response;
+      } catch (error: any) {
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return {
+            code: 404,
+            message: "Doctor not found",
+            data: null as any,
+          };
+        }
+        throw error;
+      }
+    },
+  });
+
+  // Get doctor display name - use provided name or fetch from API
+  // Priority: doctorName prop > account.firstName + lastName > fullName
+  const displayDoctorName = useMemo(() => {
+    if (doctorName) {
+      return doctorName;
+    }
+
+    if (doctorData?.data) {
+      const doctor = doctorData.data as any;
+      // Try to get name from account object (firstName + lastName)
+      if (doctor.account?.firstName && doctor.account?.lastName) {
+        return `${doctor.account.firstName} ${doctor.account.lastName}`.trim();
+      }
+      // Fallback to fullName if account doesn't have firstName/lastName
+      if (doctor.fullName) {
+        return doctor.fullName;
+      }
+    }
+
+    return null;
+  }, [doctorName, doctorData]);
+
   const initialFormState = useMemo(
     () => ({
       patientId: defaultPatientId ?? "",
-      appointmentDate: "",
+      appointmentDate: defaultAppointmentDate ?? "",
       startTime: "",
       endTime: "",
-      title: "",
       description: "",
-      type: "Consultation" as AppointmentType,
+      type: (defaultAppointmentType ?? "Consultation") as AppointmentType,
       serviceId: "",
       slotId: "",
       doctorId,
     }),
-    [defaultPatientId, doctorId]
+    [defaultPatientId, doctorId, defaultAppointmentDate, defaultAppointmentType]
   );
 
   const [formState, setFormState] = useState(initialFormState);
@@ -111,8 +175,49 @@ export function DoctorCreateAppointmentForm({
         pageSize: 50,
         searchTerm: patientSearch.trim() || undefined,
       }),
+    enabled: !disablePatientSelection, // Don't fetch if patient selection is disabled
   });
   const patients = patientsData?.data ?? [];
+
+  // Fetch patient details when patient is locked (from treatment cycle)
+  const { data: lockedPatientDetails } = useQuery({
+    queryKey: ["patient-details", formState.patientId],
+    queryFn: async () => {
+      if (!formState.patientId) return null;
+      try {
+        const response = await api.patient.getPatientDetails(
+          formState.patientId
+        );
+        return response.data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: disablePatientSelection && !!formState.patientId,
+  });
+
+  const { data: lockedUserDetails } = useQuery({
+    queryKey: ["user-details", formState.patientId],
+    queryFn: async () => {
+      if (!formState.patientId) return null;
+      try {
+        const response = await api.user.getUserDetails(formState.patientId);
+        return response.data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: disablePatientSelection && !!formState.patientId,
+  });
+
+  // Get locked patient display info
+  const lockedPatientName =
+    lockedPatientDetails?.accountInfo?.username ||
+    lockedUserDetails?.fullName ||
+    lockedUserDetails?.userName ||
+    lockedPatientDetails?.fullName ||
+    "Unknown";
+  const lockedPatientCode = lockedPatientDetails?.patientCode;
 
   const { data: servicesData } = useQuery({
     queryKey: ["doctor", "services", { pageSize: 50 }],
@@ -133,6 +238,7 @@ export function DoctorCreateAppointmentForm({
   }, [formState.appointmentDate]);
 
   // Query appointments for the selected date to check which slots are booked
+  // Following the same logic as doctor schedule dashboard
   const { data: appointmentsData, isFetching: isLoadingAppointments } =
     useQuery<PaginatedResponse<Appointment>>({
       queryKey: ["doctor", "appointments", doctorId, formState.appointmentDate],
@@ -156,13 +262,15 @@ export function DoctorCreateAppointmentForm({
         }
 
         try {
-          const response = await api.appointment.getAppointments({
+          const response = await api.appointment.getAppointmentsByDoctor(
             doctorId,
-            dateFrom: `${formState.appointmentDate}T00:00:00`,
-            dateTo: `${formState.appointmentDate}T23:59:59`,
-            pageNumber: 1,
-            pageSize: 100,
-          });
+            {
+              dateFrom: `${formState.appointmentDate}T00:00:00`,
+              dateTo: `${formState.appointmentDate}T23:59:59`,
+              pageNumber: 1,
+              pageSize: 100,
+            }
+          );
           return response;
         } catch (error: any) {
           if (isAxiosError(error) && error.response?.status === 404) {
@@ -197,61 +305,143 @@ export function DoctorCreateAppointmentForm({
       },
     });
 
+  // Filter appointments by selected date (client-side to ensure accuracy)
+  const appointments = useMemo(() => {
+    if (!appointmentsData?.data || !formState.appointmentDate) return [];
+
+    return appointmentsData.data.filter((appointment) => {
+      if (!appointment.appointmentDate) return false;
+
+      try {
+        // Parse appointmentDate (can be ISO datetime or date only)
+        const appointmentDateStr = appointment.appointmentDate;
+
+        // If already in YYYY-MM-DD format, use directly
+        if (appointmentDateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          return appointmentDateStr === formState.appointmentDate;
+        }
+
+        // If ISO datetime, extract date part
+        if (appointmentDateStr.includes("T")) {
+          const datePart = appointmentDateStr.split("T")[0];
+          return datePart === formState.appointmentDate;
+        }
+
+        // Fallback: parse with Date and compare
+        const appointmentDate = new Date(appointmentDateStr);
+        if (isNaN(appointmentDate.getTime())) {
+          return false;
+        }
+
+        // Get date in local timezone to avoid timezone errors
+        const year = appointmentDate.getFullYear();
+        const month = String(appointmentDate.getMonth() + 1).padStart(2, "0");
+        const day = String(appointmentDate.getDate()).padStart(2, "0");
+        const appointmentDateOnly = `${year}-${month}-${day}`;
+
+        return appointmentDateOnly === formState.appointmentDate;
+      } catch {
+        return false;
+      }
+    });
+  }, [appointmentsData?.data, formState.appointmentDate]);
+
   // Map appointments to slots to determine which slots are booked
-  const bookedSlotIds = useMemo(() => {
-    const appointments = appointmentsData?.data ?? [];
-    const bookedIds = new Set<string>();
-
+  const appointmentsBySlotId = useMemo(() => {
+    const map: Record<string, Appointment> = {};
     appointments.forEach((appointment) => {
-      // Check if appointment has a slotId
       if (appointment.slotId) {
-        bookedIds.add(appointment.slotId);
+        map[appointment.slotId] = appointment;
       } else {
-        // If no slotId, try to match by appointment date time
+        // If no slotId, try to match by time
         if (appointment.appointmentDate) {
-          const appointmentDate = new Date(appointment.appointmentDate);
-          const appointmentHour = appointmentDate.getHours();
-          const appointmentMinute = appointmentDate.getMinutes();
-          const appointmentTime = `${String(appointmentHour).padStart(2, "0")}:${String(appointmentMinute).padStart(2, "0")}`;
+          try {
+            const appointmentDate = new Date(appointment.appointmentDate);
+            const appointmentHour = appointmentDate.getHours();
+            const appointmentMinute = appointmentDate.getMinutes();
+            const appointmentTime = `${String(appointmentHour).padStart(2, "0")}:${String(appointmentMinute).padStart(2, "0")}:00`;
 
-          const matchedSlot = DEFAULT_SLOTS.find((slot) => {
-            // Extract time from slot.startTime (could be ISO datetime or just time string)
-            let slotStart: string | undefined;
-            if (slot.startTime?.includes("T")) {
-              // ISO datetime format - extract HH:mm
-              const slotDate = new Date(slot.startTime);
-              slotStart = `${String(slotDate.getHours()).padStart(2, "0")}:${String(slotDate.getMinutes()).padStart(2, "0")}`;
-            } else if (slot.startTime) {
-              // Time string format (HH:mm:ss or HH:mm) - extract HH:mm
-              slotStart = slot.startTime.slice(0, 5);
+            // Match with slot based on time
+            const matchedSlot = DEFAULT_SLOTS.find((slot) => {
+              const slotStart = slot.startTime.slice(0, 5); // HH:mm
+              const appointmentTimeShort = appointmentTime.slice(0, 5); // HH:mm
+              return slotStart === appointmentTimeShort;
+            });
+
+            if (matchedSlot) {
+              map[matchedSlot.id] = appointment;
             }
-            // Compare HH:mm format (without seconds)
-            return slotStart === appointmentTime;
-          });
-          if (matchedSlot) {
-            bookedIds.add(matchedSlot.id);
+          } catch (error) {
+            console.error(
+              "Error matching appointment to slot:",
+              appointment,
+              error
+            );
           }
         }
       }
     });
+    return map;
+  }, [appointments]);
 
-    return bookedIds;
-  }, [appointmentsData]);
-
-  // Create slots with booking status based on 4 default slots
+  // Create slots with booking status based on appointments for the day
   const slotsWithStatus = useMemo(() => {
     if (isWeekend) return [];
-    return DEFAULT_SLOTS.map((slot) => ({
-      ...slot,
-      isBooked: bookedSlotIds.has(slot.id),
-    }));
-  }, [bookedSlotIds, isWeekend]);
+    return DEFAULT_SLOTS.map((slot) => {
+      const appointment = appointmentsBySlotId[slot.id] || null;
+      return {
+        ...slot,
+        isBooked: !!appointment,
+      };
+    });
+  }, [appointmentsBySlotId, isWeekend]);
 
   const availableSlots = useMemo(() => {
     return slotsWithStatus.filter((slot) => !slot.isBooked);
   }, [slotsWithStatus]);
 
   const isLoadingSlots = isLoadingAppointments;
+
+  // Auto-select first available slot when slots are loaded and no slot is selected
+  useEffect(() => {
+    if (
+      !isLoadingSlots &&
+      !isWeekend &&
+      availableSlots.length > 0 &&
+      !formState.slotId &&
+      formState.appointmentDate
+    ) {
+      // Auto-select the first available slot
+      const firstAvailableSlot = availableSlots[0];
+      if (firstAvailableSlot) {
+        // Extract time from slot.startTime and endTime
+        const getTimeString = (timeStr?: string) => {
+          if (!timeStr) return "";
+          if (timeStr.includes("T")) {
+            // ISO datetime format - extract HH:mm
+            const date = new Date(timeStr);
+            return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+          }
+          // Time string format (HH:mm:ss or HH:mm) - extract HH:mm
+          return timeStr.slice(0, 5);
+        };
+
+        setFormState((prev) => ({
+          ...prev,
+          slotId: firstAvailableSlot.id,
+          startTime:
+            getTimeString(firstAvailableSlot.startTime) || prev.startTime,
+          endTime: getTimeString(firstAvailableSlot.endTime) || prev.endTime,
+        }));
+      }
+    }
+  }, [
+    isLoadingSlots,
+    isWeekend,
+    availableSlots,
+    formState.slotId,
+    formState.appointmentDate,
+  ]);
 
   const selectedService = useMemo(
     () => services.find((service) => service.id === formState.serviceId),
@@ -308,7 +498,7 @@ export function DoctorCreateAppointmentForm({
       });
       // Invalidate appointmentDoctor queries
       queryClient.invalidateQueries({ queryKey: ["appointmentDoctor"] });
-      // Invalidate slots query for the selected date to update availability
+      // Invalidate appointments query for the selected date to update slot availability
       if (formState.appointmentDate) {
         queryClient.invalidateQueries({
           queryKey: [
@@ -344,7 +534,7 @@ export function DoctorCreateAppointmentForm({
   });
 
   const handleSlotSelect = (slotId: string) => {
-    const slot = slotsWithStatus.find((item) => item.id === slotId);
+    const slot = availableSlots.find((item) => item.id === slotId);
     if (!slot) {
       setFormState((prev) => ({
         ...prev,
@@ -374,17 +564,12 @@ export function DoctorCreateAppointmentForm({
   };
 
   const handleSubmit = () => {
-    const trimmedTitle = formState.title.trim();
     const trimmedDescription = formState.description
       ? formState.description.trim()
       : "";
 
     if (!formState.patientId) {
       toast.error("Please select a patient.");
-      return;
-    }
-    if (!trimmedTitle) {
-      toast.error("Please enter an appointment title.");
       return;
     }
     if (!formState.appointmentDate) {
@@ -425,13 +610,14 @@ export function DoctorCreateAppointmentForm({
       type: formState.type, // Backend uses "type" not "appointmentType"
       appointmentDate: appointmentDate, // DateOnly format: YYYY-MM-DD
       status: "Scheduled" as AppointmentStatus,
-      reason: trimmedTitle || trimmedDescription || "Appointment scheduled",
+      reason: trimmedDescription || "Appointment scheduled",
       instructions: trimmedDescription || undefined,
       notes:
         trimmedDescription ||
         (selectedService
           ? `Service: ${selectedService.serviceName ?? selectedService.id}`
           : undefined),
+      treatmentCycleId: treatmentCycleId || undefined, // Include treatment cycle ID if provided
       doctorIds: doctorId ? [doctorId] : undefined,
       doctorRoles: doctorId ? ["Primary"] : undefined,
     };
@@ -485,29 +671,57 @@ export function DoctorCreateAppointmentForm({
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">
                 Patient
+                {disablePatientSelection && (
+                  <span className="ml-2 text-xs text-gray-500">
+                    (Locked to treatment cycle patient)
+                  </span>
+                )}
               </label>
-              <Input
-                placeholder="Search by name, code, or email..."
-                value={patientSearch}
-                onChange={(event) => setPatientSearch(event.target.value)}
-              />
-              <select
-                value={formState.patientId}
-                onChange={(event) =>
-                  setFormState((prev) => ({
-                    ...prev,
-                    patientId: event.target.value,
-                  }))
-                }
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              >
-                <option value="">Select patient</option>
-                {patients.map((patient) => (
-                  <option key={patient.id} value={patient.id}>
-                    {patient.fullName || patient.patientCode || patient.id}
-                  </option>
-                ))}
-              </select>
+              {disablePatientSelection && formState.patientId ? (
+                <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900">
+                      {lockedPatientName}
+                    </span>
+                    {lockedPatientCode && (
+                      <>
+                        <span className="text-gray-400">•</span>
+                        <span className="text-gray-600 font-mono">
+                          {lockedPatientCode}
+                        </span>
+                      </>
+                    )}
+                    <span className="ml-auto text-xs text-gray-500">
+                      (Locked)
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Input
+                    placeholder="Search by name, code, or email..."
+                    value={patientSearch}
+                    onChange={(event) => setPatientSearch(event.target.value)}
+                  />
+                  <select
+                    value={formState.patientId}
+                    onChange={(event) =>
+                      setFormState((prev) => ({
+                        ...prev,
+                        patientId: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="">Select patient</option>
+                    {patients.map((patient) => (
+                      <option key={patient.id} value={patient.id}>
+                        {patient.fullName || patient.patientCode || patient.id}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -522,6 +736,9 @@ export function DoctorCreateAppointmentForm({
                     setFormState((prev) => ({
                       ...prev,
                       appointmentDate: event.target.value,
+                      slotId: "", // Reset slot when date changes
+                      startTime: "", // Reset start time when date changes
+                      endTime: "", // Reset end time when date changes
                     }))
                   }
                 />
@@ -587,10 +804,15 @@ export function DoctorCreateAppointmentForm({
                 <p className="font-medium">Weekend - No slots available</p>
                 <p>Appointments are only available Monday through Friday.</p>
               </div>
-            ) : availableSlots.length ? (
+            ) : isLoadingSlots ? (
+              <p className="text-xs text-gray-500">
+                Loading available slots for the selected date...
+              </p>
+            ) : slotsWithStatus.length > 0 ? (
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">
-                  Available time slots ({availableSlots.length} of 4 available)
+                  Available time slots ({availableSlots.length} of{" "}
+                  {slotsWithStatus.length} available)
                 </label>
                 <select
                   value={formState.slotId}
@@ -598,7 +820,7 @@ export function DoctorCreateAppointmentForm({
                   className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   <option value="">Select a slot</option>
-                  {availableSlots.map((slot) => {
+                  {slotsWithStatus.map((slot) => {
                     // Extract time display
                     const getTimeDisplay = (timeStr?: string) => {
                       if (!timeStr) return "N/A";
@@ -607,16 +829,26 @@ export function DoctorCreateAppointmentForm({
                         return date.toLocaleTimeString("en-US", {
                           hour: "2-digit",
                           minute: "2-digit",
-                          hour12: false,
+                          hour12: true,
                         });
                       }
-                      return timeStr.slice(0, 5);
+                      // Handle time format like "08:00:00"
+                      const time = timeStr.slice(0, 5); // Get HH:mm
+                      const [hours, minutes] = time.split(":");
+                      const hour24 = parseInt(hours, 10);
+                      const ampm = hour24 >= 12 ? "PM" : "AM";
+                      const hour12 = hour24 % 12 || 12;
+                      return `${hour12}:${minutes} ${ampm}`;
                     };
                     return (
-                      <option key={slot.id} value={slot.id}>
+                      <option
+                        key={slot.id}
+                        value={slot.id}
+                        disabled={slot.isBooked}
+                      >
                         {getTimeDisplay(slot.startTime)} -{" "}
                         {getTimeDisplay(slot.endTime)}
-                        {slot.notes ? ` (${slot.notes})` : ""}
+                        {slot.isBooked ? " (Booked)" : ""}
                       </option>
                     );
                   })}
@@ -627,15 +859,11 @@ export function DoctorCreateAppointmentForm({
                     : "All 4 slots are available for this date."}
                 </p>
               </div>
-            ) : isLoadingSlots ? (
-              <p className="text-xs text-gray-500">
-                Loading available slots for the selected date...
-              </p>
             ) : formState.appointmentDate ? (
               <div className="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-                <p className="font-medium">All slots booked</p>
+                <p className="font-medium">No slots available</p>
                 <p>
-                  All 4 slots for this date are already booked. Please select
+                  All slots for this date are already booked. Please select
                   another date.
                 </p>
               </div>
@@ -652,7 +880,14 @@ export function DoctorCreateAppointmentForm({
               <label className="text-sm font-medium text-gray-700">
                 Assigned doctor
               </label>
-              <Input value={doctorName || doctorId} readOnly />
+              <Input
+                value={
+                  displayDoctorName
+                    ? `${displayDoctorName} - ${getLast4Chars(doctorId)}`
+                    : getLast4Chars(doctorId)
+                }
+                readOnly
+              />
               <p className="text-xs text-gray-500">
                 Appointments you create are automatically assigned to you.
               </p>
@@ -682,22 +917,6 @@ export function DoctorCreateAppointmentForm({
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">
-                Appointment title
-              </label>
-              <Input
-                value={formState.title}
-                onChange={(event) =>
-                  setFormState((prev) => ({
-                    ...prev,
-                    title: event.target.value,
-                  }))
-                }
-                placeholder="E.g. Follow-up consultation"
-              />
             </div>
 
             <div className="space-y-2">

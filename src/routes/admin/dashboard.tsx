@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Bell,
   ClipboardList,
   FileText,
   LayoutDashboard,
+  RefreshCw,
   Settings,
   Users,
 } from "lucide-react";
@@ -28,7 +29,20 @@ export const Route = createFileRoute("/admin/dashboard")({
 
 function AdminDashboardComponent() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    // Invalidate all queries to refresh dashboard data
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["users"] }),
+      queryClient.invalidateQueries({ queryKey: ["appointments"] }),
+      queryClient.invalidateQueries({ queryKey: ["patients"] }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   const { data: usersData } = useQuery({
     queryKey: ["users", { pageNumber: 1, pageSize: 1 }],
@@ -167,6 +181,14 @@ function AdminDashboardComponent() {
             ]}
             actions={
               <>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => navigate({ to: "/admin/reports" })}

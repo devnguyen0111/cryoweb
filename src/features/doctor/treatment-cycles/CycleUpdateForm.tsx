@@ -16,8 +16,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Modal } from "@/components/ui/modal";
 import { HorizontalTreatmentTimeline } from "./HorizontalTreatmentTimeline";
 import { CreateServiceRequestForCycleModal } from "./CreateServiceRequestForCycleModal";
+import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
+import { useAuth } from "@/contexts/AuthContext";
+import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 import {
   normalizeTreatmentCycleStatus,
   type TreatmentCycle,
@@ -25,6 +29,7 @@ import {
   type IUIStep,
   type CreateMedicalRecordRequest,
 } from "@/api/types";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 interface CycleUpdateFormProps {
   cycle: TreatmentCycle;
@@ -72,6 +77,9 @@ export function CycleUpdateForm({
   onStepAdvanced,
 }: CycleUpdateFormProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { data: doctorProfile } = useDoctorProfile();
+  const doctorId = user?.id ?? null;
   const [showMedicalRecordForm, setShowMedicalRecordForm] = useState(false);
   const [selectedAppointmentId, setSelectedAppointmentId] =
     useState<string>("");
@@ -82,6 +90,8 @@ export function CycleUpdateForm({
   const [completeOutcome, setCompleteOutcome] = useState("");
   const [completeNotes, setCompleteNotes] = useState("");
   const [showServiceRequestModal, setShowServiceRequestModal] = useState(false);
+  const [showCreateAppointmentModal, setShowCreateAppointmentModal] =
+    useState(false);
 
   // Fetch cycle details to ensure we have latest data
   const { data: cycleDetails } = useQuery({
@@ -408,8 +418,7 @@ export function CycleUpdateForm({
       }
       if (
         stepTypeStr === "IVF_FERTILIZATION" ||
-        stepTypeStr.includes("FERTILIZATION") ||
-        stepTypeStr.includes("ICSI")
+        stepTypeStr.includes("FERTILIZATION")
       ) {
         return "step5_fertilization";
       }
@@ -518,7 +527,6 @@ export function CycleUpdateForm({
       if (
         nameLower.includes("fertilization") ||
         nameLower.includes("fertilization/lab") ||
-        nameLower.includes("icsi") ||
         (nameLower.includes("lab") && !nameLower.includes("culture"))
       ) {
         return "step5_fertilization";
@@ -1244,6 +1252,11 @@ export function CycleUpdateForm({
                               });
                             }, 100);
 
+                            // Show appointment creation modal after successfully starting cycle
+                            if (currentCycle.patientId && doctorId) {
+                              setShowCreateAppointmentModal(true);
+                            }
+
                             // Don't call onStepAdvanced when starting cycle
                             // Only call it when actually advancing a step
                             // onStepAdvanced?.();
@@ -1331,6 +1344,30 @@ export function CycleUpdateForm({
                       </Button>
                     );
                   })()}
+                  {/* Only show Create Appointment button if cycle has been started */}
+                  {(() => {
+                    const cycleStatus = normalizeTreatmentCycleStatus(
+                      currentCycle.status
+                    );
+                    const hasStarted =
+                      cycleStatus === "InProgress" ||
+                      !!currentCycle.currentStep ||
+                      !!currentCycle.startDate;
+
+                    if (!hasStarted || !currentCycle.patientId || !doctorId) {
+                      return null;
+                    }
+
+                    return (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowCreateAppointmentModal(true)}
+                      >
+                        Create Appointment
+                      </Button>
+                    );
+                  })()}
                 </div>
               )
             );
@@ -1393,7 +1430,7 @@ export function CycleUpdateForm({
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <p className="font-medium text-sm">
-                            {request.requestCode || request.id.slice(0, 8)}
+                            {request.requestCode || getLast4Chars(request.id)}
                           </p>
                           <span
                             className={`rounded-full px-2 py-1 text-xs font-medium ${statusBadgeClass(request.status)}`}
@@ -1840,6 +1877,81 @@ export function CycleUpdateForm({
         variant="destructive"
         isLoading={isCancelling}
       />
+
+      {/* Create Appointment Modal - shown after starting cycle */}
+      {doctorId &&
+        currentCycle.patientId &&
+        (() => {
+          // Calculate next appointment date (7 days from today or based on cycle)
+          const calculateNextAppointmentDate = (): string => {
+            const today = new Date();
+
+            // If cycle has stepDates and currentStep, try to calculate based on step progression
+            if (currentCycle.stepDates && currentStep) {
+              const currentStepDate = currentCycle.stepDates[currentStep];
+              if (currentStepDate) {
+                const stepDate = new Date(currentStepDate);
+                // Add 3-7 days for next appointment (typical for treatment monitoring)
+                const daysToAdd = currentCycle.treatmentType === "IVF" ? 7 : 5;
+                stepDate.setDate(stepDate.getDate() + daysToAdd);
+
+                // Ensure date is at least tomorrow
+                if (stepDate > today) {
+                  return stepDate.toISOString().split("T")[0];
+                }
+              }
+            }
+
+            // If cycle has startDate, calculate from start date
+            if (currentCycle.startDate) {
+              const startDate = new Date(currentCycle.startDate);
+              const daysToAdd = currentCycle.treatmentType === "IVF" ? 7 : 5;
+              startDate.setDate(startDate.getDate() + daysToAdd);
+
+              // Ensure date is at least tomorrow
+              if (startDate > today) {
+                return startDate.toISOString().split("T")[0];
+              }
+            }
+
+            // Default: 7 days from today
+            const nextDate = new Date(today);
+            nextDate.setDate(nextDate.getDate() + 7);
+            return nextDate.toISOString().split("T")[0];
+          };
+
+          return (
+            <Modal
+              isOpen={showCreateAppointmentModal}
+              onClose={() => setShowCreateAppointmentModal(false)}
+              title="Create Appointment"
+              description={`Create an appointment for this treatment cycle (${currentCycle.treatmentType || "Treatment"} - Cycle ${currentCycle.cycleNumber || ""})`}
+              size="2xl"
+            >
+              <DoctorCreateAppointmentForm
+                doctorId={doctorId}
+                doctorName={doctorProfile?.fullName}
+                layout="modal"
+                defaultPatientId={currentCycle.patientId}
+                disablePatientSelection={true}
+                defaultAppointmentDate={calculateNextAppointmentDate()}
+                defaultAppointmentType="Consultation"
+                treatmentCycleId={currentCycle.id}
+                onClose={() => setShowCreateAppointmentModal(false)}
+                onCreated={() => {
+                  toast.success("Appointment created successfully");
+                  setShowCreateAppointmentModal(false);
+                  queryClient.invalidateQueries({
+                    queryKey: ["doctor", "appointments"],
+                  });
+                  queryClient.invalidateQueries({
+                    queryKey: ["appointments", "cycle", currentCycle.id],
+                  });
+                }}
+              />
+            </Modal>
+          );
+        })()}
     </div>
   );
 }

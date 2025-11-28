@@ -8,9 +8,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { isAxiosError } from "axios";
+import { AgreementDocument } from "./AgreementDocument";
 
 interface TreatmentPlanSignatureProps {
   treatmentId: string;
@@ -24,7 +26,7 @@ interface TreatmentPlanSignatureProps {
 
 export function TreatmentPlanSignature({
   treatmentId,
-  patientId: _patientId,
+  patientId,
   treatmentType,
   agreementId,
   onSigned,
@@ -34,6 +36,7 @@ export function TreatmentPlanSignature({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isSigning, setIsSigning] = useState(false);
+  const [showAgreementDocument, setShowAgreementDocument] = useState(false);
 
   // Fetch agreement by treatmentId or agreementId
   const {
@@ -46,8 +49,19 @@ export function TreatmentPlanSignature({
     queryFn: async () => {
       // If agreementId is provided, fetch by ID
       if (agreementId) {
-        const response = await api.agreement.getAgreementById(agreementId);
-        return response.data;
+        try {
+          const response = await api.agreement.getAgreementById(agreementId);
+          return response.data;
+        } catch (error) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            // If not found by ID, try to find by treatmentId
+            console.log(
+              `Agreement ${agreementId} not found, trying to find by treatmentId ${treatmentId}`
+            );
+          } else {
+            throw error;
+          }
+        }
       }
       // Otherwise, try to find agreement by treatmentId
       try {
@@ -68,7 +82,8 @@ export function TreatmentPlanSignature({
       }
     },
     enabled: !!treatmentId,
-    retry: false,
+    retry: 1, // Retry once in case of network issues
+    refetchOnWindowFocus: true, // Refetch when window gains focus
   });
 
   // Use new field names (signedByDoctor/signedByPatient) with fallback to legacy fields
@@ -132,9 +147,24 @@ export function TreatmentPlanSignature({
     onSuccess: async (data) => {
       toast.success("Signature recorded successfully!");
 
+      // Invalidate all agreement queries to refresh UI everywhere
       queryClient.invalidateQueries({
-        queryKey: ["agreement", agreementId || treatmentId],
+        queryKey: ["agreement"],
       });
+      // Also invalidate specific queries by ID
+      if (agreementId) {
+        queryClient.invalidateQueries({
+          queryKey: ["agreement", agreementId],
+        });
+      }
+      if (treatmentId) {
+        queryClient.invalidateQueries({
+          queryKey: ["agreement", treatmentId],
+        });
+      }
+
+      // Refetch agreement to get latest state
+      await refetchAgreement();
 
       // Check if both signed
       const bothSigned =
@@ -150,6 +180,9 @@ export function TreatmentPlanSignature({
         });
         queryClient.invalidateQueries({
           queryKey: ["treatment-cycle"],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["treatment", treatmentId],
         });
 
         console.log(
@@ -221,11 +254,14 @@ export function TreatmentPlanSignature({
     }
   }, [bothSigned, onSigned]);
 
-  if (agreementLoading) {
+  if (agreementLoading || agreementFetching) {
     return (
       <Card>
         <CardContent className="pt-6">
-          <p className="text-center text-gray-500">Loading agreement...</p>
+          <div className="flex flex-col items-center justify-center gap-2 py-4">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+            <p className="text-center text-gray-500">Loading agreement...</p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -235,9 +271,49 @@ export function TreatmentPlanSignature({
     return (
       <Card>
         <CardContent className="pt-6">
-          <p className="text-center text-red-500">
-            Agreement not found. Please create an agreement first.
-          </p>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-start gap-3">
+                <svg
+                  className="h-5 w-5 text-amber-600 mt-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-amber-800">
+                    Agreement Not Found
+                  </h3>
+                  <p className="mt-1 text-sm text-amber-700">
+                    The agreement for this treatment plan could not be found.
+                    This may happen if the agreement hasn't been created yet or
+                    there was an error during creation.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => refetchAgreement()}
+                disabled={agreementLoading || agreementFetching}
+              >
+                {agreementFetching ? "Retrying..." : "Retry"}
+              </Button>
+              {onClose && (
+                <Button variant="outline" onClick={onClose}>
+                  Close
+                </Button>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
     );
@@ -247,14 +323,23 @@ export function TreatmentPlanSignature({
     <Card>
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle>Treatment Plan Signature Confirmation</CardTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetchAgreement()}
-          disabled={agreementLoading || agreementFetching}
-        >
-          {agreementFetching ? "Refreshing..." : "Refresh status"}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAgreementDocument(true)}
+          >
+            📄 View Agreement
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetchAgreement()}
+            disabled={agreementLoading || agreementFetching}
+          >
+            {agreementFetching ? "Refreshing..." : "Refresh status"}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -427,6 +512,22 @@ export function TreatmentPlanSignature({
           )}
         </div>
       </CardContent>
+
+      {/* Agreement Document Modal */}
+      <Modal
+        isOpen={showAgreementDocument}
+        onClose={() => setShowAgreementDocument(false)}
+        title="Treatment Agreement Document"
+        size="xl"
+      >
+        <AgreementDocument
+          treatmentId={treatmentId}
+          patientId={patientId}
+          agreementId={agreementId}
+          treatmentType={treatmentType}
+          onClose={() => setShowAgreementDocument(false)}
+        />
+      </Modal>
     </Card>
   );
 }

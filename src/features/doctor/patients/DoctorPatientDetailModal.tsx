@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/utils/cn";
 import { StructuredNote } from "@/components/StructuredNote";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 interface DoctorPatientDetailModalProps {
   patientId: string | null;
@@ -207,7 +208,7 @@ export function DoctorPatientDetailModal({
                   Patient code: {patient.patientCode ?? "—"}
                 </p>
                 <p className="text-sm text-gray-500">
-                  Account ID: {patient.accountId ?? "—"}
+                  Account ID: {getLast4Chars(patient.accountId)}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">

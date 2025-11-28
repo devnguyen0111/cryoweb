@@ -13,6 +13,7 @@ import {
   isPatientDetailResponse,
   getPatientProperty,
 } from "@/utils/patient-helpers";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 export const Route = createFileRoute("/receptionist/patients")({
   validateSearch: z.object({
@@ -284,7 +285,7 @@ function ReceptionistPatientsComponent() {
                                       {displayName}
                                     </div>
                                     <div className="text-xs text-gray-500">
-                                      Patient ID: {patient.id}
+                                      Patient ID: {getLast4Chars(patient.id)}
                                     </div>
                                     <div className="text-xs text-gray-500">
                                       Blood type: {patient.bloodType || "N/A"}
@@ -292,7 +293,7 @@ function ReceptionistPatientsComponent() {
                                   </td>
                                   <td className="p-2 text-sm text-gray-600">
                                     <div>
-                                      Account ID: {patient.accountId ?? "—"}
+                                      Account ID: {getLast4Chars(patient.accountId)}
                                     </div>
                                     <div className="text-xs">
                                       Verified:{" "}
@@ -388,7 +389,7 @@ function ReceptionistPatientsComponent() {
                   </h2>
                   <p className="text-sm text-gray-500">
                     Patient ID:{" "}
-                    <span className="font-medium">{viewId || "—"}</span>
+                    <span className="font-medium">{getLast4Chars(viewId)}</span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

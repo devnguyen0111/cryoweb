@@ -49,7 +49,7 @@ const IVF_STEPS: Array<{ id: IVFStep; label: string; description: string }> = [
   {
     id: "step5_fertilization",
     label: "Fertilization/Lab",
-    description: "Fertilization/ICSI at lab",
+    description: "Fertilization at lab",
   },
   {
     id: "step6_embryo_culture",

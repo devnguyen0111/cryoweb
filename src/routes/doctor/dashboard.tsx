@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { isAxiosError } from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,7 +59,23 @@ export const Route = createFileRoute("/doctor/dashboard")({
 function DoctorDashboardComponent() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    // Invalidate all queries to refresh dashboard data
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["doctor", "statistics"] }),
+      queryClient.invalidateQueries({ queryKey: ["doctor", "appointments"] }),
+      queryClient.invalidateQueries({ queryKey: ["doctor", "patients"] }),
+      queryClient.invalidateQueries({ queryKey: ["doctor", "treatment-cycles"] }),
+      queryClient.invalidateQueries({ queryKey: ["doctor", "medical-records"] }),
+      queryClient.invalidateQueries({ queryKey: ["receptionist", "service-requests"] }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   // AccountId IS DoctorId - use user.id directly as doctorId
   const doctorId = user?.id ?? null;
@@ -449,18 +466,28 @@ function DoctorDashboardComponent() {
                 Here's a quick overview of your schedule and patients.
               </p>
             </div>
-            <form
-              onSubmit={handleSearchSubmit}
-              className="flex w-full gap-2 sm:w-auto"
-            >
-              <Input
-                placeholder="Search patients or appointments..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="min-w-0"
-              />
-              <Button type="submit">Search</Button>
-            </form>
+            <div className="flex w-full gap-2 sm:w-auto">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <form
+                onSubmit={handleSearchSubmit}
+                className="flex flex-1 gap-2"
+              >
+                <Input
+                  placeholder="Search patients or appointments..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="min-w-0"
+                />
+                <Button type="submit">Search</Button>
+              </form>
+            </div>
           </section>
 
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

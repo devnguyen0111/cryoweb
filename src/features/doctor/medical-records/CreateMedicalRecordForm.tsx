@@ -20,6 +20,7 @@ import type {
   CreateMedicalRecordRequest,
   DynamicResponse,
 } from "@/api/types";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 type MedicationForm = {
   serviceId: string;
@@ -507,7 +508,7 @@ export function CreateMedicalRecordForm({
                     <option value="">Select an appointment</option>
                     {appointments.map((appointment) => (
                       <option key={appointment.id} value={appointment.id}>
-                        {(appointment as any).appointmentCode || appointment.id.slice(-4)} -{" "}
+                        {(appointment as any).appointmentCode || getLast4Chars(appointment.id)} -{" "}
                         {new Date(appointment.appointmentDate).toLocaleDateString(
                           "en-GB",
                           {

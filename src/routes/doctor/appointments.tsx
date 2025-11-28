@@ -6,6 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { isAxiosError } from "axios";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
@@ -26,6 +27,7 @@ import type {
 import { DoctorAppointmentDetailModal } from "@/features/doctor/appointments/DoctorAppointmentDetailModal";
 import { Modal } from "@/components/ui/modal";
 import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 export const Route = createFileRoute("/doctor/appointments")({
   component: DoctorAppointmentsComponent,
@@ -55,6 +57,15 @@ function DoctorAppointmentsComponent() {
     string | null
   >(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["doctor", "appointments"] }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   const filters = useMemo(
     () => ({ statusFilter, typeFilter, dateFrom, dateTo, searchTerm }),
@@ -245,12 +256,6 @@ function DoctorAppointmentsComponent() {
     return type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
   };
 
-  // Helper function to get last 4 characters of an ID
-  const getLast4Chars = (id: string | null | undefined): string => {
-    if (!id) return "N/A";
-    return id.length >= 4 ? id.slice(-4) : id;
-  };
-
   const appointmentTypes = [
     { value: "", label: "All" },
     { value: "consultation", label: "Consultation" },
@@ -282,10 +287,22 @@ function DoctorAppointmentsComponent() {
           ) : null}
 
           <section className="flex flex-col gap-2">
-            <h1 className="text-3xl font-bold">Appointment management</h1>
-            <p className="text-gray-600">
-              Monitor schedules, update statuses, and start patient encounters.
-            </p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="text-3xl font-bold">Appointment management</h1>
+                <p className="text-gray-600">
+                  Monitor schedules, update statuses, and start patient encounters.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
           </section>
 
           <Card>

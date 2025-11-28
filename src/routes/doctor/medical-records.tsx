@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { RefreshCw } from "lucide-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   useQuery,
@@ -17,6 +18,7 @@ import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
 import { CreateMedicalRecordForm } from "@/features/doctor/medical-records/CreateMedicalRecordForm";
 import { DoctorAppointmentDetailModal } from "@/features/doctor/appointments/DoctorAppointmentDetailModal";
+import { getLast4Chars } from "@/utils/id-helpers";
 import type {
   PaginatedResponse,
   MedicalRecord,
@@ -64,6 +66,15 @@ function DoctorMedicalRecordsComponent() {
   const [appointmentModalId, setAppointmentModalId] = useState<string | null>(
     null
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["doctor", "medical-records"] }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   const filters = useMemo(
     () => ({
@@ -199,10 +210,10 @@ function DoctorMedicalRecordsComponent() {
         const name =
           patient.fullName ||
           patient.patientCode ||
-          query.data.data.patientId?.slice(-4) ||
+          getLast4Chars(query.data.data.patientId) ||
           "Unknown";
         const code =
-          patient.patientCode || query.data.data.patientId?.slice(-4) || "";
+          patient.patientCode || getLast4Chars(query.data.data.patientId) || "";
         map.set(query.data.appointmentId, {
           name,
           code,
@@ -268,9 +279,19 @@ function DoctorMedicalRecordsComponent() {
                 Manage and view patient medical records
               </p>
             </div>
-            <Button onClick={() => setIsCreateModalOpen(true)}>
-              Create New Record
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <Button onClick={() => setIsCreateModalOpen(true)}>
+                Create New Record
+              </Button>
+            </div>
           </section>
 
           <Card>
@@ -357,7 +378,7 @@ function DoctorMedicalRecordsComponent() {
                           return (
                             <tr key={record.id} className="hover:bg-gray-50">
                               <td className="px-4 py-4 whitespace-nowrap text-sm font-mono text-gray-600">
-                                {record.appointmentId.slice(-4)}
+                                {getLast4Chars(record.appointmentId)}
                               </td>
                               <td className="px-4 py-4 text-sm">
                                 {patientInfo ? (
@@ -744,7 +765,7 @@ function DoctorMedicalRecordsComponent() {
                           Appointment ID
                         </label>
                         <p className="text-sm font-mono text-gray-900">
-                          {editingRecord.appointmentId.slice(-4)}
+                          {getLast4Chars(editingRecord.appointmentId)}
                         </p>
                       </div>
                       <div className="space-y-1">

@@ -177,8 +177,7 @@ function mapStepTypeToStepId(
     }
     if (
       stepTypeStr === "IVF_FERTILIZATION" ||
-      stepTypeStr.includes("FERTILIZATION") ||
-      stepTypeStr.includes("ICSI")
+      stepTypeStr.includes("FERTILIZATION")
     ) {
       return "step5_fertilization";
     }
@@ -288,7 +287,6 @@ function mapCycleNameToStep(
     if (
       nameLower.includes("fertilization") ||
       nameLower.includes("fertilization/lab") ||
-      nameLower.includes("icsi") ||
       (nameLower.includes("lab") && !nameLower.includes("culture"))
     ) {
       return "step5_fertilization";
@@ -401,8 +399,8 @@ export function HorizontalTreatmentTimeline({
     return undefined;
   };
 
-  // Calculate current step and completed steps
-  const { currentStep, completedSteps } = useMemo(() => {
+  // Calculate current step, completed steps, and step statuses
+  const { currentStep, completedSteps, stepStatuses } = useMemo(() => {
     const treatmentCycles = allCycles.length > 0 ? allCycles : [cycle];
 
     // Determine current step FIRST (before collecting completed steps)
@@ -418,33 +416,44 @@ export function HorizontalTreatmentTimeline({
 
     // Now collect completed steps, but EXCLUDE current step
     const completedStepsSet = new Set<IVFStep | IUIStep>();
+    // Map to store status for each step (Cancelled, Failed, Completed, etc.)
+    const stepStatusMap = new Map<IVFStep | IUIStep, string>();
 
-    // Collect completed steps from cycles with status "Completed"
+    // Collect completed steps and step statuses from cycles
     for (const treatmentCycle of treatmentCycles) {
       const cycleStatus = normalizeTreatmentCycleStatus(treatmentCycle.status);
-      if (cycleStatus === "Completed") {
-        // PRIORITY: Use stepType if available (most accurate)
-        let stepId: IVFStep | IUIStep | null = null;
-        if (treatmentCycle.stepType) {
-          stepId = mapStepTypeToStepId(
-            treatmentCycle.stepType,
-            treatmentCycle.treatmentType || cycle.treatmentType
-          );
+      
+      // PRIORITY: Use stepType if available (most accurate)
+      let stepId: IVFStep | IUIStep | null = null;
+      if (treatmentCycle.stepType) {
+        stepId = mapStepTypeToStepId(
+          treatmentCycle.stepType,
+          treatmentCycle.treatmentType || cycle.treatmentType
+        );
+      }
+      // Fallback to cycleName if stepType not available
+      if (!stepId) {
+        stepId = mapCycleNameToStep(
+          treatmentCycle.cycleName,
+          treatmentCycle.treatmentType || cycle.treatmentType
+        );
+      }
+      
+      if (stepId) {
+        // Store status for this step
+        if (cycleStatus) {
+          stepStatusMap.set(stepId, cycleStatus);
         }
-        // Fallback to cycleName if stepType not available
-        if (!stepId) {
-          stepId = mapCycleNameToStep(
-            treatmentCycle.cycleName,
-            treatmentCycle.treatmentType || cycle.treatmentType
-          );
-        }
-        if (stepId) {
+        
+        // Add to completed steps if status is "Completed"
+        if (cycleStatus === "Completed") {
           // Only add if it's not the current step
           if (stepId !== currentStepValue) {
             completedStepsSet.add(stepId);
           }
         }
       }
+      
       // Also check completedSteps field if available
       if (treatmentCycle.completedSteps) {
         treatmentCycle.completedSteps.forEach((step) => {
@@ -612,6 +621,7 @@ export function HorizontalTreatmentTimeline({
     return {
       currentStep: currentStepValue,
       completedSteps: Array.from(completedStepsSet),
+      stepStatuses: stepStatusMap,
     };
   }, [allCycles, cycle, steps, currentStepFromApi, isIUI, isIVF]);
 
@@ -645,14 +655,26 @@ export function HorizontalTreatmentTimeline({
     );
   }
 
+  // Check if there are any cancelled or failed steps
+  const hasCancelledOrFailedSteps = useMemo(() => {
+    return Array.from(stepStatuses.values()).some(
+      (status) =>
+        normalizeTreatmentCycleStatus(status) === "Cancelled" ||
+        normalizeTreatmentCycleStatus(status) === "Failed"
+    );
+  }, [stepStatuses]);
+
   return (
     <div className={cn("w-full", className)}>
       <div className="relative">
         {/* Background timeline line */}
         <div className="absolute left-0 right-0 top-6 h-1 bg-gray-200" />
-        {/* Progress line */}
+        {/* Progress line - show gray if there are cancelled/failed steps, otherwise blue */}
         <div
-          className="absolute left-0 top-6 h-1 bg-blue-500 transition-all duration-500 ease-out"
+          className={cn(
+            "absolute left-0 top-6 h-1 transition-all duration-500 ease-out",
+            hasCancelledOrFailedSteps ? "bg-gray-400" : "bg-blue-500"
+          )}
           style={{ width: `${progressPercentage}%` }}
         />
 
@@ -663,15 +685,28 @@ export function HorizontalTreatmentTimeline({
             const isCurrent = currentStep === step.id;
             const isPast =
               currentStepIndex >= 0 && index < currentStepIndex && !isCompleted;
-
-            // Determine step state
-            const stepState = isCompleted
-              ? "completed"
-              : isCurrent
-                ? "current"
-                : isPast
-                  ? "past"
-                  : "pending";
+            
+            // Get status for this step from cycles
+            const stepStatus = stepStatuses.get(step.id);
+            const normalizedStepStatus = stepStatus
+              ? normalizeTreatmentCycleStatus(stepStatus)
+              : null;
+            
+            // Determine step state with status priority
+            let stepState: "completed" | "current" | "past" | "cancelled" | "failed" | "pending";
+            if (normalizedStepStatus === "Cancelled") {
+              stepState = "cancelled";
+            } else if (normalizedStepStatus === "Failed") {
+              stepState = "failed";
+            } else if (isCompleted) {
+              stepState = "completed";
+            } else if (isCurrent) {
+              stepState = "current";
+            } else if (isPast) {
+              stepState = "past";
+            } else {
+              stepState = "pending";
+            }
 
             return (
               <div
@@ -683,16 +718,34 @@ export function HorizontalTreatmentTimeline({
                 <div
                   className={cn(
                     "relative mb-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 transition-all",
-                    stepState === "completed"
-                      ? "border-green-500 bg-green-500 text-white shadow-md"
-                      : stepState === "current"
-                        ? "border-blue-500 bg-blue-500 text-white shadow-lg ring-2 ring-blue-200"
-                        : stepState === "past"
-                          ? "border-green-500 bg-green-500 text-white"
-                          : "border-gray-300 bg-white text-gray-400"
+                    stepState === "cancelled"
+                      ? "border-red-500 bg-red-500 text-white shadow-md"
+                      : stepState === "failed"
+                        ? "border-gray-400 bg-gray-400 text-white shadow-md"
+                        : stepState === "completed"
+                          ? "border-green-500 bg-green-500 text-white shadow-md"
+                          : stepState === "current"
+                            ? "border-blue-500 bg-blue-500 text-white shadow-lg ring-2 ring-blue-200"
+                            : stepState === "past"
+                              ? "border-green-500 bg-green-500 text-white"
+                              : "border-gray-300 bg-white text-gray-400"
                   )}
                 >
-                  {stepState === "completed" || stepState === "past" ? (
+                  {stepState === "cancelled" ? (
+                    <svg
+                      className="h-6 w-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  ) : stepState === "completed" || stepState === "past" ? (
                     <svg
                       className="h-6 w-6"
                       fill="none"
@@ -721,11 +774,15 @@ export function HorizontalTreatmentTimeline({
                   <p
                     className={cn(
                       "text-xs font-medium leading-tight",
-                      stepState === "completed" || stepState === "past"
-                        ? "text-green-700"
-                        : stepState === "current"
-                          ? "text-blue-700 font-semibold"
-                          : "text-gray-500"
+                      stepState === "cancelled"
+                        ? "text-red-700"
+                        : stepState === "failed"
+                          ? "text-gray-600"
+                          : stepState === "completed" || stepState === "past"
+                            ? "text-green-700"
+                            : stepState === "current"
+                              ? "text-blue-700 font-semibold"
+                              : "text-gray-500"
                     )}
                   >
                     {step.label}

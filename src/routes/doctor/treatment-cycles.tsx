@@ -4,9 +4,10 @@
  */
 
 import { useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { isAxiosError } from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -25,6 +26,7 @@ import {
   type PaginatedResponse,
   type TreatmentCycle,
 } from "@/api/types";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 export const Route = createFileRoute("/doctor/treatment-cycles")({
   component: DoctorTreatmentCyclesComponent,
@@ -42,6 +44,7 @@ interface PatientInTreatment {
 
 function DoctorTreatmentCyclesComponent() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const search = Route.useSearch();
   const [treatmentTypeFilter, setTreatmentTypeFilter] = useState<string>("");
@@ -49,16 +52,26 @@ function DoctorTreatmentCyclesComponent() {
   const [searchTerm, setSearchTerm] = useState<string>(
     searchParams.patientId || ""
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const doctorId = user?.id ?? null;
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
     useDoctorProfile();
 
-  // Fetch all active cycles (InProgress or Planning)
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["doctor", "treatment-cycles"] }),
+      queryClient.invalidateQueries({ queryKey: ["treatment"] }),
+    ]);
+    setIsRefreshing(false);
+  };
+
+  // Fetch all cycles (including cancelled/failed to show patients even after cancellation)
   const { data: cyclesData, isFetching } = useQuery<
     PaginatedResponse<TreatmentCycle>
   >({
-    queryKey: ["doctor", "treatment-cycles", "active", doctorId],
+    queryKey: ["doctor", "treatment-cycles", "all", doctorId],
     enabled: !!doctorId,
     retry: false,
     queryFn: async (): Promise<PaginatedResponse<TreatmentCycle>> => {
@@ -71,14 +84,9 @@ function DoctorTreatmentCyclesComponent() {
           // Don't use Status filter as API returns 500 error
         });
 
-        // Filter for active statuses on client-side
-        // Active statuses: InProgress, Planned, Scheduled, OnHold
-        // Exclude: Completed, Cancelled, Failed
-        const activeStatuses = ["InProgress", "Planned", "Scheduled", "OnHold"];
-        const allCycles = (response.data || []).filter((cycle) => {
-          const normalizedStatus = normalizeTreatmentCycleStatus(cycle.status);
-          return normalizedStatus && activeStatuses.includes(normalizedStatus);
-        });
+        // Get all cycles (including cancelled, failed, completed) to show patients
+        // even when their cycles are cancelled or failed
+        const allCycles = response.data || [];
 
         const uniqueCycles = Array.from(
           new Map(allCycles.map((cycle) => [cycle.id, cycle])).values()
@@ -195,23 +203,6 @@ function DoctorTreatmentCyclesComponent() {
       const patient = patientMap.get(patientId)!;
       patient.allCycles.push(cycle);
 
-      // Set active cycle (prefer InProgress over Planned/Scheduled/OnHold)
-      const cycleStatus = normalizeTreatmentCycleStatus(cycle.status);
-      const activeCycleStatus = normalizeTreatmentCycleStatus(
-        patient.activeCycle?.status
-      );
-
-      if (!patient.activeCycle) {
-        patient.activeCycle = cycle;
-      } else if (
-        cycleStatus === "InProgress" &&
-        (activeCycleStatus === "Planned" ||
-          activeCycleStatus === "Scheduled" ||
-          activeCycleStatus === "OnHold")
-      ) {
-        patient.activeCycle = cycle;
-      }
-
       // Get treatment type from cycle or treatment
       let cycleTreatmentType = cycle.treatmentType;
       if (!cycleTreatmentType) {
@@ -235,6 +226,50 @@ function DoctorTreatmentCyclesComponent() {
       if (cycleTreatmentType) {
         patient.treatmentType = cycleTreatmentType;
       }
+    });
+
+    // After grouping, select the best activeCycle for each patient
+    // Priority: InProgress > Planned/Scheduled/OnHold > Most recent (by startDate or createdAt)
+    patientMap.forEach((patient) => {
+      if (patient.allCycles.length === 0) return;
+
+      // Sort cycles by priority and date
+      const sortedCycles = [...patient.allCycles].sort((a, b) => {
+        const aStatus = normalizeTreatmentCycleStatus(a.status);
+        const bStatus = normalizeTreatmentCycleStatus(b.status);
+
+        // Priority order: InProgress > Planned/Scheduled/OnHold > Others
+        const getPriority = (status: string | null | undefined): number => {
+          if (!status) return 999;
+          if (status === "InProgress") return 1;
+          if (["Planned", "Scheduled", "OnHold"].includes(status)) return 2;
+          return 3; // Completed, Cancelled, Failed
+        };
+
+        const aPriority = getPriority(aStatus);
+        const bPriority = getPriority(bStatus);
+
+        if (aPriority !== bPriority) {
+          return aPriority - bPriority;
+        }
+
+        // If same priority, sort by date (most recent first)
+        const aDate = a.startDate
+          ? new Date(a.startDate).getTime()
+          : a.createdAt
+            ? new Date(a.createdAt).getTime()
+            : 0;
+        const bDate = b.startDate
+          ? new Date(b.startDate).getTime()
+          : b.createdAt
+            ? new Date(b.createdAt).getTime()
+            : 0;
+
+        return bDate - aDate; // Most recent first
+      });
+
+      // Select the first (highest priority) cycle as activeCycle
+      patient.activeCycle = sortedCycles[0];
     });
 
     return Array.from(patientMap.values());
@@ -457,7 +492,7 @@ function DoctorTreatmentCyclesComponent() {
       patient.patientName ||
       "Unknown";
     const patientCode = patientDetails?.patientCode || patient.patientCode;
-    const shortId = patientCode || `P-${patient.patientId.slice(-8)}`;
+    const shortId = patientCode || `P-${getLast4Chars(patient.patientId)}`;
 
     // Get age from userDetails
     const age = userDetails?.age;
@@ -642,14 +677,24 @@ function DoctorTreatmentCyclesComponent() {
                   timeline
                 </p>
               </div>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  navigate({ to: "/doctor/encounters/create" } as any)
-                }
-              >
-                Create New Treatment
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    navigate({ to: "/doctor/encounters/create" } as any)
+                  }
+                >
+                  Create New Treatment
+                </Button>
+              </div>
             </div>
           </section>
 

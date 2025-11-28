@@ -4,13 +4,10 @@
  */
 
 import { useState, useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
@@ -18,27 +15,11 @@ import { TreatmentPlanForm } from "@/features/doctor/treatment-cycles/TreatmentP
 import { TreatmentPlanSignature } from "@/features/doctor/treatment-cycles/TreatmentPlanSignature";
 import type { TreatmentType } from "@/api/types";
 
-type EncounterFormValues = {
-  visitDate: string;
+// Type for pending treatment data (simplified - only treatmentType is actually used)
+type PendingTreatmentValues = {
   treatmentType: TreatmentType;
-  chiefComplaint: string;
-  history: string;
-  vitals: {
-    bloodPressure: string;
-    heartRate: string;
-    temperature: string;
-    weight: string;
-  };
-  physicalExam: string;
-  notes: string;
-  // IUI fields
-  iuiProtocol?: string;
-  iuiProtocolOther?: string;
-  iuiMedications?: string;
-  iuiMonitoring?: string;
-  // IVF fields
-  ivfProtocol?: string;
-  ivfProtocolOther?: string;
+  // Other fields may exist but are not currently used
+  [key: string]: any;
 };
 
 interface CreateEncounterFormProps {
@@ -54,7 +35,7 @@ interface CreateEncounterFormProps {
 export function CreateEncounterForm({
   layout = "modal",
   defaultPatientId,
-  defaultAppointmentId,
+  defaultAppointmentId: _defaultAppointmentId,
   initialTreatmentType,
   startWithPlan = false,
   onClose,
@@ -62,11 +43,7 @@ export function CreateEncounterForm({
 }: CreateEncounterFormProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const [patientSearch, setPatientSearch] = useState("");
-  const [selectedPatientId, setSelectedPatientId] = useState(
-    defaultPatientId || ""
-  );
+  const [selectedPatientId] = useState(defaultPatientId || "");
   // Step management for IUI/IVF: plan -> signature -> summary
   // If initialTreatmentType or startWithPlan is provided, start with "plan", otherwise start with "encounter"
   const [currentStep, setCurrentStep] = useState<
@@ -82,7 +59,7 @@ export function CreateEncounterForm({
     null
   );
   const [pendingTreatmentData, setPendingTreatmentData] = useState<{
-    values: EncounterFormValues;
+    values: PendingTreatmentValues;
     patientId: string;
   } | null>(null);
 
@@ -90,439 +67,6 @@ export function CreateEncounterForm({
   const doctorId = user?.id ?? null;
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
     useDoctorProfile();
-
-  // Search patients
-  const { data: patientsData } = useQuery({
-    queryKey: ["patients", patientSearch],
-    queryFn: async () => {
-      if (!patientSearch || patientSearch.length < 2) return { data: [] };
-      return await api.patient.getPatients({
-        searchTerm: patientSearch,
-        pageSize: 10,
-      });
-    },
-    enabled: patientSearch.length >= 2,
-  });
-
-  // Fetch patient details when defaultPatientId or selectedPatientId is available
-  const currentPatientId = selectedPatientId || defaultPatientId;
-  const { data: selectedPatientData } = useQuery({
-    queryKey: ["patient-details", currentPatientId],
-    queryFn: async () => {
-      if (!currentPatientId) return null;
-      try {
-        const response = await api.patient.getPatientDetails(currentPatientId);
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!currentPatientId,
-  });
-
-  // Fetch user details for patient name
-  const { data: userDetails } = useQuery({
-    queryKey: ["user-details", currentPatientId],
-    queryFn: async () => {
-      if (!currentPatientId) return null;
-      try {
-        const response = await api.user.getUserDetails(currentPatientId);
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!currentPatientId,
-  });
-
-  // Get patient name from multiple sources
-  const patientName =
-    selectedPatientData?.accountInfo?.username ||
-    userDetails?.fullName ||
-    userDetails?.userName ||
-    selectedPatientData?.fullName ||
-    "Unknown";
-
-  // Update patientSearch when patient data is loaded
-  useEffect(() => {
-    if (
-      (selectedPatientData || userDetails) &&
-      currentPatientId &&
-      !patientSearch
-    ) {
-      const code = selectedPatientData?.patientCode || "";
-      setPatientSearch(`${patientName} (${code})`);
-    }
-  }, [
-    selectedPatientData,
-    userDetails,
-    currentPatientId,
-    patientSearch,
-    patientName,
-  ]);
-
-  const form = useForm<EncounterFormValues>({
-    defaultValues: {
-      visitDate: new Date().toISOString().split("T")[0],
-      treatmentType: "Consultation",
-      chiefComplaint: "",
-      history: "",
-      vitals: {
-        bloodPressure: "",
-        heartRate: "",
-        temperature: "",
-        weight: "",
-      },
-      physicalExam: "",
-      notes: "",
-      iuiProtocol: "",
-      iuiProtocolOther: "",
-      iuiMedications: "",
-      iuiMonitoring: "",
-      ivfProtocol: "",
-      ivfProtocolOther: "",
-    },
-  });
-
-  const selectedTreatmentType = form.watch("treatmentType");
-
-  const createTreatmentMutation = useMutation({
-    mutationFn: async ({
-      values,
-      doctorId: targetDoctorId,
-      patientId,
-    }: {
-      values: EncounterFormValues;
-      doctorId: string;
-      patientId: string;
-    }) => {
-      // Validate: IVF treatment can only be created for female patients
-      if (values.treatmentType === "IVF") {
-        // Fetch patient details to verify gender
-        try {
-          const patientResponse =
-            await api.patient.getPatientDetails(patientId);
-          const patientData = patientResponse.data;
-          const userResponse = await api.user.getUserDetails(patientId);
-          const userData = userResponse.data;
-
-          const patientGender =
-            patientData?.gender ||
-            (userData?.gender !== undefined
-              ? userData.gender
-                ? "Male"
-                : "Female"
-              : null);
-
-          if (patientGender === "Male") {
-            throw new Error(
-              "IVF treatment can only be created for female patients. Male patients are not eligible for IVF treatment."
-            );
-          }
-        } catch (error: any) {
-          // If it's our validation error, re-throw it
-          if (error?.message?.includes("IVF treatment can only be created")) {
-            throw error;
-          }
-          // Otherwise, log and continue (patient data might not be available, but frontend validation should catch it)
-          console.warn("Could not verify patient gender:", error);
-        }
-      }
-
-      // Format dates
-      const startDate = new Date(`${values.visitDate}T00:00:00`).toISOString();
-      const endDate = new Date(`${values.visitDate}T23:59:59`).toISOString();
-
-      // Build encounter payload according to API specification
-      // POST /api/treatment
-      const shouldAutoCreateCycle =
-        values.treatmentType === "IUI" || values.treatmentType === "IVF";
-
-      const payload: any = {
-        patientId,
-        doctorId: targetDoctorId,
-        treatmentName: values.chiefComplaint || "Encounter",
-        treatmentType: values.treatmentType,
-        startDate,
-        endDate,
-        status: "InProgress",
-        diagnosis: values.history || "", // Use history as diagnosis
-        goals: "", // Can be empty for encounters
-        notes: values.notes || "", // Only internal notes, not JSON string
-        estimatedCost: 0,
-        actualCost: 0,
-        autoCreate: shouldAutoCreateCycle,
-      };
-
-      // Add IUI object if treatment type is IUI
-      if (values.treatmentType === "IUI") {
-        // Use iuiProtocolOther if "Other" is selected, otherwise use iuiProtocol
-        const protocolValue =
-          values.iuiProtocol === "Other"
-            ? values.iuiProtocolOther?.trim() || ""
-            : values.iuiProtocol?.trim() || "";
-
-        if (!protocolValue) {
-          throw new Error("Protocol is required for IUI treatment");
-        }
-
-        const iuiObject: any = {
-          protocol: protocolValue,
-          medications: values.iuiMedications?.trim() || "",
-          monitoring: values.iuiMonitoring?.trim() || "",
-          ovulationTriggerDate: startDate,
-          inseminationDate: endDate,
-          motileSpermCount: 0,
-          numberOfAttempts: 0,
-          outcome: "",
-          notes: "",
-          status: "Planned",
-        };
-
-        // Only include date fields if they have values, otherwise omit them
-        // Backend will handle null/undefined dates
-        payload.iui = iuiObject;
-      }
-
-      // Add IVF object if treatment type is IVF
-      if (values.treatmentType === "IVF") {
-        // Use ivfProtocolOther if "Other" is selected, otherwise use ivfProtocol
-        const protocolValue =
-          values.ivfProtocol === "Other"
-            ? values.ivfProtocolOther?.trim() || ""
-            : values.ivfProtocol?.trim() || "";
-
-        // Build IVF object - exclude treatmentId (will be set by backend)
-        const ivfObject: any = {
-          protocol: protocolValue,
-          stimulationStartDate: startDate,
-          oocyteRetrievalDate: startDate,
-          fertilizationDate: startDate,
-          transferDate: endDate,
-          oocytesRetrieved: 0,
-          oocytesMature: 0,
-          oocytesFertilized: 0,
-          embryosCultured: 0,
-          embryosTransferred: 0,
-          embryosCryopreserved: 0,
-          embryosFrozen: 0,
-          notes: "",
-          outcome: "",
-          complications: "",
-          status: "Planned",
-        };
-
-        // Only include date fields if they have values, otherwise omit them
-        // Backend will handle null/undefined dates
-        payload.ivf = ivfObject;
-      }
-
-      const response = await api.treatment.createTreatment(payload);
-      const treatmentData = response.data;
-
-      // Note: Backend automatically creates cycle when autoCreate=true is set in payload
-      // No need to manually create cycle here - it's already done by backend
-      if (
-        shouldAutoCreateCycle &&
-        treatmentData?.id &&
-        (values.treatmentType === "IUI" || values.treatmentType === "IVF")
-      ) {
-        // Cycle is automatically created by backend with autoCreate=true
-        // Just log for debugging
-        console.log(
-          `Treatment ${treatmentData.id} created with autoCreate=true. Cycle should be auto-created by backend.`
-        );
-      }
-
-      return treatmentData;
-    },
-    onSuccess: (data, variables) => {
-      const treatmentId = data?.id;
-      const treatmentType = variables.values.treatmentType;
-
-      let successMessage = "Treatment saved successfully!";
-      if (treatmentType === "Consultation") {
-        successMessage = "Encounter saved successfully!";
-      } else if (treatmentType === "IUI") {
-        successMessage = "IUI treatment created successfully!";
-      } else if (treatmentType === "IVF") {
-        successMessage = "IVF treatment created successfully!";
-      }
-
-      toast.success(successMessage);
-
-      queryClient.invalidateQueries({
-        queryKey: ["doctor-encounters"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["doctor-treatments"],
-      });
-
-      if (treatmentType === "Consultation") {
-        // For Consultation, navigate to diagnosis page
-        if (onCreated && treatmentId) {
-          onCreated(treatmentId);
-        } else if (treatmentId && defaultPatientId) {
-          navigate({
-            to: "/doctor/encounters/$encounterId/diagnosis",
-            params: { encounterId: treatmentId },
-            search: {
-              patientId: defaultPatientId,
-              appointmentId: defaultAppointmentId,
-              treatmentId: treatmentId,
-            },
-          });
-        }
-        if (onClose) {
-          onClose();
-        }
-      } else {
-        // For other types (non-IUI/IVF)
-        if (onCreated && treatmentId) {
-          onCreated(treatmentId);
-        }
-        if (onClose) {
-          onClose();
-        }
-      }
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ||
-        "Unable to save encounter. Please try again.";
-      toast.error(message);
-    },
-  });
-
-  // Mutation to update treatment with encounter data after signature
-  const updateTreatmentWithEncounterDataMutation = useMutation({
-    mutationFn: async ({
-      treatmentId: targetTreatmentId,
-      values,
-    }: {
-      treatmentId: string;
-      values: EncounterFormValues;
-      doctorId: string;
-      patientId: string;
-    }) => {
-      // Format dates
-      const startDate = new Date(`${values.visitDate}T00:00:00`).toISOString();
-      const endDate = new Date(`${values.visitDate}T23:59:59`).toISOString();
-
-      // Update treatment with encounter data
-      const payload: any = {
-        treatmentName: values.chiefComplaint || "Encounter",
-        startDate,
-        endDate,
-        status: "InProgress", // Change from Planning to InProgress
-        diagnosis: values.history || "",
-        // Keep existing goals and notes from plan, merge with encounter notes
-        notes: values.notes || "",
-      };
-
-      // Don't update IUI/IVF objects - they are managed separately
-      // The protocol and other IUI/IVF fields should remain as set in the plan
-
-      const response = await api.treatment.updateTreatment(
-        targetTreatmentId,
-        payload
-      );
-      return response.data;
-    },
-    onSuccess: () => {
-      toast.success("Encounter created successfully!");
-      queryClient.invalidateQueries({
-        queryKey: ["doctor-treatments"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["doctor", "treatment-cycles"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["treatment", createdTreatmentId],
-      });
-
-      if (onCreated && createdTreatmentId) {
-        onCreated(createdTreatmentId);
-      }
-
-      // Navigate to treatment cycles (cycle will be auto-created after signature)
-      if (pendingTreatmentData) {
-        navigate({
-          to: "/doctor/treatment-cycles",
-          search: { patientId: pendingTreatmentData.patientId },
-        });
-      }
-
-      if (onClose) {
-        onClose();
-      }
-    },
-    onError: (error: any) => {
-      toast.error(
-        error?.response?.data?.message || "Failed to create encounter"
-      );
-    },
-  });
-
-  // Helper function to check if patient is male
-  const isPatientMale = (): boolean => {
-    const patientGender =
-      selectedPatientData?.gender ||
-      (userDetails?.gender !== undefined
-        ? userDetails.gender
-          ? "Male"
-          : "Female"
-        : null);
-
-    return patientGender === "Male";
-  };
-
-  const onSubmit = (values: EncounterFormValues) => {
-    const patientId = selectedPatientId || defaultPatientId;
-
-    if (!patientId) {
-      toast.error("Select a patient before creating an encounter.");
-      return;
-    }
-
-    if (!doctorId) {
-      toast.error(
-        "Unable to find doctor information. Please contact the administrator."
-      );
-      return;
-    }
-
-    // Validate: IVF treatment can only be created for female patients
-    if (values.treatmentType === "IVF" && isPatientMale()) {
-      toast.error(
-        "IVF treatment can only be created for female patients. Male patients are not eligible for IVF treatment."
-      );
-      return;
-    }
-
-    // If we have createdTreatmentId, this means we're submitting encounter form after signature
-    // Update the treatment with encounter data
-    if (createdTreatmentId) {
-      updateTreatmentWithEncounterDataMutation.mutate({
-        treatmentId: createdTreatmentId,
-        values,
-        doctorId,
-        patientId,
-      });
-      return;
-    }
-
-    // For IUI/IVF, show treatment plan form first (Step 1)
-    if (values.treatmentType === "IUI" || values.treatmentType === "IVF") {
-      // Save form data and move to plan step
-      setPendingTreatmentData({ values, patientId });
-      setCurrentStep("plan");
-      return;
-    }
-
-    // For Consultation and Other, create treatment directly
-    createTreatmentMutation.mutate({ doctorId, values, patientId });
-  };
 
   // Fetch patient details for plan step
   const planPatientId =
@@ -727,7 +271,6 @@ export function CreateEncounterForm({
                       setCurrentStep("encounter");
                       setPendingTreatmentData(null);
                       setPlanTreatmentType(null);
-                      form.setValue("treatmentType", "Consultation");
                     }}
                   >
                     Go Back

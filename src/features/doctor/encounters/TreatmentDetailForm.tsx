@@ -4,7 +4,7 @@
  */
 
 import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
@@ -14,12 +14,7 @@ import { toast } from "sonner";
 import { cn } from "@/utils/cn";
 import { StructuredNote } from "@/components/StructuredNote";
 import { TreatmentPlanSignature } from "@/features/doctor/treatment-cycles/TreatmentPlanSignature";
-import type {
-  TreatmentIUICreateUpdateRequest,
-  IUICycleStatus,
-  IVFStep,
-  IUIStep,
-} from "@/api/types";
+import type { IVFStep, IUIStep } from "@/api/types";
 import { normalizeTreatmentCycleStatus as normalizeStatus } from "@/api/types";
 
 interface TreatmentDetailFormProps {
@@ -613,8 +608,8 @@ export function TreatmentDetailForm({
     return new Set(completedSteps);
   }, [completedSteps]);
 
-  // Mutation to update treatment status - MUST be called before any early returns
-  const updateStatusMutation = useMutation({
+  // Mutation to update treatment status - currently unused
+  /* const updateStatusMutation = useMutation({
     mutationFn: async (newStatus: string) => {
       // Update IUI/IVF specific status if applicable
       if (treatmentType === "IUI" && iuiData) {
@@ -752,7 +747,7 @@ export function TreatmentDetailForm({
     onError: (error: any) => {
       toast.error(error?.response?.data?.message || "Unable to update status");
     },
-  });
+  }); */
 
   // Note: Step progression should be handled through treatment cycles, not directly through treatment status
   // This form is for viewing only. To update steps, use the treatment cycles page.

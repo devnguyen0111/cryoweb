@@ -211,11 +211,35 @@ export function CreateServiceRequestModal({
     mutationFn: async (data: ServiceRequestCreateRequestModel) => {
       return api.serviceRequest.createServiceRequest(data);
     },
-    onSuccess: () => {
+    onSuccess: async (response) => {
       toast.success("Service request created successfully");
       queryClient.invalidateQueries({
         queryKey: ["doctor", "service-requests"],
       });
+      
+      // Send notification to patient
+      if (response.data?.patientId && response.data?.id) {
+        const { sendServiceRequestNotification } = await import(
+          "@/utils/notifications"
+        );
+        const serviceName = serviceDetails
+          .map((detail) => {
+            const service = services.find((s) => s.id === detail.serviceId);
+            return service?.name;
+          })
+          .filter(Boolean)
+          .join(", ");
+        
+        await sendServiceRequestNotification(
+          response.data.patientId,
+          "created",
+          {
+            serviceRequestId: response.data.id,
+            serviceName: serviceName || undefined,
+          }
+        );
+      }
+      
       onSuccess();
       handleClose();
     },

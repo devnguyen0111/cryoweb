@@ -2,7 +2,11 @@ import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { api } from "@/api/client";
-import type { Patient, PatientDetailResponse } from "@/api/types";
+import type {
+  Patient,
+  PatientDetailResponse,
+  UserDetailResponse,
+} from "@/api/types";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -129,6 +133,68 @@ export function DoctorPatientDetailModal({
       : null;
   }, [patient]);
 
+  // Fetch user/account details to get dob, gender, and fullName
+  const accountId = patient?.accountId || patientId;
+  const {
+    data: userDetails,
+    isLoading: userLoading,
+    isFetching: userFetching,
+  } = useQuery<UserDetailResponse | null>({
+    enabled: isOpen && Boolean(accountId),
+    queryKey: ["doctor", "user-details", accountId, "patient-detail-modal"],
+    retry: false,
+    queryFn: async () => {
+      if (!accountId) return null;
+      try {
+        const response = await api.user.getUserDetails(accountId);
+        return response.data ?? null;
+      } catch (error) {
+        if (
+          isAxiosError(error) &&
+          (error.response?.status === 404 || error.response?.status === 403)
+        ) {
+          return null;
+        }
+        console.warn("Failed to fetch user details:", error);
+        return null;
+      }
+    },
+  });
+
+  // Merge patient data with user details
+  const mergedPatient = useMemo(() => {
+    if (!patient) return null;
+
+    // Get full name from user details or patient
+    const fullName =
+      userDetails?.fullName ||
+      userDetails?.userName ||
+      patientDetail?.accountInfo?.username ||
+      patient.fullName ||
+      patient.patientCode ||
+      "Patient";
+
+    // Get date of birth from user details or patient
+    const dateOfBirth = userDetails?.dob
+      ? userDetails.dob
+      : patient.dateOfBirth || null;
+
+    // Get gender from user details (boolean: true = Male, false = Female) or patient
+    const gender =
+      userDetails?.gender !== undefined
+        ? userDetails.gender
+          ? "Male"
+          : "Female"
+        : patient.gender || null;
+
+    return {
+      ...patient,
+      fullName,
+      dateOfBirth,
+      gender,
+    };
+  }, [patient, patientDetail, userDetails]);
+
   const accountStatus = useMemo(() => {
     if (!patient) {
       return null;
@@ -172,7 +238,7 @@ export function DoctorPatientDetailModal({
       onClose={onClose}
       size="xl"
     >
-      {isLoading || isFetching ? (
+      {isLoading || isFetching || userLoading || userFetching ? (
         <div className="py-10 text-center text-sm text-gray-500">
           Loading patient information...
         </div>
@@ -186,7 +252,7 @@ export function DoctorPatientDetailModal({
             Close
           </Button>
         </div>
-      ) : !patient ? (
+      ) : !mergedPatient ? (
         <div className="space-y-4 py-6 text-center text-sm text-gray-500">
           <p>Patient information is not available.</p>
           <Button variant="outline" onClick={onClose}>
@@ -199,16 +265,13 @@ export function DoctorPatientDetailModal({
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-1">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {patient.fullName ||
-                    patientDetail?.accountInfo?.username ||
-                    patient.patientCode ||
-                    "Patient"}
+                  {mergedPatient.fullName}
                 </h3>
                 <p className="text-sm text-gray-500">
-                  Patient code: {patient.patientCode ?? "—"}
+                  Patient code: {mergedPatient.patientCode ?? "—"}
                 </p>
                 <p className="text-sm text-gray-500">
-                  Account ID: {getLast4Chars(patient.accountId)}
+                  Account ID: {getLast4Chars(mergedPatient.accountId)}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -222,12 +285,12 @@ export function DoctorPatientDetailModal({
                     {verificationStatus.label}
                   </Badge>
                 ) : null}
-                {patient.bloodType ? (
+                {mergedPatient.bloodType ? (
                   <Badge
                     variant="outline"
                     className="border-purple-200 bg-purple-50 text-purple-700"
                   >
-                    Blood type: {patient.bloodType}
+                    Blood type: {mergedPatient.bloodType}
                   </Badge>
                 ) : null}
               </div>
@@ -249,13 +312,16 @@ export function DoctorPatientDetailModal({
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <DetailField label="Full name" value={patient.fullName} />
+              <DetailField label="Full name" value={mergedPatient.fullName} />
               <DetailField
                 label="Date of birth"
-                value={formatDate(patient.dateOfBirth)}
+                value={formatDate(mergedPatient.dateOfBirth)}
               />
-              <DetailField label="Gender" value={patient.gender} />
-              <DetailField label="National ID" value={patient.nationalId} />
+              <DetailField label="Gender" value={mergedPatient.gender} />
+              <DetailField
+                label="National ID"
+                value={mergedPatient.nationalId}
+              />
               <DetailField
                 label="Occupation"
                 value={patientDetail?.occupation}
@@ -273,17 +339,21 @@ export function DoctorPatientDetailModal({
             <CardContent className="grid gap-4 md:grid-cols-2">
               <DetailField
                 label="Email"
-                value={patientDetail?.accountInfo?.email ?? patient.email}
+                value={patientDetail?.accountInfo?.email ?? mergedPatient.email}
                 placeholder="Not provided"
               />
               <DetailField
                 label="Phone number"
-                value={patientDetail?.accountInfo?.phone ?? patient.phoneNumber}
+                value={
+                  patientDetail?.accountInfo?.phone ?? mergedPatient.phoneNumber
+                }
                 placeholder="Not provided"
               />
               <DetailField
                 label="Address"
-                value={patientDetail?.accountInfo?.address ?? patient.address}
+                value={
+                  patientDetail?.accountInfo?.address ?? mergedPatient.address
+                }
                 placeholder="Not provided"
                 multiline
               />
@@ -403,11 +473,11 @@ export function DoctorPatientDetailModal({
               />
               <DetailField
                 label="Created at"
-                value={formatDateTime(patient.createdAt)}
+                value={formatDateTime(mergedPatient.createdAt)}
               />
               <DetailField
                 label="Last updated"
-                value={formatDateTime(patient.updatedAt)}
+                value={formatDateTime(mergedPatient.updatedAt)}
               />
             </CardContent>
           </Card>

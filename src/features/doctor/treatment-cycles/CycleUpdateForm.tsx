@@ -80,6 +80,15 @@ export function CycleUpdateForm({
   const { user } = useAuth();
   const { data: doctorProfile } = useDoctorProfile();
   const doctorId = user?.id ?? null;
+
+  // Log cycle information when component mounts or cycle changes
+  console.log(`[CycleUpdateForm] Component rendered with cycle:`, {
+    cycleId: cycle.id,
+    cycleNumber: cycle.cycleNumber,
+    cycleName: cycle.cycleName,
+    currentStep: cycle.currentStep,
+    status: cycle.status,
+  });
   const [showMedicalRecordForm, setShowMedicalRecordForm] = useState(false);
   const [selectedAppointmentId, setSelectedAppointmentId] =
     useState<string>("");
@@ -123,6 +132,45 @@ export function CycleUpdateForm({
     enabled: !!rawCurrentCycle.treatmentId,
   });
 
+  // Fetch current step from backend API (most accurate source) - same as HorizontalTreatmentTimeline
+  const normalizedTreatmentType = useMemo(() => {
+    const type = rawCurrentCycle.treatmentType;
+    if (!type) return null;
+    const typeUpper = String(type).toUpperCase();
+    if (typeUpper === "IVF") return "IVF";
+    if (typeUpper === "IUI") return "IUI";
+    return null;
+  }, [rawCurrentCycle.treatmentType]);
+
+  const { data: currentStepFromApi } = useQuery({
+    queryKey: [
+      "treatment-current-step",
+      rawCurrentCycle.treatmentId,
+      normalizedTreatmentType,
+    ],
+    queryFn: async () => {
+      if (!rawCurrentCycle.treatmentId || !normalizedTreatmentType) return null;
+      try {
+        if (normalizedTreatmentType === "IUI") {
+          const response = await api.treatmentIUI.getCurrentStep(
+            rawCurrentCycle.treatmentId
+          );
+          return response.data ?? null;
+        } else if (normalizedTreatmentType === "IVF") {
+          const response = await api.treatmentIVF.getCurrentStep(
+            rawCurrentCycle.treatmentId
+          );
+          return response.data ?? null;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!rawCurrentCycle.treatmentId && !!normalizedTreatmentType,
+    staleTime: 30000, // Cache for 30 seconds
+  });
+
   // Fetch all cycles for this treatment to show progress (needed for treatmentType inference)
   const { data: allCyclesDataForType } = useQuery({
     queryKey: ["treatment-cycles", "treatment", rawCurrentCycle.treatmentId],
@@ -141,6 +189,28 @@ export function CycleUpdateForm({
     },
     enabled: !!rawCurrentCycle.treatmentId,
   });
+
+  // Helper: Get active cycle from all cycles
+  // Active cycle = cycle with LOWEST cycleNumber that is not Completed/Cancelled/Failed
+  // This ensures we always work on cycles in order (1 → 2 → 3 → ...), regardless of status
+  const getActiveCycle = (cycles: TreatmentCycle[]): TreatmentCycle | null => {
+    if (!cycles || cycles.length === 0) return null;
+
+    // Find all cycles that are not Completed, Cancelled, or Failed
+    // Sort by cycleNumber (ascending) and return the first one
+    const activeCycles = cycles
+      .filter((c) => {
+        const status = normalizeTreatmentCycleStatus(c.status);
+        return (
+          status !== "Completed" &&
+          status !== "Cancelled" &&
+          status !== "Failed"
+        );
+      })
+      .sort((a, b) => a.cycleNumber - b.cycleNumber);
+
+    return activeCycles[0] || null;
+  };
 
   // Ensure currentCycle has treatmentType
   const currentCycle = useMemo(() => {
@@ -204,7 +274,25 @@ export function CycleUpdateForm({
     },
   });
 
+  // Fetch appointments for this cycle (for statistics)
+  const { data: cycleAppointmentsData } = useQuery({
+    queryKey: ["cycle-appointments", currentCycle.id],
+    queryFn: async () => {
+      if (!currentCycle.id) return [];
+      try {
+        const response = await api.treatmentCycle.getCycleAppointments(
+          currentCycle.id
+        );
+        return response.data || [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!currentCycle.id,
+  });
+
   // Fetch appointments for this patient (to allow selecting any appointment for medical record)
+  // This is separate from cycle appointments for the form dropdown
   const { data: appointmentsData } = useQuery({
     queryKey: ["appointments", "patient", currentCycle.patientId],
     queryFn: async () => {
@@ -287,23 +375,126 @@ export function CycleUpdateForm({
     enabled: !!currentCycle.treatmentId,
   });
 
-  // Fetch service requests for this patient
+  // Fetch service requests for this treatment/cycle
+  // Filter to only show service requests related to this treatment cycle
   const { data: serviceRequestsData } = useQuery({
-    queryKey: ["service-requests", "patient", currentCycle.patientId],
+    queryKey: [
+      "service-requests",
+      "treatment",
+      currentCycle.treatmentId,
+      currentCycle.id,
+    ],
     queryFn: async () => {
       if (!currentCycle.patientId) return [];
       try {
+        // Fetch all service requests for this patient
         const response = await api.serviceRequest.getServiceRequests({
           patientId: currentCycle.patientId,
           pageNumber: 1,
           pageSize: 100,
         });
+        const allRequests = response.data || [];
+
+        // Filter service requests that belong to this treatment cycle
+        // Service requests created from cycle have notes like:
+        // "Service request for treatment cycle: {cycleName}" or "Service request for treatment cycle: {cycleId}"
+        const cycleName = currentCycle.cycleName || "";
+        const cycleId = currentCycle.id;
+
+        // Use cycle appointments to filter by appointmentId
+        const cycleAppointmentIds =
+          cycleAppointmentsData?.map((apt) => apt.id) || [];
+
+        // Filter service requests that match this cycle
+        const filteredRequests = allRequests.filter((request) => {
+          // Check if notes contain cycle name or cycle ID
+          const notes = request.notes || "";
+          const hasCycleNameInNotes =
+            cycleName && notes.toLowerCase().includes(cycleName.toLowerCase());
+          const hasCycleIdInNotes = cycleId && notes.includes(cycleId);
+
+          // Check if appointmentId matches any appointment in this cycle
+          const hasMatchingAppointment =
+            request.appointmentId &&
+            cycleAppointmentIds.includes(request.appointmentId);
+
+          // Include if any condition matches
+          return (
+            hasCycleNameInNotes || hasCycleIdInNotes || hasMatchingAppointment
+          );
+        });
+
+        return filteredRequests;
+      } catch {
+        return [];
+      }
+    },
+    enabled:
+      !!currentCycle.patientId &&
+      !!currentCycle.id &&
+      cycleAppointmentsData !== undefined,
+  });
+
+  // Fetch medical records for this patient and filter by cycle appointments
+  const { data: medicalRecordsData } = useQuery({
+    queryKey: [
+      "medical-records",
+      "patient",
+      currentCycle.patientId,
+      "cycle",
+      currentCycle.id,
+    ],
+    queryFn: async () => {
+      if (!currentCycle.patientId) return [];
+      try {
+        // Fetch all medical records for this patient
+        const response = await api.medicalRecord.getMedicalRecords({
+          PatientId: currentCycle.patientId,
+          Page: 1,
+          Size: 100,
+        });
+        const allRecords = response.data || [];
+
+        // Use cycle appointments to filter medical records
+        const cycleAppointmentIds =
+          cycleAppointmentsData?.map((apt) => apt.id) || [];
+
+        // Filter medical records that belong to this cycle's appointments
+        if (cycleAppointmentIds.length === 0) {
+          return []; // If no appointments in cycle, return empty array
+        }
+
+        return allRecords.filter((record) => {
+          return (
+            record.appointmentId &&
+            cycleAppointmentIds.includes(record.appointmentId)
+          );
+        });
+      } catch {
+        return [];
+      }
+    },
+    enabled:
+      !!currentCycle.patientId &&
+      !!currentCycle.id &&
+      cycleAppointmentsData !== undefined,
+  });
+
+  // Fetch documents for this cycle
+  const { data: documentsData } = useQuery({
+    queryKey: ["cycle-documents", currentCycle.id],
+    queryFn: async () => {
+      if (!currentCycle.id) return [];
+      try {
+        const response = await api.treatmentCycle.getCycleDocuments(
+          currentCycle.id
+        );
         return response.data || [];
       } catch {
         return [];
       }
     },
-    enabled: !!currentCycle.patientId,
+    enabled: !!currentCycle.id,
   });
 
   // Fetch all cycles for this treatment to show progress
@@ -374,8 +565,10 @@ export function CycleUpdateForm({
       }
       if (
         stepTypeStr === "IUI_POSTIUI" ||
+        stepTypeStr === "IUI_POST_IUI" ||
         stepTypeStr.includes("POSTIUI") ||
-        stepTypeStr.includes("POST_IUI")
+        stepTypeStr.includes("POST_IUI") ||
+        stepTypeStr.includes("POSTIUI")
       ) {
         return "step5_post_iui";
       }
@@ -576,7 +769,41 @@ export function CycleUpdateForm({
     return null;
   };
 
-  // Get current step and next step - use same logic as HorizontalTreatmentTimeline
+  // Helper to convert step number from API to step ID
+  const getStepIdFromNumber = (
+    stepNumber: number | null | undefined,
+    stepList: Array<IVFStep | IUIStep>
+  ): IVFStep | IUIStep | undefined => {
+    if (stepNumber === null || stepNumber === undefined) return undefined;
+    // API returns 0-based index: 0 = step0, 1 = step1, 2 = step2, etc.
+    if (stepNumber >= 0 && stepNumber < stepList.length) {
+      return stepList[stepNumber];
+    }
+    return undefined;
+  };
+
+  // Get ACTIVE cycle (not the cycle being viewed)
+  // This is critical to show correct treatment progress
+  const activeCycle = useMemo(() => {
+    const active = getActiveCycle(finalAllCyclesData);
+    console.log(`[CycleUpdateForm] getActiveCycle result:`, {
+      totalCycles: finalAllCyclesData.length,
+      activeCycleId: active?.id,
+      activeCycleNumber: active?.cycleNumber,
+      activeCycleName: active?.cycleName,
+      activeCycleStatus: active?.status,
+      allCyclesInfo: finalAllCyclesData.map((c) => ({
+        id: c.id,
+        number: c.cycleNumber,
+        name: c.cycleName,
+        status: c.status,
+        normalized: normalizeTreatmentCycleStatus(c.status),
+      })),
+    });
+    return active;
+  }, [finalAllCyclesData, currentCycle.id]);
+
+  // Get current step and next step - ALWAYS use active cycle, not viewing cycle
   const { currentStep, nextStep } = useMemo(() => {
     const isIVF = currentCycle.treatmentType === "IVF";
     const isIUI = currentCycle.treatmentType === "IUI";
@@ -586,417 +813,188 @@ export function CycleUpdateForm({
       return { currentStep: null, nextStep: null };
     }
 
-    // First, try to get step from cycleName (same as HorizontalTreatmentTimeline)
-    let currentStepValue: IVFStep | IUIStep | null = null;
-    const completedStepsSet = new Set<IVFStep | IUIStep>();
+    // CRITICAL: Always use active cycle to determine currentStep
+    // This ensures we show the actual treatment progress, not the cycle being viewed
+    const cycleForStep = activeCycle || currentCycle;
 
-    // Collect completedSteps from ALL cycles first (including currentCycle)
-    // This is critical to understand which steps are already done across all cycles
-    const allCyclesToCheck =
-      finalAllCyclesData.length > 0
-        ? [...finalAllCyclesData, currentCycle]
-        : [currentCycle];
-
-    // Process all cycles to build completedStepsSet
-    for (const cycle of allCyclesToCheck) {
-      // Add completedSteps from cycle.completedSteps field (this is the most reliable source)
-      if (cycle.completedSteps) {
-        cycle.completedSteps.forEach((step) => completedStepsSet.add(step));
-      }
-
-      // If cycle status is "Completed", map its stepType or cycleName to step and mark as completed
-      const cycleStatus = normalizeTreatmentCycleStatus(cycle.status);
-      if (cycleStatus === "Completed") {
-        // PRIORITY: Use stepType if available (most accurate)
-        let stepId: IVFStep | IUIStep | null = null;
-        if (cycle.stepType) {
-          stepId = mapStepTypeToStepId(
-            cycle.stepType,
-            cycle.treatmentType as "IUI" | "IVF" | undefined
-          );
-        }
-        // Fallback to cycleName if stepType not available
-        if (!stepId) {
-          stepId = mapCycleNameToStep(
-            cycle.cycleName,
-            cycle.treatmentType as "IUI" | "IVF" | undefined
-          );
-        }
-        if (stepId) {
-          completedStepsSet.add(stepId);
-        }
-      }
-    }
-
-    // PRIORITY 1: Check cycles with Scheduled or InProgress status first (these are the most active)
-    // Sort cycles by orderIndex or cycleNumber to process in order
-    const sortedCyclesForCurrent = [...allCyclesToCheck].sort((a, b) => {
-      const orderA = a.orderIndex ?? a.cycleNumber ?? 0;
-      const orderB = b.orderIndex ?? b.cycleNumber ?? 0;
-      return orderA - orderB;
+    console.log(`[CycleUpdateForm] Determining currentStep:`, {
+      viewingCycle: currentCycle.cycleNumber,
+      viewingCycleName: currentCycle.cycleName,
+      activeCycle: activeCycle?.cycleNumber,
+      activeCycleName: activeCycle?.cycleName,
+      activeCycleStepType: activeCycle?.stepType,
+      activeCycleCycleName: activeCycle?.cycleName,
+      usingCycle: cycleForStep.cycleNumber,
+      usingCycleStepType: cycleForStep.stepType,
+      usingCycleCycleName: cycleForStep.cycleName,
+      currentStepFromApi: currentStepFromApi,
     });
 
-    // First, prioritize Scheduled cycles (status 7) - these are the immediate next steps
-    const scheduledCycles = sortedCyclesForCurrent.filter((c) => {
-      const status = normalizeTreatmentCycleStatus(c.status);
-      return status === "Scheduled";
-    });
+    // CRITICAL: If activeCycle exists, we MUST use it to determine step
+    // Do NOT fallback to currentStepFromApi if activeCycle exists (even if it doesn't have step info)
+    // This ensures consistency: active cycle = current step source
+    if (activeCycle) {
+      // PRIORITY 1: Use active cycle's currentStep if available (most reliable for active cycle)
+      if (activeCycle.currentStep) {
+        const currentIndex = stepList.findIndex(
+          (s) => s === activeCycle.currentStep
+        );
+        if (currentIndex >= 0) {
+          const next =
+            currentIndex < stepList.length - 1
+              ? stepList[currentIndex + 1]
+              : null;
+          console.log(
+            `[CycleUpdateForm] Using active cycle's currentStep:`,
+            activeCycle.currentStep
+          );
+          return {
+            currentStep: activeCycle.currentStep,
+            nextStep: next,
+          };
+        }
+      }
 
-    if (scheduledCycles.length > 0) {
-      // Find the step for the most advanced scheduled cycle (highest step index)
-      let maxStepIndex = -1;
-      for (const scheduledCycle of scheduledCycles) {
-        // PRIORITY: Use stepType if available
-        let stepId: IVFStep | IUIStep | null = null;
-        if (scheduledCycle.stepType) {
-          stepId = mapStepTypeToStepId(
-            scheduledCycle.stepType,
-            scheduledCycle.treatmentType as "IUI" | "IVF" | undefined
-          );
-        }
-        // Fallback to cycleName
-        if (!stepId) {
-          stepId = mapCycleNameToStep(
-            scheduledCycle.cycleName,
-            scheduledCycle.treatmentType as "IUI" | "IVF" | undefined
-          );
-        }
+      // PRIORITY 2: Use active cycle's stepType (reliable source from active cycle)
+      // Fallback to currentCycle.treatmentType if activeCycle doesn't have it
+      const treatmentTypeForMapping =
+        (activeCycle.treatmentType as "IUI" | "IVF" | undefined) ||
+        (currentCycle.treatmentType as "IUI" | "IVF" | undefined);
+
+      if (activeCycle.stepType) {
+        const stepId = mapStepTypeToStepId(
+          activeCycle.stepType,
+          treatmentTypeForMapping
+        );
         if (stepId) {
-          const stepIndex = stepList.findIndex((s) => s === stepId);
-          // Only consider if step is not already completed
-          if (stepIndex > maxStepIndex && !completedStepsSet.has(stepId)) {
-            maxStepIndex = stepIndex;
-            currentStepValue = stepId;
-          }
-        }
-      }
-    }
-
-    // PRIORITY 2: If no Scheduled cycles, check InProgress cycles
-    if (!currentStepValue) {
-      const inProgressCycles = sortedCyclesForCurrent.filter((c) => {
-        const status = normalizeTreatmentCycleStatus(c.status);
-        return status === "InProgress";
-      });
-
-      if (inProgressCycles.length > 0) {
-        let maxStepIndex = -1;
-        for (const inProgressCycle of inProgressCycles) {
-          const stepId = mapCycleNameToStep(
-            inProgressCycle.cycleName,
-            inProgressCycle.treatmentType as "IUI" | "IVF" | undefined
+          const currentIndex = stepList.findIndex((s) => s === stepId);
+          const next =
+            currentIndex >= 0 && currentIndex < stepList.length - 1
+              ? stepList[currentIndex + 1]
+              : null;
+          console.log(
+            `[CycleUpdateForm] Using active cycle's stepType:`,
+            stepId,
+            `(from stepType: ${activeCycle.stepType}, treatmentType: ${treatmentTypeForMapping})`
           );
-          if (stepId) {
-            const stepIndex = stepList.findIndex((s) => s === stepId);
-            if (stepIndex > maxStepIndex && !completedStepsSet.has(stepId)) {
-              maxStepIndex = stepIndex;
-              currentStepValue = stepId;
-            }
-          }
-        }
-      }
-    }
-
-    // PRIORITY 3: If we haven't found currentStep from active cycles, use completedSteps to find next step
-    // This ensures that if step 4 is completed, we show step 5 as current, not step 2
-    if (!currentStepValue && completedStepsSet.size > 0) {
-      const completedStepsArray = Array.from(completedStepsSet);
-      let maxCompletedIndex = -1;
-      for (const completedStep of completedStepsArray) {
-        const stepIndex = stepList.findIndex((s) => s === completedStep);
-        if (stepIndex > maxCompletedIndex) {
-          maxCompletedIndex = stepIndex;
-        }
-      }
-      // Move to next step after the last completed one
-      if (maxCompletedIndex >= 0 && maxCompletedIndex < stepList.length - 1) {
-        const nextStepAfterCompleted = stepList[maxCompletedIndex + 1];
-        // Only use this if the next step is not already completed
-        if (!completedStepsSet.has(nextStepAfterCompleted)) {
-          currentStepValue = nextStepAfterCompleted;
-        }
-      }
-    }
-
-    // PRIORITY 4: If still not found, check Planned cycles
-    if (!currentStepValue) {
-      const plannedCycles = sortedCyclesForCurrent.filter((c) => {
-        const status = normalizeTreatmentCycleStatus(c.status);
-        return status === "Planned";
-      });
-
-      if (plannedCycles.length > 0) {
-        let maxStepIndex = -1;
-        for (const plannedCycle of plannedCycles) {
-          const stepId = mapCycleNameToStep(
-            plannedCycle.cycleName,
-            plannedCycle.treatmentType as "IUI" | "IVF" | undefined
-          );
-          if (stepId && !completedStepsSet.has(stepId)) {
-            const stepIndex = stepList.findIndex((s) => s === stepId);
-            if (stepIndex > maxStepIndex) {
-              maxStepIndex = stepIndex;
-              currentStepValue = stepId;
-            }
-          }
-        }
-      }
-    }
-
-    // If not found from active cycles, check all non-completed cycles (same logic as timeline)
-    if (!currentStepValue && finalAllCyclesData.length > 0) {
-      const sortedCycles = [...finalAllCyclesData].sort((a, b) => {
-        if (a.cycleNumber !== undefined && b.cycleNumber !== undefined) {
-          return a.cycleNumber - b.cycleNumber;
-        }
-        if (a.startDate && b.startDate) {
-          return (
-            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+          return {
+            currentStep: stepId,
+            nextStep: next,
+          };
+        } else {
+          console.warn(
+            `[CycleUpdateForm] Failed to map stepType "${activeCycle.stepType}" with treatmentType "${treatmentTypeForMapping}"`
           );
         }
-        return 0;
-      });
+      }
 
-      // Find cycles that are not completed, cancelled, or failed
-      const nonCompletedCycles = sortedCycles.filter((c) => {
-        const status = normalizeTreatmentCycleStatus(c.status);
-        return (
-          status !== "Completed" &&
-          status !== "Cancelled" &&
-          status !== "Failed"
+      // PRIORITY 3: Use active cycle's cycleName (reliable source from active cycle)
+      if (activeCycle.cycleName) {
+        const stepId = mapCycleNameToStep(
+          activeCycle.cycleName,
+          treatmentTypeForMapping
         );
-      });
-
-      // Find the step for the most advanced non-completed cycle
-      if (nonCompletedCycles.length > 0) {
-        let maxStepIndex = -1;
-        for (const nonCompletedCycle of nonCompletedCycles) {
-          const stepId = mapCycleNameToStep(
-            nonCompletedCycle.cycleName,
-            nonCompletedCycle.treatmentType as "IUI" | "IVF" | undefined
+        if (stepId) {
+          const currentIndex = stepList.findIndex((s) => s === stepId);
+          const next =
+            currentIndex >= 0 && currentIndex < stepList.length - 1
+              ? stepList[currentIndex + 1]
+              : null;
+          console.log(
+            `[CycleUpdateForm] Using active cycle's cycleName:`,
+            stepId,
+            `(from cycleName: ${activeCycle.cycleName}, treatmentType: ${treatmentTypeForMapping})`
           );
-          if (stepId && !completedStepsSet.has(stepId)) {
-            const stepIndex = stepList.findIndex((s) => s === stepId);
-            if (stepIndex > maxStepIndex) {
-              maxStepIndex = stepIndex;
-              currentStepValue = stepId;
-            }
-          }
-        }
-      }
-
-      // Collect completedSteps from all cycles
-      for (const cycle of sortedCycles) {
-        if (cycle.completedSteps) {
-          cycle.completedSteps.forEach((step) => completedStepsSet.add(step));
-        }
-        // Also mark completed cycles as completed steps
-        const cycleStatus = normalizeTreatmentCycleStatus(cycle.status);
-        if (cycleStatus === "Completed") {
-          // PRIORITY: Use stepType if available
-          let stepId: IVFStep | IUIStep | null = null;
-          if (cycle.stepType) {
-            stepId = mapStepTypeToStepId(
-              cycle.stepType,
-              cycle.treatmentType as "IUI" | "IVF" | undefined
-            );
-          }
-          // Fallback to cycleName
-          if (!stepId) {
-            stepId = mapCycleNameToStep(
-              cycle.cycleName,
-              cycle.treatmentType as "IUI" | "IVF" | undefined
-            );
-          }
-          if (stepId) {
-            completedStepsSet.add(stepId);
-          }
-        }
-      }
-
-      // If still not found, check completedSteps to determine next step
-      if (!currentStepValue && completedStepsSet.size > 0) {
-        const completedStepsArray = Array.from(completedStepsSet);
-        let maxCompletedIndex = -1;
-        for (const completedStep of completedStepsArray) {
-          const stepIndex = stepList.findIndex((s) => s === completedStep);
-          if (stepIndex > maxCompletedIndex) {
-            maxCompletedIndex = stepIndex;
-          }
-        }
-        // Move to next step after the last completed one
-        if (maxCompletedIndex >= 0 && maxCompletedIndex < stepList.length - 1) {
-          currentStepValue = stepList[maxCompletedIndex + 1];
-        }
-      }
-    }
-
-    // Fallback to cycle.currentStep if available, but only if it's not already completed
-    if (!currentStepValue && currentCycle.currentStep) {
-      // Check if currentStep is already completed
-      if (!completedStepsSet.has(currentCycle.currentStep)) {
-        currentStepValue = currentCycle.currentStep;
-      } else {
-        // If currentStep is completed, use completedSteps to find next step
-        if (completedStepsSet.size > 0) {
-          const completedStepsArray = Array.from(completedStepsSet);
-          let maxCompletedIndex = -1;
-          for (const completedStep of completedStepsArray) {
-            const stepIndex = stepList.findIndex((s) => s === completedStep);
-            if (stepIndex > maxCompletedIndex) {
-              maxCompletedIndex = stepIndex;
-            }
-          }
-          // Move to next step after the last completed one
-          if (
-            maxCompletedIndex >= 0 &&
-            maxCompletedIndex < stepList.length - 1
-          ) {
-            currentStepValue = stepList[maxCompletedIndex + 1];
-          }
-        }
-      }
-    }
-
-    // Final fallback to first step (only if no completed steps and no currentStep)
-    if (!currentStepValue && completedStepsSet.size === 0) {
-      currentStepValue = stepList[0];
-    }
-
-    const currentIndex = stepList.findIndex((s) => s === currentStepValue);
-    const next =
-      currentIndex >= 0 && currentIndex < stepList.length - 1
-        ? stepList[currentIndex + 1]
-        : null;
-
-    return {
-      currentStep: currentStepValue,
-      nextStep: next,
-    };
-  }, [currentCycle, finalAllCyclesData]);
-
-  // Mutation to advance to next step or next cycle
-  const advanceStepMutation = useMutation({
-    mutationFn: async (nextStepId: IVFStep | IUIStep | null) => {
-      // Check if we're at the last step of current cycle
-      const isLastStep = !nextStepId;
-
-      if (isLastStep) {
-        // Complete current cycle and move to next cycle
-        const now = new Date().toISOString();
-
-        // 1. Complete current cycle
-        await api.treatmentCycle.updateTreatmentCycle(currentCycle.id, {
-          status: "Completed",
-          endDate: now,
-          cycleName: currentCycle.cycleName,
-          cycleNumber: currentCycle.cycleNumber,
-          protocol: currentCycle.protocol,
-          notes: currentCycle.notes,
-          cost: currentCycle.cost ?? undefined,
-        });
-
-        // 2. Find and activate next cycle
-        const allCycles = finalAllCyclesData || [];
-        const sortedCycles = [...allCycles].sort((a, b) => {
-          const orderA = a.orderIndex ?? a.cycleNumber ?? 0;
-          const orderB = b.orderIndex ?? b.cycleNumber ?? 0;
-          return orderA - orderB;
-        });
-
-        const currentCycleIndex = sortedCycles.findIndex(
-          (c) => c.id === currentCycle.id
-        );
-
-        if (
-          currentCycleIndex >= 0 &&
-          currentCycleIndex < sortedCycles.length - 1
-        ) {
-          const nextCycle = sortedCycles[currentCycleIndex + 1];
-          const nextCycleStatus = normalizeTreatmentCycleStatus(
-            nextCycle.status
+          return {
+            currentStep: stepId,
+            nextStep: next,
+          };
+        } else {
+          console.warn(
+            `[CycleUpdateForm] Failed to map cycleName "${activeCycle.cycleName}" with treatmentType "${treatmentTypeForMapping}"`
           );
-
-          // Activate next cycle if it's Planned or Scheduled
-          if (
-            nextCycleStatus === "Planned" ||
-            nextCycleStatus === "Scheduled"
-          ) {
-            await api.treatmentCycle.updateTreatmentCycle(nextCycle.id, {
-              status: "InProgress",
-              startDate: now,
-              cycleName: nextCycle.cycleName,
-              cycleNumber: nextCycle.cycleNumber,
-              protocol: nextCycle.protocol,
-              notes: nextCycle.notes,
-              cost: nextCycle.cost ?? undefined,
-            });
-          }
         }
-
-        return {
-          completed: true,
-          nextCycle: currentCycleIndex < sortedCycles.length - 1,
-        };
-      } else {
-        // Advance to next step in current cycle
-        const currentCompleted = currentCycle.completedSteps || [];
-        const newCompleted = [
-          ...new Set([...currentCompleted, currentCycle.currentStep!]),
-        ];
-
-        // Use updateTreatmentCycle API (PUT /api/treatment-cycles/{id})
-        return api.treatmentCycle.updateTreatmentCycle(currentCycle.id, {
-          status: "InProgress",
-          cycleName: currentCycle.cycleName,
-          cycleNumber: currentCycle.cycleNumber,
-          protocol: currentCycle.protocol,
-          notes: currentCycle.notes,
-          cost: currentCycle.cost ?? undefined,
-          // Legacy fields for backward compatibility
-          currentStep: nextStepId,
-          completedSteps: newCompleted,
-          stepDates: {
-            ...(currentCycle.stepDates || {}),
-            [currentCycle.currentStep!]: new Date().toISOString(),
-            [nextStepId]: new Date().toISOString(),
-          },
-        });
       }
-    },
-    onSuccess: (result) => {
-      if (result && typeof result === "object" && "completed" in result) {
-        if (result.completed && result.nextCycle) {
-          toast.success("Cycle completed and moved to next cycle");
-        } else if (result.completed) {
-          toast.success("Cycle completed");
-        }
-      } else {
-        toast.success("Advanced to next treatment stage");
-      }
-      queryClient.invalidateQueries({
-        queryKey: ["doctor", "treatment-cycle", currentCycle.id],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["doctor", "treatment-cycles"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["treatment-cycles", "treatment", currentCycle.treatmentId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["appointments", "patient", currentCycle.patientId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["samples", "cycle", currentCycle.id],
-      });
-      onStepAdvanced?.();
-    },
-    onError: (error: any) => {
-      toast.error(
-        error?.response?.data?.message || "Failed to advance to next stage"
+
+      // If activeCycle exists but has no step info, try currentStepFromApi before falling back to first step
+      console.warn(
+        `[CycleUpdateForm] Active cycle (${activeCycle.cycleNumber}: ${activeCycle.cycleName}) exists but has no step info. Trying currentStepFromApi...`
       );
-    },
-  });
+
+      // Try currentStepFromApi as fallback if active cycle has no step info
+      if (currentStepFromApi !== null && currentStepFromApi !== undefined) {
+        const stepFromApi = getStepIdFromNumber(currentStepFromApi, stepList);
+        if (stepFromApi) {
+          const currentIndex = stepList.findIndex((s) => s === stepFromApi);
+          const next =
+            currentIndex >= 0 && currentIndex < stepList.length - 1
+              ? stepList[currentIndex + 1]
+              : null;
+          console.log(
+            `[CycleUpdateForm] Using currentStepFromApi (active cycle has no step info):`,
+            stepFromApi
+          );
+          return {
+            currentStep: stepFromApi,
+            nextStep: next,
+          };
+        }
+      }
+
+      // Final fallback: use first step
+      const firstStep = stepList[0] || null;
+      console.warn(
+        `[CycleUpdateForm] No step found from active cycle or API. Using first step:`,
+        firstStep
+      );
+      return {
+        currentStep: firstStep,
+        nextStep: stepList.length > 1 ? stepList[1] : null,
+      };
+    }
+
+    // PRIORITY 4: Use currentStepFromApi as fallback (only if NO active cycle exists)
+    // This handles cases where there's no active cycle yet
+    if (
+      !activeCycle &&
+      currentStepFromApi !== null &&
+      currentStepFromApi !== undefined
+    ) {
+      const stepFromApi = getStepIdFromNumber(currentStepFromApi, stepList);
+      if (stepFromApi) {
+        const currentIndex = stepList.findIndex((s) => s === stepFromApi);
+        const next =
+          currentIndex >= 0 && currentIndex < stepList.length - 1
+            ? stepList[currentIndex + 1]
+            : null;
+        console.log(
+          `[CycleUpdateForm] Using currentStepFromApi (no active cycle):`,
+          stepFromApi
+        );
+        return {
+          currentStep: stepFromApi,
+          nextStep: next,
+        };
+      }
+    }
+
+    // FALLBACK: If no step found and no active cycle, use first step
+    const firstStep = stepList[0] || null;
+    console.log(
+      `[CycleUpdateForm] No step found, using first step:`,
+      firstStep
+    );
+    return {
+      currentStep: firstStep,
+      nextStep: stepList.length > 1 ? stepList[1] : null,
+    };
+  }, [
+    currentCycle.treatmentType,
+    activeCycle,
+    currentCycle,
+    currentStepFromApi,
+    finalAllCyclesData,
+  ]);
 
   // Mutation to create medical record
   const createMedicalRecordMutation = useMutation({
@@ -1036,16 +1034,6 @@ export function CycleUpdateForm({
     },
   });
 
-  const handleAdvanceStep = () => {
-    if (!nextStep) {
-      // At the last step - complete current cycle and move to next cycle
-      advanceStepMutation.mutate(null);
-    } else {
-      // Advance to next step in current cycle
-      advanceStepMutation.mutate(nextStep);
-    }
-  };
-
   const handleCreateMedicalRecord = (data: MedicalRecordFormData) => {
     createMedicalRecordMutation.mutate(data);
   };
@@ -1075,12 +1063,61 @@ export function CycleUpdateForm({
     return stepLabels[step] || step;
   };
 
-  const appointmentsCount = appointmentsData?.length || 0;
+  const appointmentsCount = cycleAppointmentsData?.length || 0;
   const samplesCount = samplesData?.length || 0;
   const agreementsCount = agreementsData?.length || 0;
+  const serviceRequestsCount = serviceRequestsData?.length || 0;
+  const medicalRecordsCount = medicalRecordsData?.length || 0;
+  const documentsCount = documentsData?.length || 0;
+
+  // Check if viewing cycle is the active cycle
+  // Compare by both id and cycleNumber to ensure accuracy
+  const isViewingActiveCycle =
+    activeCycle &&
+    (activeCycle.id === currentCycle.id ||
+      activeCycle.cycleNumber === currentCycle.cycleNumber);
+  const isViewingFutureCycle =
+    activeCycle && currentCycle.cycleNumber > activeCycle.cycleNumber;
 
   return (
     <div className="space-y-6">
+      {/* Warning if viewing non-active cycle */}
+      {!isViewingActiveCycle && activeCycle && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 text-yellow-600">
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-yellow-800">
+                {isViewingFutureCycle
+                  ? "Viewing Future Cycle"
+                  : "Viewing Previous Cycle"}
+              </h3>
+              <p className="mt-1 text-sm text-yellow-700">
+                This is{" "}
+                {isViewingFutureCycle
+                  ? "a planned future cycle"
+                  : "a completed/inactive cycle"}
+                . The current active cycle is{" "}
+                <strong>
+                  Cycle {activeCycle.cycleNumber}: {activeCycle.cycleName}
+                </strong>
+                .
+                {isViewingFutureCycle &&
+                  " You must complete the active cycle first before starting this one."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Treatment Progress Timeline */}
       <Card>
         <CardHeader>
@@ -1095,7 +1132,7 @@ export function CycleUpdateForm({
       </Card>
 
       {/* Statistics */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
@@ -1121,6 +1158,36 @@ export function CycleUpdateForm({
                 {agreementsCount}
               </p>
               <p className="text-sm text-gray-500">Agreements</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">
+                {serviceRequestsCount}
+              </p>
+              <p className="text-sm text-gray-500">Service Requests</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">
+                {medicalRecordsCount}
+              </p>
+              <p className="text-sm text-gray-500">Medical Records</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">
+                {documentsCount}
+              </p>
+              <p className="text-sm text-gray-500">Documents</p>
             </div>
           </CardContent>
         </Card>
@@ -1150,75 +1217,208 @@ export function CycleUpdateForm({
             const normalizedStatus = normalizeTreatmentCycleStatus(
               currentCycle.status
             );
-            // Check if there's a next cycle available
-            const allCycles = finalAllCyclesData || [];
-            const sortedCycles = [...allCycles].sort((a, b) => {
-              const orderA = a.orderIndex ?? a.cycleNumber ?? 0;
-              const orderB = b.orderIndex ?? b.cycleNumber ?? 0;
-              return orderA - orderB;
-            });
-            const currentCycleIndex = sortedCycles.findIndex(
-              (c) => c.id === currentCycle.id
-            );
-            const hasNextCycle =
-              currentCycleIndex >= 0 &&
-              currentCycleIndex < sortedCycles.length - 1;
-
             return (
               normalizedStatus !== "Completed" &&
               normalizedStatus !== "Cancelled" && (
                 <div className="flex flex-wrap gap-2">
-                  {nextStep ? (
-                    <Button
-                      onClick={handleAdvanceStep}
-                      disabled={advanceStepMutation.isPending}
-                    >
-                      {advanceStepMutation.isPending
-                        ? "Advancing..."
-                        : "Advance to Next Stage"}
-                    </Button>
-                  ) : hasNextCycle ? (
-                    <Button
-                      onClick={handleAdvanceStep}
-                      disabled={advanceStepMutation.isPending}
-                    >
-                      {advanceStepMutation.isPending
-                        ? "Completing..."
-                        : "Complete Cycle & Move to Next"}
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleAdvanceStep}
-                      disabled={advanceStepMutation.isPending}
-                    >
-                      {advanceStepMutation.isPending
-                        ? "Completing..."
-                        : "Complete Cycle"}
-                    </Button>
-                  )}
                   {(normalizedStatus === "Planned" ||
                     normalizedStatus === "Scheduled") &&
-                    !currentCycle.currentStep && (
+                    // Show Start Cycle button if cycle hasn't been started yet
+                    // Allow starting even if viewing non-active cycle (will start active cycle with warning)
+                    !cycle.currentStep &&
+                    !rawCurrentCycle.currentStep && (
                       <Button
                         type="button"
                         onClick={async (e) => {
                           e.preventDefault();
                           e.stopPropagation();
 
+                          // Always start the ACTIVE cycle, not the viewing cycle
+                          // This ensures we follow the correct workflow order
+                          const cycleToStart = activeCycle || currentCycle;
+                          const cycleIdToStart = cycleToStart.id;
+                          const cycleNumberToStart = cycleToStart.cycleNumber;
+
+                          // Check if viewing cycle is different from active cycle
+                          const isViewingActiveCycleForStart =
+                            activeCycle &&
+                            (activeCycle.id === cycle.id ||
+                              activeCycle.cycleNumber === cycle.cycleNumber);
+
+                          console.log(
+                            `[CycleUpdateForm] Start button clicked:`,
+                            {
+                              viewingCycleId: cycle.id,
+                              viewingCycleNumber: cycle.cycleNumber,
+                              viewingCycleName: cycle.cycleName,
+                              activeCycleId: activeCycle?.id,
+                              activeCycleNumber: activeCycle?.cycleNumber,
+                              activeCycleName: activeCycle?.cycleName,
+                              willStartCycleId: cycleIdToStart,
+                              willStartCycleNumber: cycleNumberToStart,
+                              isViewingActiveCycle:
+                                isViewingActiveCycleForStart,
+                            }
+                          );
+
+                          // Show warning if trying to start while viewing a different cycle
+                          if (!isViewingActiveCycleForStart && activeCycle) {
+                            const confirmMessage =
+                              `You are viewing Cycle ${cycle.cycleNumber} (${cycle.cycleName}), ` +
+                              `but the active cycle to start is Cycle ${cycleToStart.cycleNumber} (${cycleToStart.cycleName}). ` +
+                              `Do you want to start Cycle ${cycleToStart.cycleNumber}?`;
+
+                            if (!confirm(confirmMessage)) {
+                              return;
+                            }
+                          }
+
+                          // Additional validation: verify this cycle should be started
+                          // If cycle has a step determined from cycleName, it might already be in progress
+                          const cycleStepFromName = cycleToStart.cycleName
+                            ? mapCycleNameToStep(
+                                cycleToStart.cycleName,
+                                cycleToStart.treatmentType as
+                                  | "IUI"
+                                  | "IVF"
+                                  | undefined
+                              )
+                            : null;
+
+                          if (cycleStepFromName) {
+                            console.warn(
+                              `[CycleUpdateForm] Cycle ${cycleNumberToStart} appears to have step ${cycleStepFromName} from cycleName "${cycleToStart.cycleName}". ` +
+                                `This cycle may already be in progress. Proceeding with start anyway.`
+                            );
+                          }
+
                           try {
+                            // IMPORTANT: Use cycle.id (from prop) instead of currentCycle.id
+                            // This ensures we start the correct cycle that was passed to this component
+                            // currentCycle might be modified by logic, but cycle prop is always the original
+
+                            // Verify we're starting the correct cycle
+                            if (cycleIdToStart !== currentCycle.id) {
+                              console.warn(
+                                `Cycle ID mismatch: prop cycle.id (${cycleIdToStart}) vs currentCycle.id (${currentCycle.id}). Using prop cycle.id.`
+                              );
+                            }
+
+                            // CRITICAL: Determine the correct step for THIS CYCLE (cycleToStart) before starting
+                            // This ensures we start the cycle at the correct step based on its stepType/cycleName
+                            let expectedStep: IVFStep | IUIStep | null = null;
+
+                            // Priority 1: Use stepType if available (most accurate)
+                            if (cycleToStart.stepType) {
+                              const stepId = mapStepTypeToStepId(
+                                cycleToStart.stepType,
+                                cycleToStart.treatmentType as
+                                  | "IUI"
+                                  | "IVF"
+                                  | undefined
+                              );
+                              if (stepId) {
+                                expectedStep = stepId;
+                              }
+                            }
+
+                            // Priority 2: Use cycleName if stepType didn't work
+                            if (!expectedStep && cycleToStart.cycleName) {
+                              const stepId = mapCycleNameToStep(
+                                cycleToStart.cycleName,
+                                cycleToStart.treatmentType as
+                                  | "IUI"
+                                  | "IVF"
+                                  | undefined
+                              );
+                              if (stepId) {
+                                expectedStep = stepId;
+                              }
+                            }
+
+                            // Log cycle information before starting
+                            console.log(`[CycleUpdateForm] Starting cycle:`, {
+                              cycleId: cycleIdToStart,
+                              cycleNumber: cycleNumberToStart,
+                              cycleName: cycleToStart.cycleName,
+                              stepType: cycleToStart.stepType,
+                              expectedStep: expectedStep,
+                              currentStep: currentStep,
+                              isViewingActiveCycle: isViewingActiveCycle,
+                              viewingCycle: cycle.cycleNumber,
+                              activeCycle: activeCycle?.cycleNumber,
+                            });
+
                             // Use POST /api/treatment-cycles/{id}/start
                             const response =
                               await api.treatmentCycle.startTreatmentCycle(
-                                currentCycle.id,
+                                cycleIdToStart,
                                 {
                                   startDate: new Date().toISOString(),
                                 }
                               );
 
+                            // Verify the response is for the correct cycle
+                            if (response.data) {
+                              if (response.data.id !== cycleIdToStart) {
+                                console.error(
+                                  `[CycleUpdateForm] Backend returned different cycle! Expected: ${cycleIdToStart}, Got: ${response.data.id}`
+                                );
+                                toast.error(
+                                  `Warning: Started cycle ${response.data.cycleNumber} instead of cycle ${cycleNumberToStart}. Please verify.`
+                                );
+                              } else {
+                                console.log(
+                                  `[CycleUpdateForm] Successfully started cycle ${cycleNumberToStart} (ID: ${cycleIdToStart})`
+                                );
+
+                                // CRITICAL: Verify and fix currentStep if backend didn't set it correctly
+                                // If we have an expected step and backend didn't set it, update it
+                                if (
+                                  expectedStep &&
+                                  response.data.currentStep !== expectedStep
+                                ) {
+                                  console.warn(
+                                    `[CycleUpdateForm] Backend set currentStep to ${response.data.currentStep}, but expected ${expectedStep}. Updating...`
+                                  );
+
+                                  // Update cycle with correct currentStep
+                                  try {
+                                    const updateResponse =
+                                      await api.treatmentCycle.updateTreatmentCycle(
+                                        cycleIdToStart,
+                                        {
+                                          currentStep: expectedStep,
+                                          stepDates: {
+                                            ...(response.data.stepDates || {}),
+                                            [expectedStep]:
+                                              new Date().toISOString(),
+                                          },
+                                        }
+                                      );
+
+                                    if (updateResponse.data) {
+                                      // Update response data with corrected step
+                                      response.data = updateResponse.data;
+                                      console.log(
+                                        `[CycleUpdateForm] Successfully updated cycle ${cycleNumberToStart} with correct currentStep: ${expectedStep}`
+                                      );
+                                    }
+                                  } catch (updateError: any) {
+                                    console.error(
+                                      `[CycleUpdateForm] Failed to update currentStep:`,
+                                      updateError
+                                    );
+                                    // Don't show error to user, just log it
+                                  }
+                                }
+                              }
+                            }
+
                             // Update query data immediately with response data
                             if (response.data) {
                               queryClient.setQueryData(
-                                ["doctor", "treatment-cycle", currentCycle.id],
+                                ["doctor", "treatment-cycle", cycleIdToStart],
                                 response.data
                               );
                             }
@@ -1227,11 +1427,12 @@ export function CycleUpdateForm({
 
                             // Invalidate queries without immediate refetch to avoid page reload
                             // Use refetchType: 'none' to prevent automatic refetch
+                            // Use cycleIdToStart to ensure we invalidate the correct cycle
                             queryClient.invalidateQueries({
                               queryKey: [
                                 "doctor",
                                 "treatment-cycle",
-                                currentCycle.id,
+                                cycleIdToStart,
                               ],
                               refetchType: "none", // Don't refetch immediately
                             });
@@ -1251,6 +1452,23 @@ export function CycleUpdateForm({
                                 refetchType: "none",
                               });
                             }, 100);
+
+                            // Send notification to patient
+                            if (currentCycle.patientId) {
+                              const { sendTreatmentCycleNotification } =
+                                await import("@/utils/notifications");
+                              await sendTreatmentCycleNotification(
+                                currentCycle.patientId,
+                                "started",
+                                {
+                                  cycleId: currentCycle.id,
+                                  cycleName: currentCycle.cycleName,
+                                  cycleNumber: currentCycle.cycleNumber,
+                                  treatmentType: currentCycle.treatmentType,
+                                },
+                                doctorId || undefined
+                              );
+                            }
 
                             // Show appointment creation modal after successfully starting cycle
                             if (currentCycle.patientId && doctorId) {
@@ -1812,6 +2030,25 @@ export function CycleUpdateForm({
                     queryClient.invalidateQueries({
                       queryKey: ["treatment-cycles", "patient"],
                     });
+
+                    // Send notification to patient
+                    if (currentCycle.patientId) {
+                      const { sendTreatmentCycleNotification } = await import(
+                        "@/utils/notifications"
+                      );
+                      await sendTreatmentCycleNotification(
+                        currentCycle.patientId,
+                        "completed",
+                        {
+                          cycleId: currentCycle.id,
+                          cycleName: currentCycle.cycleName,
+                          cycleNumber: currentCycle.cycleNumber,
+                          treatmentType: currentCycle.treatmentType,
+                        },
+                        doctorId || undefined
+                      );
+                    }
+
                     setShowCompleteConfirm(false);
                     setCompleteOutcome("");
                     setCompleteNotes("");
@@ -1861,6 +2098,25 @@ export function CycleUpdateForm({
                 currentCycle.treatmentId,
               ],
             });
+
+            // Send notification to patient
+            if (currentCycle.patientId) {
+              const { sendTreatmentCycleNotification } = await import(
+                "@/utils/notifications"
+              );
+              await sendTreatmentCycleNotification(
+                currentCycle.patientId,
+                "cancelled",
+                {
+                  cycleId: currentCycle.id,
+                  cycleName: currentCycle.cycleName,
+                  cycleNumber: currentCycle.cycleNumber,
+                  treatmentType: currentCycle.treatmentType,
+                },
+                doctorId || undefined
+              );
+            }
+
             setShowCancelConfirm(false);
           } catch (error: any) {
             toast.error(

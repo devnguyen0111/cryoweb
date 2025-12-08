@@ -33,9 +33,8 @@ function ReceptionistServiceRequestDetailRoute() {
   const [notesDraft, setNotesDraft] = useState("");
   const [decisionMode, setDecisionMode] = useState<DecisionMode>(null);
   const [decisionNotes, setDecisionNotes] = useState("");
-  const [showQRCode, setShowQRCode] = useState(false);
-  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
-  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [createdTransactionId, setCreatedTransactionId] = useState<
     string | null
   >(null);
@@ -175,12 +174,11 @@ function ReceptionistServiceRequestDetailRoute() {
     onSuccess: (response) => {
       if (response.data) {
         // Use paymentUrl from the transaction response
-        setQrCodeUrl(
-          response.data.paymentUrl || response.data.qrCodeUrl || null
+        setPaymentUrl(
+          response.data.paymentUrl || response.data.vnPayUrl || null
         );
-        setQrCodeData(response.data.qrCodeData || null);
         setCreatedTransactionId(response.data.id);
-        setShowQRCode(true);
+        setShowPaymentModal(true);
         toast.success("Payment transaction created successfully");
         queryClient.invalidateQueries({
           queryKey: ["receptionist", "transactions"],
@@ -501,8 +499,8 @@ function ReceptionistServiceRequestDetailRoute() {
                             disabled={createPaymentQRMutation.isPending}
                           >
                             {createPaymentQRMutation.isPending
-                              ? "Generating QR Code..."
-                              : "Create Payment QR Code"}
+                              ? "Creating Transaction..."
+                              : "Create Payment Transaction"}
                           </Button>
                         )}
                       </div>
@@ -516,42 +514,24 @@ function ReceptionistServiceRequestDetailRoute() {
           </div>
         </div>
 
-        {/* QR Code Modal */}
+        {/* Payment URL Modal */}
         <Modal
-          isOpen={showQRCode}
+          isOpen={showPaymentModal}
           onClose={() => {
-            setShowQRCode(false);
-            setQrCodeData(null);
-            setQrCodeUrl(null);
+            setShowPaymentModal(false);
+            setPaymentUrl(null);
             setCreatedTransactionId(null);
           }}
-          title="Payment QR Code"
-          description="Scan this QR code to complete payment for this service request"
+          title="Payment Transaction Created"
+          description="Click the link below to complete payment for this service request"
           size="md"
         >
           <div className="space-y-4">
-            {qrCodeUrl || qrCodeData ? (
+            {paymentUrl ? (
               <div className="space-y-4">
-                {qrCodeUrl ? (
-                  <div className="flex justify-center">
-                    <img
-                      src={qrCodeUrl}
-                      alt="Payment QR Code"
-                      className="max-w-full h-auto border border-gray-200 rounded-lg"
-                    />
-                  </div>
-                ) : qrCodeData ? (
-                  <div className="flex justify-center">
-                    <div
-                      className="border border-gray-200 rounded-lg p-4 bg-white"
-                      dangerouslySetInnerHTML={{ __html: qrCodeData }}
-                    />
-                  </div>
-                ) : null}
                 <div className="text-center space-y-2">
                   <p className="text-sm text-gray-600">
-                    Scan this QR code with your payment app to complete the
-                    transaction.
+                    Click the button below to open the payment page.
                   </p>
                   <div className="text-xs text-gray-500 space-y-1">
                     <p>
@@ -573,35 +553,44 @@ function ReceptionistServiceRequestDetailRoute() {
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2">
                   <Button
-                    variant="outline"
-                    className="flex-1"
+                    className="w-full"
                     onClick={() => {
-                      navigate({
-                        to: "/receptionist/transactions",
-                      });
+                      window.open(paymentUrl, "_blank");
                     }}
                   >
-                    View All Transactions
+                    Open Payment Page
                   </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => {
-                      setShowQRCode(false);
-                      setQrCodeData(null);
-                      setQrCodeUrl(null);
-                      setCreatedTransactionId(null);
-                    }}
-                  >
-                    Close
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        navigate({
+                          to: "/receptionist/transactions",
+                        });
+                      }}
+                    >
+                      View All Transactions
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setShowPaymentModal(false);
+                        setPaymentUrl(null);
+                        setCreatedTransactionId(null);
+                      }}
+                    >
+                      Close
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : (
               <div className="py-12 text-center text-gray-500">
-                Unable to generate QR code. Please try again.
+                Unable to get payment URL. Please try again.
               </div>
             )}
           </div>

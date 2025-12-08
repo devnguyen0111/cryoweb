@@ -35,6 +35,7 @@ export const Route = createFileRoute("/doctor/treatment-cycles")({
 
 interface PatientInTreatment {
   patientId: string;
+  treatmentId: string; // Add treatmentId to distinguish between different treatments
   patientName: string;
   patientCode?: string;
   treatmentType: "IUI" | "IVF" | null;
@@ -61,7 +62,9 @@ function DoctorTreatmentCyclesComponent() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["doctor", "treatment-cycles"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "treatment-cycles"],
+      }),
       queryClient.invalidateQueries({ queryKey: ["treatment"] }),
     ]);
     setIsRefreshing(false);
@@ -178,20 +181,27 @@ function DoctorTreatmentCyclesComponent() {
     return map;
   }, [treatmentsData]);
 
-  // Group cycles by patient and fetch patient details
+  // Group cycles by patient AND treatment to show each treatment separately
+  // This allows showing cancelled treatments alongside new treatments
   const patientsInTreatment = useMemo(() => {
     const cycles = cyclesData?.data || [];
+    // Use composite key: patientId + treatmentId to group by treatment
     const patientMap = new Map<string, PatientInTreatment>();
 
     cycles.forEach((cycle) => {
       // Get patientId from cycle or from treatment map
       const patientId =
         cycle.patientId || treatmentToPatientMap.get(cycle.treatmentId);
-      if (!patientId) return;
+      if (!patientId || !cycle.treatmentId) return;
 
-      if (!patientMap.has(patientId)) {
-        patientMap.set(patientId, {
+      // Create composite key: patientId + treatmentId
+      // This ensures each treatment shows as a separate entry
+      const compositeKey = `${patientId}_${cycle.treatmentId}`;
+
+      if (!patientMap.has(compositeKey)) {
+        patientMap.set(compositeKey, {
           patientId,
+          treatmentId: cycle.treatmentId,
           patientName: "Loading...",
           patientCode: undefined,
           treatmentType: cycle.treatmentType || null,
@@ -200,7 +210,7 @@ function DoctorTreatmentCyclesComponent() {
         });
       }
 
-      const patient = patientMap.get(patientId)!;
+      const patient = patientMap.get(compositeKey)!;
       patient.allCycles.push(cycle);
 
       // Get treatment type from cycle or treatment
@@ -229,47 +239,46 @@ function DoctorTreatmentCyclesComponent() {
     });
 
     // After grouping, select the best activeCycle for each patient
-    // Priority: InProgress > Planned/Scheduled/OnHold > Most recent (by startDate or createdAt)
+    // Active cycle = cycle with LOWEST cycleNumber that is not Completed/Cancelled/Failed
+    // If all cycles are cancelled/completed/failed, use the most recent cycle for display
+    // This ensures we always work on cycles in order (1 → 2 → 3 → ...), regardless of status
     patientMap.forEach((patient) => {
       if (patient.allCycles.length === 0) return;
 
-      // Sort cycles by priority and date
-      const sortedCycles = [...patient.allCycles].sort((a, b) => {
-        const aStatus = normalizeTreatmentCycleStatus(a.status);
-        const bStatus = normalizeTreatmentCycleStatus(b.status);
+      // Find all cycles that are not Completed, Cancelled, or Failed
+      // Sort by cycleNumber (ascending) and return the first one
+      const activeCycles = patient.allCycles
+        .filter((c) => {
+          const status = normalizeTreatmentCycleStatus(c.status);
+          return (
+            status !== "Completed" &&
+            status !== "Cancelled" &&
+            status !== "Failed"
+          );
+        })
+        .sort((a, b) => a.cycleNumber - b.cycleNumber);
 
-        // Priority order: InProgress > Planned/Scheduled/OnHold > Others
-        const getPriority = (status: string | null | undefined): number => {
-          if (!status) return 999;
-          if (status === "InProgress") return 1;
-          if (["Planned", "Scheduled", "OnHold"].includes(status)) return 2;
-          return 3; // Completed, Cancelled, Failed
-        };
-
-        const aPriority = getPriority(aStatus);
-        const bPriority = getPriority(bStatus);
-
-        if (aPriority !== bPriority) {
-          return aPriority - bPriority;
-        }
-
-        // If same priority, sort by date (most recent first)
-        const aDate = a.startDate
-          ? new Date(a.startDate).getTime()
-          : a.createdAt
-            ? new Date(a.createdAt).getTime()
-            : 0;
-        const bDate = b.startDate
-          ? new Date(b.startDate).getTime()
-          : b.createdAt
-            ? new Date(b.createdAt).getTime()
-            : 0;
-
-        return bDate - aDate; // Most recent first
-      });
-
-      // Select the first (highest priority) cycle as activeCycle
-      patient.activeCycle = sortedCycles[0];
+      // Select the cycle with lowest cycleNumber as activeCycle
+      // If no active cycles, use the most recent cycle (including cancelled) for display
+      if (activeCycles.length > 0) {
+        patient.activeCycle = activeCycles[0];
+      } else {
+        // All cycles are cancelled/completed/failed - use the most recent one for display
+        const sortedByDate = [...patient.allCycles].sort((a, b) => {
+          const aDate = a.updatedAt
+            ? new Date(a.updatedAt).getTime()
+            : a.createdAt
+              ? new Date(a.createdAt).getTime()
+              : 0;
+          const bDate = b.updatedAt
+            ? new Date(b.updatedAt).getTime()
+            : b.createdAt
+              ? new Date(b.createdAt).getTime()
+              : 0;
+          return bDate - aDate; // Most recent first
+        });
+        patient.activeCycle = sortedByDate[0] || null;
+      }
     });
 
     return Array.from(patientMap.values());
@@ -510,7 +519,15 @@ function DoctorTreatmentCyclesComponent() {
       ? phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
       : null;
 
-    if (!activeCycle || !cycleWithType) {
+    // Always show patient card, even if all cycles are cancelled/completed/failed
+    // This allows viewing cancelled treatments
+    if (!activeCycle) {
+      return null; // Only hide if truly no cycles exist
+    }
+
+    if (!cycleWithType) {
+      // If cycleWithType is null, still try to render with activeCycle
+      // This handles cases where treatment data might not be available
       return null;
     }
 
@@ -526,6 +543,34 @@ function DoctorTreatmentCyclesComponent() {
     const appointmentsCount = appointmentsData?.length || 0;
     const samplesCount = samplesData?.length || 0;
     const agreementsCount = agreementsData?.length || 0;
+
+    // Determine treatment status based on all cycles
+    const treatmentStatus = useMemo(() => {
+      const allCycles = patient.allCycles;
+      if (allCycles.length === 0) return null;
+
+      const statuses = allCycles.map((c) =>
+        normalizeTreatmentCycleStatus(c.status)
+      );
+
+      // If all cycles are cancelled, treatment is cancelled
+      if (statuses.every((s) => s === "Cancelled")) {
+        return "Cancelled";
+      }
+
+      // If all cycles are completed, treatment is completed
+      if (statuses.every((s) => s === "Completed")) {
+        return "Completed";
+      }
+
+      // If all cycles are failed, treatment is failed
+      if (statuses.every((s) => s === "Failed")) {
+        return "Failed";
+      }
+
+      // Otherwise, treatment is active (has at least one non-completed/cancelled/failed cycle)
+      return "Active";
+    }, [patient.allCycles]);
 
     return (
       <>
@@ -559,6 +604,22 @@ function DoctorTreatmentCyclesComponent() {
                         )}
                       >
                         {cycleWithType.treatmentType}
+                      </span>
+                    )}
+                    {treatmentStatus && (
+                      <span
+                        className={cn(
+                          "rounded-full px-3 py-1 text-xs font-semibold",
+                          treatmentStatus === "Cancelled"
+                            ? "bg-red-100 text-red-700"
+                            : treatmentStatus === "Completed"
+                              ? "bg-green-100 text-green-700"
+                              : treatmentStatus === "Failed"
+                                ? "bg-gray-100 text-gray-700"
+                                : "bg-blue-100 text-blue-700"
+                        )}
+                      >
+                        {treatmentStatus}
                       </span>
                     )}
                   </div>
@@ -683,7 +744,9 @@ function DoctorTreatmentCyclesComponent() {
                   onClick={handleRefresh}
                   disabled={isRefreshing}
                 >
-                  <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                  <RefreshCw
+                    className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                  />
                   Refresh
                 </Button>
                 <Button
@@ -704,7 +767,8 @@ function DoctorTreatmentCyclesComponent() {
                 <div>
                   <CardTitle>Filters</CardTitle>
                   <p className="text-sm text-gray-500">
-                    {filteredPatients.length} patients in treatment
+                    {filteredPatients.length} treatment
+                    {filteredPatients.length !== 1 ? "s" : ""} in progress
                   </p>
                 </div>
               </div>
@@ -750,7 +814,10 @@ function DoctorTreatmentCyclesComponent() {
               </div>
             ) : filteredPatients.length > 0 ? (
               filteredPatients.map((patient) => (
-                <PatientCard key={patient.patientId} patient={patient} />
+                <PatientCard
+                  key={`${patient.patientId}_${patient.treatmentId}`}
+                  patient={patient}
+                />
               ))
             ) : (
               <div className="py-12 text-center">

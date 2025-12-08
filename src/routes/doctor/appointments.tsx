@@ -174,17 +174,29 @@ function DoctorAppointmentsComponent() {
   }, [patientQueries, patientIds]);
 
   const updateStatusMutation = useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       appointmentId,
       status,
     }: {
       appointmentId: string;
       status: string;
-    }) =>
-      api.appointment.updateAppointmentStatus(appointmentId, {
-        status: status as any,
-      }),
-    onSuccess: (_, variables) => {
+    }) => {
+      const result = await api.appointment.updateAppointmentStatus(
+        appointmentId,
+        {
+          status: status as any,
+        }
+      );
+      // Fetch appointment details to get patientId
+      try {
+        const appointmentDetails =
+          await api.appointment.getAppointmentDetails(appointmentId);
+        return { result, appointment: appointmentDetails.data };
+      } catch {
+        return { result, appointment: null };
+      }
+    },
+    onSuccess: async (data, variables) => {
       toast.success("Appointment status updated successfully");
       queryClient.invalidateQueries({ queryKey: ["doctor", "appointments"] });
       queryClient.invalidateQueries({ queryKey: ["appointments", "today"] });
@@ -196,6 +208,22 @@ function DoctorAppointmentsComponent() {
           { appointmentId: variables.appointmentId },
         ],
       });
+      
+      // Send notification to patient
+      if (data.appointment?.patientId) {
+        const { sendAppointmentNotification } = await import(
+          "@/utils/notifications"
+        );
+        await sendAppointmentNotification(
+          data.appointment.patientId,
+          "status_changed",
+          {
+            appointmentId: variables.appointmentId,
+            appointmentDate: data.appointment.appointmentDate,
+            status: variables.status,
+          }
+        );
+      }
     },
     onError: (error: any) => {
       const message =

@@ -7,7 +7,7 @@ interface ServiceRequestActionModalProps {
   isOpen: boolean;
   onClose: () => void;
   request: ServiceRequest | null;
-  action: "approve" | "reject" | "complete" | null;
+  action: "reject" | "complete" | null;
   onConfirm: () => void;
   isLoading?: boolean;
 }
@@ -32,13 +32,6 @@ export function ServiceRequestActionModal({
 
   const getActionInfo = () => {
     switch (action) {
-      case "approve":
-        return {
-          title: "Approve Service Request",
-          description: "Are you sure you want to approve this service request?",
-          buttonText: "Approve",
-          buttonVariant: "default" as const,
-        };
       case "reject":
         return {
           title: "Reject Service Request",

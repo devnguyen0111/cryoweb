@@ -11,7 +11,6 @@ import type {
   CompleteTreatmentCycleRequest,
   CancelTreatmentCycleRequest,
   GetTreatmentCyclesRequest,
-  LabSample,
   AppointmentSummary,
   TreatmentCycleBillingResponse,
   AddCycleSampleRequest,
@@ -248,9 +247,10 @@ export class TreatmentCycleApi {
   /**
    * Get cycle samples
    * GET /api/treatment-cycles/{id}/samples
+   * Returns array of sample IDs (strings)
    */
-  async getCycleSamples(id: string): Promise<PaginatedResponse<LabSample>> {
-    const response = await this.client.get<PaginatedResponse<LabSample>>(
+  async getCycleSamples(id: string): Promise<BaseResponse<string[]>> {
+    const response = await this.client.get<BaseResponse<string[]>>(
       `/treatment-cycles/${id}/samples`
     );
     return response.data;
@@ -259,12 +259,13 @@ export class TreatmentCycleApi {
   /**
    * Add sample to cycle
    * POST /api/treatment-cycles/{id}/samples
+   * Returns the created sample ID (string)
    */
   async addCycleSample(
     id: string,
     data: AddCycleSampleRequest
-  ): Promise<BaseResponse<LabSample>> {
-    const response = await this.client.post<BaseResponse<LabSample>>(
+  ): Promise<BaseResponse<string>> {
+    const response = await this.client.post<BaseResponse<string>>(
       `/treatment-cycles/${id}/samples`,
       data
     );
@@ -274,12 +275,13 @@ export class TreatmentCycleApi {
   /**
    * Get cycle appointments
    * GET /api/treatment-cycles/{id}/appointments
+   * Returns array of appointment summaries
    */
   async getCycleAppointments(
     id: string
-  ): Promise<PaginatedResponse<AppointmentSummary>> {
+  ): Promise<BaseResponse<AppointmentSummary[]>> {
     const response = await this.client.get<
-      PaginatedResponse<AppointmentSummary>
+      BaseResponse<AppointmentSummary[]>
     >(`/treatment-cycles/${id}/appointments`);
     return response.data;
   }

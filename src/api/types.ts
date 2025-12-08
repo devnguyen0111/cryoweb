@@ -1743,36 +1743,37 @@ export interface GetMediasRequest {
 // Notification Types
 // ============================================================================
 
-export type NotificationType = "Info" | "Warning" | "Error" | "Success";
-export type NotificationStatus = "Unread" | "Read";
+// Legacy notification types - deprecated, use the types below instead
+export type LegacyNotificationType = "Info" | "Warning" | "Error" | "Success";
+export type LegacyNotificationStatus = "Unread" | "Read";
 
-export interface Notification {
+export interface LegacyNotification {
   id: string;
   userId: string;
   title: string;
   message: string;
-  notificationType?: NotificationType;
-  status: NotificationStatus;
+  notificationType?: LegacyNotificationType;
+  status: LegacyNotificationStatus;
   linkUrl?: string;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface CreateNotificationRequest {
+export interface LegacyCreateNotificationRequest {
   userId: string;
   title: string;
   message: string;
-  notificationType?: NotificationType;
+  notificationType?: LegacyNotificationType;
   linkUrl?: string;
 }
 
-export interface UpdateNotificationRequest {
+export interface LegacyUpdateNotificationRequest {
   id: string;
   title?: string;
   message?: string;
-  notificationType?: NotificationType;
-  status?: NotificationStatus;
+  notificationType?: LegacyNotificationType;
+  status?: LegacyNotificationStatus;
   linkUrl?: string;
 }
 
@@ -1981,4 +1982,93 @@ export interface MedicalRecordListQuery {
   Size?: number;
   Sort?: string;
   Order?: "asc" | "desc";
+}
+
+// ============================================================================
+// Notification Types
+// ============================================================================
+
+export type NotificationType =
+  | "Appointment"
+  | "Medication"
+  | "Test"
+  | "Payment"
+  | "Treatment"
+  | "Relationship"
+  | "Reminder";
+
+export type NotificationStatus =
+  | "Scheduled"
+  | "Sent"
+  | "Delivered"
+  | "Read"
+  | "Failed";
+
+export interface Notification {
+  id: string;
+  title: string;
+  content: string;
+  type: NotificationType;
+  status: NotificationStatus;
+  patientId: string;
+  patientName?: string;
+  userId?: string;
+  userName?: string;
+  scheduledTime?: string;
+  sentTime?: string;
+  readTime?: string;
+  channel?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  isImportant?: boolean;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateNotificationRequest {
+  title: string;
+  content: string;
+  type: NotificationType;
+  patientId: string;
+  userId?: string;
+  scheduledTime?: string;
+  channel?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  isImportant?: boolean;
+  notes?: string;
+}
+
+export interface UpdateNotificationRequest {
+  id?: string;
+  title?: string;
+  content?: string;
+  type?: NotificationType;
+  patientId?: string;
+  userId?: string;
+  status?: NotificationStatus;
+  scheduledTime?: string;
+  sentTime?: string;
+  readTime?: string;
+  channel?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  isImportant?: boolean;
+  notes?: string;
+}
+
+export interface GetNotificationsRequest {
+  SearchTerm?: string;
+  PatientId?: string;
+  UserId?: string;
+  Type?: NotificationType;
+  Status?: NotificationStatus;
+  IsImportant?: boolean;
+  FromDate?: string;
+  ToDate?: string;
+  Page?: number;
+  Size?: number;
+  Sort?: string;
+  Order?: string;
 }

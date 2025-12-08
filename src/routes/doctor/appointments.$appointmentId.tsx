@@ -86,12 +86,28 @@ function DoctorAppointmentDetailsComponent() {
       api.appointment.updateAppointmentStatus(appointmentId, {
         status: ensureAppointmentStatus(status),
       }),
-    onSuccess: () => {
+    onSuccess: async (_, status) => {
       toast.success("Appointment status updated.");
       queryClient.invalidateQueries({
         queryKey: ["doctor", "appointments", "detail", appointmentId],
       });
       invalidateAppointmentLists();
+      
+      // Send notification to patient
+      if (patientId && appointment) {
+        const { sendAppointmentNotification } = await import(
+          "@/utils/notifications"
+        );
+        await sendAppointmentNotification(
+          patientId,
+          "status_changed",
+          {
+            appointmentId: appointmentId,
+            appointmentDate: appointment.appointmentDate,
+            status: String(status),
+          }
+        );
+      }
     },
     onError: (error: any) => {
       toast.error(
@@ -106,7 +122,7 @@ function DoctorAppointmentDetailsComponent() {
       api.appointment.cancelAppointment(appointmentId, {
         cancellationReason: cancelReason,
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Appointment cancelled.");
       setShowCancelReason(false);
       setCancelReason("");
@@ -114,6 +130,22 @@ function DoctorAppointmentDetailsComponent() {
         queryKey: ["doctor", "appointments", "detail", appointmentId],
       });
       invalidateAppointmentLists();
+      
+      // Send notification to patient
+      if (patientId && appointment) {
+        const { sendAppointmentNotification } = await import(
+          "@/utils/notifications"
+        );
+        await sendAppointmentNotification(
+          patientId,
+          "cancelled",
+          {
+            appointmentId: appointmentId,
+            appointmentDate: appointment.appointmentDate,
+            appointmentType: appointment.type,
+          }
+        );
+      }
     },
     onError: (error: any) => {
       toast.error(

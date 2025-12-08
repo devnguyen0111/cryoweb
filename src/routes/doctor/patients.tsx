@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Eye } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
-import type { PaginatedResponse, TreatmentCycle } from "@/api/types";
+import type { PaginatedResponse, TreatmentCycle, UserDetailResponse } from "@/api/types";
 import { normalizeTreatmentCycleStatus } from "@/api/types";
 import { cn } from "@/utils/cn";
 import { DoctorPatientDetailModal } from "@/features/doctor/patients/DoctorPatientDetailModal";
@@ -174,6 +174,50 @@ function DoctorPatientsComponent() {
     })),
   });
 
+  // Fetch user details for all patients to get dob and gender
+  const userDetailsQueries = useQueries({
+    queries: patients.map((patient) => ({
+      queryKey: ["doctor", "patients", patient.id, "user-details"],
+      enabled: Boolean(patient.id || patient.accountId),
+      retry: false,
+      queryFn: async (): Promise<UserDetailResponse | null> => {
+        const accountId = patient.accountId || patient.id;
+        if (!accountId) {
+          return null;
+        }
+        try {
+          const response = await api.user.getUserDetails(accountId);
+          return response.data ?? null;
+        } catch (error) {
+          if (
+            isAxiosError(error) &&
+            (error.response?.status === 404 || error.response?.status === 403)
+          ) {
+            return null;
+          }
+          console.warn(
+            "[DoctorPatients] Unable to load user details",
+            accountId,
+            error
+          );
+          return null;
+        }
+      },
+    })),
+  });
+
+  // Create a map of patientId -> userDetails for quick lookup
+  const userDetailsMap = useMemo(() => {
+    const map = new Map<string, UserDetailResponse | null>();
+    userDetailsQueries.forEach((query, index) => {
+      const patient = patients[index];
+      if (patient) {
+        map.set(patient.id, query.data ?? null);
+      }
+    });
+    return map;
+  }, [userDetailsQueries, patients]);
+
   const treatmentStatusByPatient = new Map<string, string>();
   cycleSnapshots.forEach((query, index) => {
     const patient = patients[index];
@@ -200,6 +244,12 @@ function DoctorPatientsComponent() {
     () => patients.find((patient) => patient.id === selectedPatientId) ?? null,
     [patients, selectedPatientId]
   );
+
+  // Get user details for selected patient
+  const selectedPatientUserDetails = useMemo(() => {
+    if (!selectedPatientId) return null;
+    return userDetailsMap.get(selectedPatientId) ?? null;
+  }, [selectedPatientId, userDetailsMap]);
 
   const {
     data: selectedPatientCycles = emptyCycleResponse,
@@ -466,6 +516,7 @@ function DoctorPatientsComponent() {
                   <div className="space-y-3">
                     {patients.map((patient, index) => {
                       const isDetail = isPatientDetailResponse(patient);
+                      const userDetails = userDetailsMap.get(patient.id);
                       const displayName =
                         (isDetail
                           ? (patient as any).accountInfo?.username
@@ -485,6 +536,19 @@ function DoctorPatientsComponent() {
                           : null) ||
                         patient.phoneNumber ||
                         "Phone not provided";
+                      
+                      // Get date of birth from userDetails or patient
+                      const dateOfBirth = userDetails?.dob
+                        ? formatDate(userDetails.dob)
+                        : patient.dateOfBirth
+                          ? formatDate(patient.dateOfBirth)
+                          : "—";
+                      
+                      // Get gender from userDetails or patient
+                      const gender = userDetails?.gender !== undefined
+                        ? userDetails.gender ? "Male" : "Female"
+                        : patient.gender || "—";
+                      
                       const treatmentLabel =
                         treatmentStatusByPatient.get(patient.id) ??
                         (getPatientProperty(patient, "treatmentCount", 0) > 0
@@ -496,76 +560,104 @@ function DoctorPatientsComponent() {
                         getAccountStatus(patient);
 
                       return (
-                        <button
+                        <div
                           key={patient.id}
-                          type="button"
-                          onClick={() => setSelectedPatientId(patient.id)}
                           className={cn(
-                            "w-full rounded-lg border p-4 text-left transition hover:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/40",
+                            "w-full rounded-lg border p-4 transition",
                             selectedPatientId === patient.id
                               ? "border-primary bg-primary/5 shadow"
                               : "border-gray-200"
                           )}
                         >
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="space-y-1">
-                              <p className="text-base font-semibold text-gray-900">
-                                {displayName}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Patient code: {patient.patientCode ?? "—"}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Account ID: {getLast4Chars(patient.accountId)}
-                              </p>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPatientId(patient.id)}
+                            className="w-full text-left focus:outline-none focus:ring-2 focus:ring-primary/40"
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="space-y-1">
+                                <p className="text-base font-semibold text-gray-900">
+                                  {displayName}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Patient code: {patient.patientCode ?? "—"}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Account ID: {getLast4Chars(patient.accountId)}
+                                </p>
+                              </div>
+                              <span className={cn("text-sm font-medium", tone)}>
+                                {statusLabel}
+                              </span>
                             </div>
-                            <span className={cn("text-sm font-medium", tone)}>
-                              {statusLabel}
-                            </span>
-                          </div>
 
-                          <div className="mt-3 grid gap-2 text-sm text-gray-600 md:grid-cols-3">
-                            <div>
-                              <p className="text-xs uppercase text-gray-500">
-                                Contact
-                              </p>
-                              <p>{email}</p>
-                              <p>{phone}</p>
+                            <div className="mt-3 grid gap-2 text-sm text-gray-600 md:grid-cols-3">
+                              <div>
+                                <p className="text-xs uppercase text-gray-500">
+                                  Contact
+                                </p>
+                                <p>{email}</p>
+                                <p>{phone}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs uppercase text-gray-500">
+                                  Demographics
+                                </p>
+                                <p>DOB: {dateOfBirth}</p>
+                                <p>Gender: {gender}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs uppercase text-gray-500">
+                                  Treatment status
+                                </p>
+                                <p>
+                                  {treatmentLoading
+                                    ? "Loading..."
+                                    : treatmentLabel}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Total cycles:{" "}
+                                  {getPatientProperty(
+                                    patient,
+                                    "treatmentCount",
+                                    0
+                                  )}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-xs uppercase text-gray-500">
-                                Treatment status
-                              </p>
-                              <p>
-                                {treatmentLoading
-                                  ? "Loading..."
-                                  : treatmentLabel}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Total cycles:{" "}
-                                {getPatientProperty(
-                                  patient,
-                                  "treatmentCount",
-                                  0
-                                )}
-                              </p>
+                            <div className="mt-3 grid gap-2 text-sm text-gray-600 md:grid-cols-3">
+                              <div>
+                                <p className="text-xs uppercase text-gray-500">
+                                  Additional info
+                                </p>
+                                <p>Blood type: {patient.bloodType || "N/A"}</p>
+                                <p>
+                                  Lab samples:{" "}
+                                  {getPatientProperty(
+                                    patient,
+                                    "labSampleCount",
+                                    0
+                                  )}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-xs uppercase text-gray-500">
-                                Additional info
-                              </p>
-                              <p>Blood type: {patient.bloodType || "N/A"}</p>
-                              <p>
-                                Lab samples:{" "}
-                                {getPatientProperty(
-                                  patient,
-                                  "labSampleCount",
-                                  0
-                                )}
-                              </p>
-                            </div>
+                          </button>
+                          <div className="mt-3 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenPatientDetailModal(patient.id);
+                              }}
+                              className="flex items-center gap-2"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View Detail
+                            </Button>
                           </div>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -599,6 +691,24 @@ function DoctorPatientsComponent() {
                       <p className="text-sm text-gray-600">
                         Account ID: {getLast4Chars(selectedPatient.accountId)}
                       </p>
+                      <div className="space-y-1 text-sm text-gray-600">
+                        <p>
+                          <span className="font-medium">Date of Birth:</span>{" "}
+                          {selectedPatientUserDetails?.dob
+                            ? formatDate(selectedPatientUserDetails.dob)
+                            : selectedPatient.dateOfBirth
+                              ? formatDate(selectedPatient.dateOfBirth)
+                              : "—"}
+                        </p>
+                        <p>
+                          <span className="font-medium">Gender:</span>{" "}
+                          {selectedPatientUserDetails?.gender !== undefined
+                            ? selectedPatientUserDetails.gender
+                              ? "Male"
+                              : "Female"
+                            : selectedPatient.gender || "—"}
+                      </p>
+                      </div>
                       <div className="flex flex-wrap gap-2 text-xs font-medium">
                         <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">
                           {careStatus}

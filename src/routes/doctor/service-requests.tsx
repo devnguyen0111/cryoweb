@@ -34,7 +34,7 @@ function DoctorServiceRequestsComponent() {
   const [actionModal, setActionModal] = useState<{
     isOpen: boolean;
     requestId: string | null;
-    action: "approve" | "reject" | "complete" | null;
+    action: "reject" | "complete" | null;
   }>({
     isOpen: false,
     requestId: null,
@@ -210,28 +210,46 @@ function DoctorServiceRequestsComponent() {
       action,
     }: {
       id: string;
-      action: "approve" | "reject" | "complete";
+      action: "reject" | "complete";
     }) => {
       switch (action) {
-        case "approve":
-          return api.serviceRequest.approveServiceRequest(id);
         case "reject":
           return api.serviceRequest.rejectServiceRequest(id);
         case "complete":
           return api.serviceRequest.completeServiceRequest(id);
       }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: async (response, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["doctor", "service-requests"],
       });
       const actionText =
-        variables.action === "approve"
-          ? "approved"
-          : variables.action === "reject"
+        variables.action === "reject"
+          ? "rejected"
+          : "completed";
+      toast.success(`Service request ${actionText} successfully`);
+      
+      // Send notification to patient
+      if (response.data?.patientId) {
+        const { sendServiceRequestNotification } = await import(
+          "@/utils/notifications"
+        );
+        const action =
+          variables.action === "reject"
             ? "rejected"
             : "completed";
-      toast.success(`Service request ${actionText} successfully`);
+        
+        await sendServiceRequestNotification(
+          response.data.patientId,
+          action,
+          {
+            serviceRequestId: response.data.id,
+            serviceName: undefined, // Could fetch service details if needed
+            notes: response.data.notes || undefined,
+          }
+        );
+      }
+      
       setActionModal({ isOpen: false, requestId: null, action: null });
     },
     onError: (error: any) => {
@@ -243,7 +261,7 @@ function DoctorServiceRequestsComponent() {
 
   const handleStatusAction = (
     id: string,
-    action: "approve" | "reject" | "complete"
+    action: "reject" | "complete"
   ) => {
     setActionModal({ isOpen: true, requestId: id, action });
   };
@@ -446,40 +464,23 @@ function DoctorServiceRequestsComponent() {
                                     View
                                   </Button>
                                   {request.status === "Pending" && (
-                                    <>
-                                      <Button
-                                        variant="default"
-                                        size="sm"
-                                        onClick={() =>
-                                          handleStatusAction(
-                                            request.id,
-                                            "approve"
-                                          )
-                                        }
-                                        disabled={
-                                          statusActionMutation.isPending
-                                        }
-                                      >
-                                        Approve
-                                      </Button>
-                                      <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        onClick={() =>
-                                          handleStatusAction(
-                                            request.id,
-                                            "reject"
-                                          )
-                                        }
-                                        disabled={
-                                          statusActionMutation.isPending
-                                        }
-                                      >
-                                        Reject
-                                      </Button>
-                                    </>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleStatusAction(
+                                          request.id,
+                                          "reject"
+                                        )
+                                      }
+                                      disabled={
+                                        statusActionMutation.isPending
+                                      }
+                                    >
+                                      Reject
+                                    </Button>
                                   )}
-                                  {request.status === "Approved" && (
+                                  {(request.status === "Approved" || request.status === "Pending") && (
                                     <Button
                                       variant="default"
                                       size="sm"

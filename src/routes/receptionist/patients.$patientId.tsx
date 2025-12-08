@@ -115,7 +115,7 @@ function ReceptionistPatientDetail() {
     relatedEntityId: "",
   });
   const [showQRCode, setShowQRCode] = useState(false);
-  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [createdTransactionId, setCreatedTransactionId] = useState<
     string | null
   >(null);
@@ -186,7 +186,7 @@ function ReceptionistPatientDetail() {
       }),
     onSuccess: (response) => {
       if (response.data) {
-        setQrCodeUrl(response.data.paymentUrl || null);
+        setPaymentUrl(response.data.paymentUrl || response.data.vnPayUrl || null);
         setCreatedTransactionId(response.data.id);
         setShowCreateTransactionModal(false);
         setShowQRCode(true);
@@ -804,65 +804,67 @@ function ReceptionistPatientDetail() {
           </div>
         </Modal>
 
-        {/* QR Code Modal for Created Transaction */}
+        {/* Payment URL Modal for Created Transaction */}
         <Modal
           isOpen={showQRCode && Boolean(createdTransactionId)}
           onClose={() => {
             setShowQRCode(false);
-            setQrCodeUrl(null);
+            setPaymentUrl(null);
             setCreatedTransactionId(null);
           }}
-          title="Payment QR Code"
-          description="Scan this QR code to complete payment"
+          title="Payment Transaction Created"
+          description="Click the link below to complete payment"
           size="md"
         >
           <div className="space-y-4">
-            {qrCodeUrl ? (
+            {paymentUrl ? (
               <div className="space-y-4">
-                <div className="flex justify-center">
-                  <img
-                    src={qrCodeUrl}
-                    alt="Payment QR Code"
-                    className="max-w-full h-auto border border-gray-200 rounded-lg"
-                  />
-                </div>
                 <div className="text-center text-sm text-gray-600">
                   <p>
-                    Scan this QR code with your payment app to complete the
-                    transaction.
+                    Click the button below to open the payment page and complete the transaction.
                   </p>
                   {createdTransactionId && (
-                    <p className="mt-2 text-xs">
+                    <p className="mt-2 text-xs text-gray-500">
                       Transaction ID: {createdTransactionId.slice(0, 8)}
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2">
                   <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() =>
-                      navigate({ to: "/receptionist/transactions" })
-                    }
-                  >
-                    View All Transactions
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1"
+                    className="w-full"
                     onClick={() => {
-                      setShowQRCode(false);
-                      setQrCodeUrl(null);
-                      setCreatedTransactionId(null);
+                      window.open(paymentUrl, "_blank");
                     }}
                   >
-                    Close
+                    Open Payment Page
                   </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() =>
+                        navigate({ to: "/receptionist/transactions" })
+                      }
+                    >
+                      View All Transactions
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setShowQRCode(false);
+                        setPaymentUrl(null);
+                        setCreatedTransactionId(null);
+                      }}
+                    >
+                      Close
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : (
               <div className="py-12 text-center text-gray-500">
-                Unable to generate QR code. Please try again.
+                Unable to get payment URL. Please try again.
               </div>
             )}
           </div>

@@ -356,7 +356,23 @@ export function CreateMedicalRecordForm({
     };
 
     createMedicalRecordMutation.mutate(medicalRecordData, {
-      onSuccess: (medicalRecord) => {
+      onSuccess: async (medicalRecord) => {
+        // Send notification to patient
+        if (values.patientId && medicalRecord.data?.id) {
+          const { sendEncounterNotification } = await import(
+            "@/utils/notifications"
+          );
+          await sendEncounterNotification(
+            values.patientId,
+            "created",
+            {
+              encounterId: medicalRecord.data.id,
+              appointmentId: values.appointmentId,
+              diagnosis: values.diagnosis,
+            }
+          );
+        }
+        
         // If there are medications, create service request (prescription)
         const medicationsWithService = values.medications.filter(
           (med) => med.serviceId

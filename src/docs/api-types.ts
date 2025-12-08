@@ -89,7 +89,12 @@ export interface EmailRequest {
 // User Types
 // ============================================================================
 
-export type UserRole = 'Patient' | 'Doctor' | 'Admin' | 'Receptionist' | 'LaboratoryTechnician';
+export type UserRole =
+  | "Patient"
+  | "Doctor"
+  | "Admin"
+  | "Receptionist"
+  | "LaboratoryTechnician";
 
 export interface User {
   id: string;
@@ -133,7 +138,7 @@ export interface GetUsersRequest {
 // Patient Types
 // ============================================================================
 
-export type Gender = 'Male' | 'Female' | 'Other';
+export type Gender = "Male" | "Female" | "Other";
 
 export interface Patient {
   id: string;
@@ -193,7 +198,7 @@ export interface GetPatientsRequest {
   isActive?: boolean;
   gender?: Gender;
   sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: "asc" | "desc";
 }
 
 export interface PatientSearchResult {
@@ -285,8 +290,12 @@ export interface DoctorStatisticsResponse {
 // Appointment Types
 // ============================================================================
 
-export type AppointmentStatus = 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
-export type AppointmentType = 'Consultation' | 'Treatment' | 'FollowUp';
+export type AppointmentStatus =
+  | "Pending"
+  | "Confirmed"
+  | "Completed"
+  | "Cancelled";
+export type AppointmentType = "Consultation" | "Treatment" | "FollowUp";
 
 export interface Appointment {
   id: string;
@@ -530,8 +539,12 @@ export interface GetSlotsRequest {
 // Treatment Types
 // ============================================================================
 
-export type TreatmentType = 'IVF' | 'IUI' | 'Other';
-export type TreatmentStatus = 'Planning' | 'InProgress' | 'Completed' | 'Cancelled';
+export type TreatmentType = "IVF" | "IUI" | "Other";
+export type TreatmentStatus =
+  | "Planning"
+  | "InProgress"
+  | "Completed"
+  | "Cancelled";
 
 export interface Treatment {
   id: string;
@@ -570,7 +583,11 @@ export interface GetTreatmentsRequest {
 // Treatment Cycle Types
 // ============================================================================
 
-export type TreatmentCycleStatus = 'Planning' | 'InProgress' | 'Completed' | 'Cancelled';
+export type TreatmentCycleStatus =
+  | "Planning"
+  | "InProgress"
+  | "Completed"
+  | "Cancelled";
 
 export interface TreatmentCycle {
   id: string;
@@ -663,7 +680,14 @@ export interface UploadCycleDocumentRequest {
 // Treatment IVF Types
 // ============================================================================
 
-export type IVFCycleStatus = 'Planning' | 'Stimulation' | 'Retrieval' | 'Fertilization' | 'Transfer' | 'Completed' | 'Cancelled';
+export type IVFCycleStatus =
+  | "Planning"
+  | "Stimulation"
+  | "Retrieval"
+  | "Fertilization"
+  | "Transfer"
+  | "Completed"
+  | "Cancelled";
 
 export interface TreatmentIVF {
   id: string;
@@ -690,7 +714,12 @@ export interface TreatmentIVFCreateUpdateRequest {
 // Treatment IUI Types
 // ============================================================================
 
-export type IUICycleStatus = 'Planning' | 'Monitoring' | 'Insemination' | 'Completed' | 'Cancelled';
+export type IUICycleStatus =
+  | "Planning"
+  | "Monitoring"
+  | "Insemination"
+  | "Completed"
+  | "Cancelled";
 
 export interface TreatmentIUI {
   id: string;
@@ -766,7 +795,12 @@ export interface GetServiceCategoriesRequest {
 // Service Request Types
 // ============================================================================
 
-export type ServiceRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Completed' | 'Cancelled';
+export type ServiceRequestStatus =
+  | "Pending"
+  | "Approved"
+  | "Rejected"
+  | "Completed"
+  | "Cancelled";
 
 export interface ServiceRequest {
   id: string;
@@ -833,9 +867,9 @@ export interface GetServiceRequestsRequest {
 // Cryobank Types
 // ============================================================================
 
-export type SampleType = 'Sperm' | 'Oocyte' | 'Embryo';
-export type CryoLocationType = 'Tank' | 'Canister' | 'Goblet' | 'Slot';
-export type ContractStatus = 'Active' | 'Expired' | 'Terminated';
+export type SampleType = "Sperm" | "Oocyte" | "Embryo";
+export type CryoLocationType = "Tank" | "Canister" | "Goblet" | "Slot";
+export type ContractStatus = "Active" | "Expired" | "Terminated";
 
 export interface CryoStorageContract {
   id: string;
@@ -1019,7 +1053,12 @@ export interface GetCryoPackagesRequest {
 // Lab Sample Types
 // ============================================================================
 
-export type SpecimenStatus = 'Collected' | 'Processing' | 'Stored' | 'Used' | 'Discarded';
+export type SpecimenStatus =
+  | "Collected"
+  | "Processing"
+  | "Stored"
+  | "Used"
+  | "Discarded";
 
 export interface LabSample {
   id: string;
@@ -1126,8 +1165,12 @@ export interface GetLabSamplesRequest {
 // Transaction Types
 // ============================================================================
 
-export type TransactionStatus = 'Pending' | 'Completed' | 'Failed' | 'Cancelled';
-export type TransactionType = 'Payment' | 'Refund';
+export type TransactionStatus =
+  | "Pending"
+  | "Completed"
+  | "Failed"
+  | "Cancelled";
+export type TransactionType = "Payment" | "Refund";
 
 export interface Transaction {
   id: string;
@@ -1166,8 +1209,8 @@ export interface GetTransactionsRequest {
 // Relationship Types
 // ============================================================================
 
-export type RelationshipType = 'Spouse' | 'Partner' | 'Other';
-export type RelationshipStatus = 'Pending' | 'Approved' | 'Rejected';
+export type RelationshipType = "Spouse" | "Partner" | "Other";
+export type RelationshipStatus = "Pending" | "Approved" | "Rejected";
 
 export interface Relationship {
   id: string;
@@ -1297,8 +1340,8 @@ export interface GetMediasRequest {
 // Notification Types
 // ============================================================================
 
-export type NotificationType = 'Info' | 'Warning' | 'Error' | 'Success';
-export type NotificationStatus = 'Unread' | 'Read';
+export type NotificationType = "Info" | "Warning" | "Error" | "Success";
+export type NotificationStatus = "Unread" | "Read";
 
 export interface Notification {
   id: string;
@@ -1338,4 +1381,3 @@ export interface GetNotificationsRequest {
   status?: NotificationStatus;
   isActive?: boolean;
 }
-

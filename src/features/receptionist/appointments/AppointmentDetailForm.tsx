@@ -394,7 +394,7 @@ export function AppointmentDetailForm({
 
       return { doctorId, slotId };
     },
-    onSuccess: ({ doctorId, slotId }) => {
+    onSuccess: async ({ doctorId, slotId }) => {
       const doctor = doctors.find((d) => d.id === doctorId);
       const message = slotId
         ? `Changed doctor to: ${doctor?.fullName || doctorId} with new slot`
@@ -406,6 +406,24 @@ export function AppointmentDetailForm({
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments"],
       });
+      
+      // Send notification to patient
+      if (appointment?.patientId) {
+        const { sendAppointmentNotification } = await import(
+          "@/utils/notifications"
+        );
+        await sendAppointmentNotification(
+          appointment.patientId,
+          "updated",
+          {
+            appointmentId: appointmentId,
+            appointmentDate: appointment.appointmentDate,
+            appointmentType: appointment.type,
+            doctorName: doctor?.fullName,
+          }
+        );
+      }
+      
       // Reset selections
       setSelectedSlotId("");
     },
@@ -421,7 +439,7 @@ export function AppointmentDetailForm({
   // Check in mutation
   const checkInMutation = useMutation({
     mutationFn: () => api.appointment.checkIn(appointmentId),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Patient checked in");
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments", "detail", appointmentId],
@@ -429,6 +447,22 @@ export function AppointmentDetailForm({
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments"],
       });
+      
+      // Send notification to patient
+      if (appointment?.patientId) {
+        const { sendAppointmentNotification } = await import(
+          "@/utils/notifications"
+        );
+        await sendAppointmentNotification(
+          appointment.patientId,
+          "status_changed",
+          {
+            appointmentId: appointmentId,
+            appointmentDate: appointment.appointmentDate,
+            status: "Checked In",
+          }
+        );
+      }
     },
     onError: (error: any) => {
       const message =
@@ -441,7 +475,7 @@ export function AppointmentDetailForm({
   // Check out mutation
   const checkOutMutation = useMutation({
     mutationFn: () => api.appointment.checkOut(appointmentId),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Patient checked out");
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments", "detail", appointmentId],
@@ -449,6 +483,22 @@ export function AppointmentDetailForm({
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments"],
       });
+      
+      // Send notification to patient
+      if (appointment?.patientId) {
+        const { sendAppointmentNotification } = await import(
+          "@/utils/notifications"
+        );
+        await sendAppointmentNotification(
+          appointment.patientId,
+          "status_changed",
+          {
+            appointmentId: appointmentId,
+            appointmentDate: appointment.appointmentDate,
+            status: "Checked Out",
+          }
+        );
+      }
     },
     onError: (error: any) => {
       const message =
@@ -464,7 +514,7 @@ export function AppointmentDetailForm({
       api.appointment.cancelAppointment(appointmentId, {
         cancellationReason: cancelReason || undefined,
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Appointment cancelled");
       setCancelReason("");
       setShowCancelDialog(false);
@@ -474,6 +524,22 @@ export function AppointmentDetailForm({
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments"],
       });
+      
+      // Send notification to patient
+      if (appointment?.patientId) {
+        const { sendAppointmentNotification } = await import(
+          "@/utils/notifications"
+        );
+        await sendAppointmentNotification(
+          appointment.patientId,
+          "cancelled",
+          {
+            appointmentId: appointmentId,
+            appointmentDate: appointment.appointmentDate,
+            appointmentType: appointment.type,
+          }
+        );
+      }
     },
     onError: (error: any) => {
       const message =

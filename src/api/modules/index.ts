@@ -25,3 +25,4 @@ export { TreatmentIVFApi } from "./treatment-ivf.api";
 export { AgreementApi } from "./agreement.api";
 export { MedicalRecordApi } from "./medical-record.api";
 export { TransactionApi } from "./transaction.api";
+export { NotificationApi } from "./notification.api";

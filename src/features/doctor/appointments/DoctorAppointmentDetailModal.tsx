@@ -759,9 +759,25 @@ export function DoctorAppointmentDetailModal({
         patientId: patientId,
         pageSize: 25,
       });
+      const appointments = (response.data as Appointment[]) ?? [];
+      // Filter appointments to ensure they belong to this specific patient
+      // This prevents showing appointments from other patients if API doesn't filter correctly
+      const filteredAppointments = appointments.filter((apt) => {
+        // Check multiple possible field names for patientId
+        const aptPatientId =
+          apt.patientId ||
+          (apt as any).patientID ||
+          (apt as any).PatientId ||
+          (apt as any).PatientID ||
+          (apt as any).patient?.id ||
+          (apt as any).patient?.patientId ||
+          (apt as any).patient?.accountId ||
+          (apt as any).patientAccountId ||
+          (apt as any).patientAccountID;
+        return aptPatientId === patientId;
+      });
       // Sort by appointmentDate descending
-      const sorted = (response.data as Appointment[]) ?? [];
-      return sorted.sort((a, b) => {
+      return filteredAppointments.sort((a, b) => {
         const aDate = new Date(a.appointmentDate).getTime();
         const bDate = new Date(b.appointmentDate).getTime();
         return bDate - aDate;

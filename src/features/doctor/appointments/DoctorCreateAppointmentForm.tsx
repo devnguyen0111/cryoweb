@@ -489,7 +489,7 @@ export function DoctorCreateAppointmentForm({
 
       return appointment;
     },
-    onSuccess: (appointment) => {
+    onSuccess: async (appointment) => {
       toast.success("Appointment created successfully");
       // Invalidate all appointment-related queries
       queryClient.invalidateQueries({ queryKey: ["doctor", "appointments"] });
@@ -509,6 +509,25 @@ export function DoctorCreateAppointmentForm({
           ],
         });
       }
+      
+      // Send notification to patient
+      if (appointment?.patientId && appointment?.id) {
+        const { sendAppointmentNotification } = await import(
+          "@/utils/notifications"
+        );
+        await sendAppointmentNotification(
+          appointment.patientId,
+          "created",
+          {
+            appointmentId: appointment.id,
+            appointmentDate: appointment.appointmentDate,
+            appointmentType: appointment.appointmentType || (appointment as any).type,
+            doctorName: displayDoctorName,
+          },
+          doctorId
+        );
+      }
+      
       if (appointment?.id) {
         onCreated?.(appointment.id);
       }

@@ -164,11 +164,24 @@ function ReceptionistAppointmentsComponent() {
   };
 
   const updateStatusMutation = useMutation({
-    mutationFn: (payload: { appointmentId: string; status: string }) =>
-      api.appointment.updateAppointmentStatus(payload.appointmentId, {
-        status: ensureAppointmentStatus(payload.status),
-      }),
-    onSuccess: () => {
+    mutationFn: async (payload: { appointmentId: string; status: string }) => {
+      const result = await api.appointment.updateAppointmentStatus(
+        payload.appointmentId,
+        {
+          status: ensureAppointmentStatus(payload.status),
+        }
+      );
+      // Fetch appointment details to get patientId
+      try {
+        const appointmentDetails = await api.appointment.getAppointmentDetails(
+          payload.appointmentId
+        );
+        return { result, appointment: appointmentDetails.data };
+      } catch {
+        return { result, appointment: null };
+      }
+    },
+    onSuccess: async (data, variables) => {
       toast.success("Appointment status updated");
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments"],
@@ -176,6 +189,22 @@ function ReceptionistAppointmentsComponent() {
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "service-requests"],
       });
+
+      // Send notification to patient
+      if (data.appointment?.patientId) {
+        const { sendAppointmentNotification } = await import(
+          "@/utils/notifications"
+        );
+        await sendAppointmentNotification(
+          data.appointment.patientId,
+          "status_changed",
+          {
+            appointmentId: variables.appointmentId,
+            appointmentDate: data.appointment.appointmentDate,
+            status: variables.status,
+          }
+        );
+      }
     },
     onError: (error: any) => {
       const message =

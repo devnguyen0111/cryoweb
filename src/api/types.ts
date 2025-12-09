@@ -1703,6 +1703,91 @@ export interface UpdateMedicineRequest {
 }
 
 // ============================================================================
+// Prescription Types
+// ============================================================================
+
+export interface PrescriptionDetail {
+  id?: string;
+  medicineId: string;
+  medicineName?: string;
+  dosage?: string;
+  form?: string;
+  quantity: number;
+  frequency?: string;
+  durationDays?: number;
+  instructions?: string;
+  notes?: string;
+}
+
+export interface PrescriptionDetailResponse extends PrescriptionDetail {
+  id: string;
+  medicineName: string;
+  form?: string;
+}
+
+export interface Prescription {
+  id: string;
+  medicalRecordId: string;
+  medicalRecordDiagnosis?: string;
+  prescriptionDate: string; // ISO date-time
+  diagnosis?: string;
+  instructions?: string;
+  notes?: string;
+  isFilled: boolean;
+  filledDate?: string | null; // ISO date-time
+  createdAt?: string;
+  updatedAt?: string | null;
+  prescriptionDetails?: PrescriptionDetail[];
+}
+
+export interface PrescriptionDetailResponseFull extends Prescription {
+  prescriptionDetails: PrescriptionDetailResponse[];
+}
+
+export interface CreatePrescriptionRequest {
+  medicalRecordId: string;
+  prescriptionDate?: string; // ISO date-time
+  diagnosis?: string;
+  instructions?: string;
+  notes?: string;
+  prescriptionDetails: {
+    medicineId: string;
+    quantity: number;
+    dosage?: string;
+    frequency?: string;
+    durationDays?: number;
+    instructions?: string;
+    notes?: string;
+  }[];
+}
+
+export interface UpdatePrescriptionRequest {
+  diagnosis?: string;
+  instructions?: string;
+  notes?: string;
+  prescriptionDetails: {
+    medicineId: string;
+    quantity: number;
+    dosage?: string;
+    frequency?: string;
+    durationDays?: number;
+    instructions?: string;
+    notes?: string;
+  }[];
+}
+
+export interface GetPrescriptionsRequest {
+  MedicalRecordId?: string;
+  FromDate?: string; // ISO date-time
+  ToDate?: string; // ISO date-time
+  SearchTerm?: string;
+  Page?: number;
+  Size?: number;
+  Sort?: string;
+  Order?: string;
+}
+
+// ============================================================================
 // Media Types
 // ============================================================================
 

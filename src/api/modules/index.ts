@@ -26,3 +26,5 @@ export { AgreementApi } from "./agreement.api";
 export { MedicalRecordApi } from "./medical-record.api";
 export { TransactionApi } from "./transaction.api";
 export { NotificationApi } from "./notification.api";
+export { PrescriptionApi } from "./prescription.api";
+export { MedicineApi } from "./medicine.api";

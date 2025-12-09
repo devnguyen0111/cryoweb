@@ -24,6 +24,8 @@ import {
   MedicalRecordApi,
   TransactionApi,
   NotificationApi,
+  PrescriptionApi,
+  MedicineApi,
 } from "./modules";
 
 const API_BASE_URL =
@@ -128,6 +130,8 @@ export class ApiClient {
   medicalRecord: MedicalRecordApi;
   transaction: TransactionApi;
   notification: NotificationApi;
+  prescription: PrescriptionApi;
+  medicine: MedicineApi;
 
   constructor() {
     this.auth = new AuthApi(client);
@@ -153,6 +157,8 @@ export class ApiClient {
     this.medicalRecord = new MedicalRecordApi(client);
     this.transaction = new TransactionApi(client);
     this.notification = new NotificationApi(client);
+    this.prescription = new PrescriptionApi(client);
+    this.medicine = new MedicineApi(client);
   }
 }
 

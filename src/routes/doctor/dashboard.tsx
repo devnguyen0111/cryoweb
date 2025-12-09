@@ -15,13 +15,10 @@ import { cn } from "@/utils/cn";
 import type {
   Appointment,
   DoctorSchedule,
-  DoctorStatisticsResponse,
   PaginatedResponse,
-  Patient,
   PatientDetailResponse,
   ServiceRequest,
   TreatmentCycle,
-  MedicalRecord,
 } from "@/api/types";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 
@@ -70,9 +67,15 @@ function DoctorDashboardComponent() {
       queryClient.invalidateQueries({ queryKey: ["doctor", "statistics"] }),
       queryClient.invalidateQueries({ queryKey: ["doctor", "appointments"] }),
       queryClient.invalidateQueries({ queryKey: ["doctor", "patients"] }),
-      queryClient.invalidateQueries({ queryKey: ["doctor", "treatment-cycles"] }),
-      queryClient.invalidateQueries({ queryKey: ["doctor", "medical-records"] }),
-      queryClient.invalidateQueries({ queryKey: ["receptionist", "service-requests"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "treatment-cycles"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "medical-records"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "service-requests"],
+      }),
     ]);
     setIsRefreshing(false);
   };
@@ -83,30 +86,6 @@ function DoctorDashboardComponent() {
     useDoctorProfile();
 
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
-
-  const { data: doctorStatistics } = useQuery<DoctorStatisticsResponse | null>({
-    queryKey: ["doctor", "statistics", doctorId],
-    enabled: !!doctorId,
-    retry: false,
-    queryFn: async (): Promise<DoctorStatisticsResponse | null> => {
-      if (!doctorId) {
-        return null;
-      }
-
-      try {
-        const response = await api.doctor.getDoctorStatistics();
-        return response.data ?? null;
-      } catch (error: any) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
-        }
-        const message =
-          error?.response?.data?.message || "Unable to load system statistics.";
-        toast.warning(message);
-        return null;
-      }
-    },
-  });
 
   const { data: upcomingAppointments, isFetching: appointmentsLoading } =
     useQuery<PaginatedResponse<Appointment>>({
@@ -130,7 +109,7 @@ function DoctorDashboardComponent() {
             doctorId,
             dateFrom: today,
             pageNumber: 1,
-            pageSize: 5,
+            pageSize: 3,
           });
         } catch (error: any) {
           if (isAxiosError(error) && error.response?.status === 404) {
@@ -145,30 +124,58 @@ function DoctorDashboardComponent() {
       },
     });
 
-  const { data: activePatients } = useQuery<PaginatedResponse<Patient>>({
-    queryKey: ["patients", "doctor-dashboard"],
-    retry: false,
-    queryFn: async (): Promise<PaginatedResponse<Patient>> => {
-      try {
-        return await fetchWith404Fallback(() =>
-          api.patient.getPatients({ pageNumber: 1, pageSize: 5 })
-        );
-      } catch (error: any) {
-        const message =
-          error?.response?.data?.message || "Unable to load patient list.";
-        toast.error(message);
-        return createEmptyResponse<Patient>();
-      }
-    },
-  });
+  // Get recent appointments to extract unique patients
+  const { data: recentAppointments } = useQuery<PaginatedResponse<Appointment>>(
+    {
+      queryKey: ["doctor", "appointments", "recent", doctorId],
+      enabled: !!doctorId,
+      retry: false,
+      queryFn: async (): Promise<PaginatedResponse<Appointment>> => {
+        if (!doctorId) {
+          return createEmptyResponse<Appointment>();
+        }
 
-  const patientIds = useMemo(
-    () =>
-      (activePatients?.data ?? [])
-        .map((patient) => patient.id)
-        .filter((id): id is string => Boolean(id)),
-    [activePatients?.data]
+        try {
+          return await api.appointment.getAppointments({
+            doctorId,
+            pageNumber: 1,
+            pageSize: 20, // Get more to extract unique patients
+          });
+        } catch (error: any) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            return createEmptyResponse<Appointment>();
+          }
+          return createEmptyResponse<Appointment>();
+        }
+      },
+    }
   );
+
+  // Extract unique patient IDs from appointments
+  const patientIds = useMemo(() => {
+    if (!recentAppointments?.data) return [];
+    const ids = recentAppointments.data
+      .map((apt) => {
+        const raw = apt as unknown as Record<string, any>;
+        return (
+          apt.patientId ??
+          raw.patientID ??
+          raw.PatientId ??
+          raw.PatientID ??
+          raw.patient?.id ??
+          raw.patient?.patientId ??
+          raw.patient?.accountId ??
+          raw.patientAccountId ??
+          raw.patientAccountID ??
+          raw.PatientAccountId ??
+          raw.PatientAccountID ??
+          null
+        );
+      })
+      .filter((id): id is string => Boolean(id));
+    // Remove duplicates and limit to 5
+    return Array.from(new Set(ids)).slice(0, 5);
+  }, [recentAppointments?.data]);
 
   const { data: patientDetailsMap } = useQuery<
     Record<string, PatientDetailResponse | null>
@@ -205,31 +212,25 @@ function DoctorDashboardComponent() {
 
   const enrichedPatients = useMemo(() => {
     const details = patientDetailsMap ?? {};
-    return (activePatients?.data ?? []).map((patient, index) => {
-      const detail = details[patient.id];
+    return patientIds.map((patientId, index) => {
+      const detail = details[patientId];
       const displayName =
         detail?.fullName ||
         detail?.accountInfo?.username ||
-        patient.fullName ||
-        patient.patientCode ||
+        detail?.patientCode ||
         `Patient #${index + 1}`;
-      const email =
-        detail?.accountInfo?.email || detail?.email || patient.email || "—";
-      const phone =
-        detail?.accountInfo?.phone ||
-        detail?.phoneNumber ||
-        patient.phoneNumber ||
-        "—";
+      const email = detail?.accountInfo?.email || detail?.email || "—";
+      const phone = detail?.accountInfo?.phone || detail?.phoneNumber || "—";
 
       return {
-        base: patient,
+        id: patientId,
         detail,
         displayName,
         email,
         phone,
       };
     });
-  }, [activePatients?.data, patientDetailsMap]);
+  }, [patientIds, patientDetailsMap]);
 
   // Get treatment cycles filtered by doctorId directly (Backend supports this)
   const { data: treatmentCycles } = useQuery<PaginatedResponse<TreatmentCycle>>(
@@ -283,56 +284,72 @@ function DoctorDashboardComponent() {
     },
   });
 
+  // Get appointment IDs for this doctor to filter service requests
+  const appointmentIds = useMemo(() => {
+    if (!recentAppointments?.data) return [];
+    return recentAppointments.data
+      .map((apt) => apt.id)
+      .filter((id): id is string => Boolean(id));
+  }, [recentAppointments?.data]);
+
+  // Get service requests for doctor's appointments
   const { data: pendingServiceRequests } = useQuery<
     PaginatedResponse<ServiceRequest>
   >({
-    queryKey: ["service-requests", "doctor-dashboard", doctorId],
-    enabled: !!doctorId,
+    queryKey: [
+      "service-requests",
+      "doctor-dashboard",
+      doctorId,
+      appointmentIds,
+    ],
+    enabled: !!doctorId && appointmentIds.length > 0,
     retry: false,
     queryFn: async (): Promise<PaginatedResponse<ServiceRequest>> => {
-      if (!doctorId) {
+      if (!doctorId || appointmentIds.length === 0) {
         return createEmptyResponse<ServiceRequest>();
       }
 
       try {
-        return await fetchWith404Fallback(() =>
-          api.serviceRequest.getServiceRequests({
-            status: "Pending",
-            pageNumber: 1,
-            pageSize: 5,
+        // Fetch service requests for each appointment and combine
+        const allRequests: ServiceRequest[] = [];
+        await Promise.all(
+          appointmentIds.slice(0, 10).map(async (appointmentId) => {
+            try {
+              const response =
+                await api.serviceRequest.getServiceRequestsByAppointment(
+                  appointmentId
+                );
+              if (response.data) {
+                allRequests.push(
+                  ...response.data.filter((req) => req.status === "Pending")
+                );
+              }
+            } catch (error) {
+              // Silently fail for individual appointments
+            }
           })
         );
+
+        // Return paginated response format
+        return {
+          code: 200,
+          message: "",
+          data: allRequests.slice(0, 5),
+          metaData: {
+            pageNumber: 1,
+            pageSize: 5,
+            totalCount: allRequests.length,
+            totalPages: Math.ceil(allRequests.length / 5),
+            hasPrevious: false,
+            hasNext: allRequests.length > 5,
+          },
+        };
       } catch (error: any) {
         const message =
           error?.response?.data?.message ||
           "Unable to load pending prescriptions or requests.";
         toast.error(message);
         return createEmptyResponse<ServiceRequest>();
-      }
-    },
-  });
-
-  const { data: recentMedicalRecords } = useQuery<
-    PaginatedResponse<MedicalRecord>
-  >({
-    queryKey: ["medical-records", "doctor-dashboard"],
-    retry: false,
-    queryFn: async (): Promise<PaginatedResponse<MedicalRecord>> => {
-      try {
-        return await fetchWith404Fallback(() =>
-          api.medicalRecord.getMedicalRecords({
-            Page: 1,
-            Size: 5,
-            Sort: "CreatedAt",
-            Order: "desc",
-          })
-        );
-      } catch (error: any) {
-        const message =
-          error?.response?.data?.message ||
-          "Unable to load recent medical records.";
-        toast.error(message);
-        return createEmptyResponse<MedicalRecord>();
       }
     },
   });
@@ -344,9 +361,9 @@ function DoctorDashboardComponent() {
       description: "Includes follow-ups and procedures",
     },
     {
-      title: "Active patients",
-      value: activePatients?.metaData?.totalCount ?? 0,
-      description: "Patients with active treatment cycles",
+      title: "My patients",
+      value: patientIds.length,
+      description: "Recent patients from appointments",
     },
     {
       title: "Treatment cycles",
@@ -354,9 +371,9 @@ function DoctorDashboardComponent() {
       description: "Active IUI/IVF cases",
     },
     {
-      title: "Prescriptions issued",
+      title: "Pending requests",
       value: pendingServiceRequests?.metaData?.totalCount ?? 0,
-      description: "Awaiting confirmation or digital signature",
+      description: "Service requests awaiting action",
     },
   ];
 
@@ -367,43 +384,40 @@ function DoctorDashboardComponent() {
       tone: "info" | "warning" | "success";
     }> = [];
 
-    // Note: doctorStatistics from backend may have different structure
-    // Commenting out for now until we verify the backend response structure
-    // if (doctorStatistics) {
-    //   if (
-    //     doctorStatistics.totalSlotsToday !== undefined &&
-    //     doctorStatistics.bookedSlotsToday !== undefined
-    //   ) {
-    //     items.push({
-    //       id: "slots",
-    //       tone: "info",
-    //       message: `There are ${doctorStatistics.totalSlotsToday} slots today with ${doctorStatistics.bookedSlotsToday} already booked.`,
-    //     });
-    //   }
-    //
-    //   if (
-    //     doctorStatistics.availableSlotsToday !== undefined &&
-    //     doctorStatistics.availableSlotsToday > 0
-    //   ) {
-    //     items.push({
-    //       id: "availability",
-    //       tone: "success",
-    //       message: `${doctorStatistics.availableSlotsToday} slots remain available; you can accept additional appointments.`,
-    //     });
-    //   }
-    // }
+    const todayAppointmentsCount =
+      upcomingAppointments?.metaData?.totalCount ?? 0;
+    if (todayAppointmentsCount > 0) {
+      items.push({
+        id: "appointments",
+        tone: "info",
+        message: `You have ${todayAppointmentsCount} appointment${todayAppointmentsCount > 1 ? "s" : ""} scheduled for today.`,
+      });
+    }
 
     const pendingCount = pendingServiceRequests?.metaData?.totalCount ?? 0;
     if (pendingCount > 0) {
       items.push({
         id: "prescription",
         tone: "warning",
-        message: `${pendingCount} prescriptions/requests awaiting digital signature.`,
+        message: `${pendingCount} service request${pendingCount > 1 ? "s" : ""} awaiting your action.`,
+      });
+    }
+
+    const activeCyclesCount = treatmentCycles?.metaData?.totalCount ?? 0;
+    if (activeCyclesCount > 0) {
+      items.push({
+        id: "cycles",
+        tone: "success",
+        message: `${activeCyclesCount} active treatment cycle${activeCyclesCount > 1 ? "s" : ""} in progress.`,
       });
     }
 
     return items;
-  }, [doctorStatistics, pendingServiceRequests?.metaData?.totalCount]);
+  }, [
+    upcomingAppointments?.metaData?.totalCount,
+    pendingServiceRequests?.metaData?.totalCount,
+    treatmentCycles?.metaData?.totalCount,
+  ]);
 
   const toneStyles = useMemo(
     () => ({
@@ -472,13 +486,12 @@ function DoctorDashboardComponent() {
                 onClick={handleRefresh}
                 disabled={isRefreshing}
               >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
                 Refresh
               </Button>
-              <form
-                onSubmit={handleSearchSubmit}
-                className="flex flex-1 gap-2"
-              >
+              <form onSubmit={handleSearchSubmit} className="flex flex-1 gap-2">
                 <Input
                   placeholder="Search patients or appointments..."
                   value={searchTerm}
@@ -527,39 +540,49 @@ function DoctorDashboardComponent() {
               </CardHeader>
               <CardContent>
                 {appointmentsLoading ? (
-                  <div className="py-12 text-center text-gray-500">
-                    Loading data...
+                  <div className="py-8 text-center text-gray-500">
+                    Loading...
                   </div>
                 ) : upcomingAppointments?.data?.length ? (
-                  <div className="space-y-4">
-                    {upcomingAppointments.data.map((appointment, index) => (
-                      <div
-                        key={appointment.id}
-                        className="flex flex-col gap-2 rounded-lg border border-gray-100 p-4 md:flex-row md:items-center md:justify-between"
-                      >
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {appointment.appointmentCode ||
-                              `appointment #${index + 1}`}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {new Date(
-                              appointment.appointmentDate
-                            ).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-start gap-2 md:items-end">
-                          <span
-                            className={cn(
-                              "inline-flex rounded-full px-3 py-1 text-xs font-medium",
-                              statusClass(appointment.status)
-                            )}
-                          >
-                            {appointment.status || "pending"}
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="outline"
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                    {upcomingAppointments.data
+                      .slice(0, 5)
+                      .map((appointment) => {
+                        // Format date and time
+                        const appointmentDate = appointment.appointmentDate
+                          ? new Date(appointment.appointmentDate)
+                          : null;
+
+                        const appointmentTime = appointmentDate
+                          ? appointmentDate.toLocaleTimeString("en-GB", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: false,
+                            })
+                          : "—";
+
+                        const appointmentDateStr = appointmentDate
+                          ? appointmentDate.toLocaleDateString("en-GB", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            })
+                          : null;
+
+                        // Get patient info if available
+                        const appointmentData = appointment as any;
+                        const patientName =
+                          appointmentData?.patient?.fullName ||
+                          appointmentData?.patientName ||
+                          null;
+
+                        const patientCode =
+                          appointmentData?.patient?.patientCode || null;
+
+                        return (
+                          <div
+                            key={appointment.id}
+                            className="flex items-center justify-between rounded-lg border border-gray-100 p-3 hover:bg-gray-50 transition-colors cursor-pointer"
                             onClick={() =>
                               navigate({
                                 to: "/doctor/appointments/$appointmentId",
@@ -567,14 +590,72 @@ function DoctorDashboardComponent() {
                               })
                             }
                           >
-                            View details
-                          </Button>
-                        </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {appointmentDateStr && (
+                                  <span className="text-xs font-medium text-gray-700">
+                                    {appointmentDateStr}
+                                  </span>
+                                )}
+                                <span className="text-sm font-medium text-gray-900">
+                                  {appointmentTime}
+                                </span>
+                                {appointment.appointmentType && (
+                                  <span className="text-xs text-gray-500">
+                                    • {appointment.appointmentType}
+                                  </span>
+                                )}
+                              </div>
+                              {patientName && (
+                                <p className="mt-0.5 text-xs text-gray-600 truncate">
+                                  {patientName}
+                                </p>
+                              )}
+                              <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+                                {patientCode && (
+                                  <p className="text-xs text-gray-500 font-mono">
+                                    Code: {patientCode}
+                                  </p>
+                                )}
+                                {appointment.appointmentCode && (
+                                  <p className="text-xs text-gray-400">
+                                    {patientCode && "• "}
+                                    {appointment.appointmentCode}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 ml-3">
+                              <span
+                                className={cn(
+                                  "inline-flex rounded-full px-2 py-0.5 text-xs font-medium shrink-0",
+                                  statusClass(appointment.status)
+                                )}
+                              >
+                                {appointment.status || "pending"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    {upcomingAppointments.data.length > 5 && (
+                      <div className="pt-2 border-t border-gray-100 sticky bottom-0 bg-white">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full text-xs"
+                          onClick={() =>
+                            navigate({ to: "/doctor/appointments" })
+                          }
+                        >
+                          View all {upcomingAppointments.metaData.totalCount}{" "}
+                          appointments
+                        </Button>
                       </div>
-                    ))}
+                    )}
                   </div>
                 ) : (
-                  <div className="py-12 text-center text-gray-500">
+                  <div className="py-8 text-center text-gray-500">
                     No appointments today.
                   </div>
                 )}
@@ -630,8 +711,8 @@ function DoctorDashboardComponent() {
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {enrichedPatients.map(
-                          ({ base: patient, displayName, email, phone }) => (
-                            <tr key={patient.id}>
+                          ({ id, displayName, email, phone }) => (
+                            <tr key={id}>
                               <td className="px-4 py-3 font-medium text-gray-900">
                                 {displayName}
                               </td>
@@ -649,7 +730,7 @@ function DoctorDashboardComponent() {
                                   onClick={() =>
                                     navigate({
                                       to: "/doctor/patients/$patientId",
-                                      params: { patientId: patient.id },
+                                      params: { patientId: id },
                                     })
                                   }
                                 >
@@ -704,168 +785,6 @@ function DoctorDashboardComponent() {
                 ) : (
                   <div className="py-10 text-center text-gray-500">
                     You don't have a schedule for today.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </section>
-
-          <section className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Quick treatment workflow</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate({ to: "/doctor/treatment-cycles" })}
-                >
-                  Open cycle management
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {treatmentCycles?.data?.length ? (
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {treatmentCycles.data.map((cycle) => (
-                      <div
-                        key={cycle.id}
-                        className="rounded-lg border border-gray-100 p-4"
-                      >
-                        <p className="text-sm font-semibold text-gray-900">
-                          Cycle {cycle.treatmentType || "N/A"}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Start: {cycle.startDate || "Not updated"}
-                        </p>
-                        <span
-                          className={cn(
-                            "mt-3 inline-flex rounded-full px-3 py-1 text-xs font-medium",
-                            cycle.status === "Completed"
-                              ? "bg-green-100 text-green-700"
-                              : cycle.status === "InProgress"
-                                ? "bg-blue-100 text-blue-700"
-                                : "bg-gray-100 text-gray-700"
-                          )}
-                        >
-                          {cycle.status || "Pending"}
-                        </span>
-                        <div className="mt-4 flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              navigate({
-                                to: "/doctor/treatment-cycles/$cycleId",
-                                params: { cycleId: cycle.id },
-                              })
-                            }
-                          >
-                            Details
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              navigate({
-                                to: "/doctor/treatment-cycles/$cycleId",
-                                params: { cycleId: cycle.id },
-                              } as any)
-                            }
-                          >
-                            View Timeline
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-10 text-center text-gray-500">
-                    No treatment cycles assigned to you yet.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Recent Medical Records</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate({ to: "/doctor/medical-records" })}
-                >
-                  View all
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {recentMedicalRecords?.data?.length ? (
-                  <div className="space-y-4">
-                    {recentMedicalRecords.data.map((record) => (
-                      <div
-                        key={record.id}
-                        className="flex flex-col gap-2 rounded-lg border border-gray-100 p-4"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">
-                              {record.diagnosis
-                                ? record.diagnosis.length > 50
-                                  ? record.diagnosis.substring(0, 50) + "..."
-                                  : record.diagnosis
-                                : "No diagnosis"}
-                            </p>
-                            {record.chiefComplaint && (
-                              <p className="mt-1 text-xs text-gray-500">
-                                {record.chiefComplaint.length > 60
-                                  ? record.chiefComplaint.substring(0, 60) +
-                                    "..."
-                                  : record.chiefComplaint}
-                              </p>
-                            )}
-                            <p className="mt-1 text-xs text-gray-400">
-                              {new Date(record.createdAt).toLocaleDateString(
-                                "en-GB",
-                                {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                }
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              navigate({
-                                to: "/doctor/medical-records",
-                                search: { q: record.id },
-                              })
-                            }
-                          >
-                            View
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              navigate({
-                                to: "/doctor/appointments/$appointmentId",
-                                params: {
-                                  appointmentId: record.appointmentId,
-                                },
-                              })
-                            }
-                          >
-                            Appointment
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-10 text-center text-gray-500">
-                    No recent medical records.
                   </div>
                 )}
               </CardContent>

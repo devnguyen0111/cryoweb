@@ -38,12 +38,16 @@ const mapUserResponse = (source: ApiUser | User, fallbackEmail = ""): User => {
     (source as ApiUser).userName ??
     (source as User).userName ??
     (email ? email.split("@")[0] : undefined);
-  const fullName =
-    (source as ApiUser).fullName ??
-    (source as User).fullName ??
+  const firstName =
+    (source as ApiUser).firstName ??
+    (source as User).firstName ??
     userName ??
     fallbackEmail.split("@")[0] ??
     "User";
+  const lastName =
+    (source as ApiUser).lastName ??
+    (source as User).lastName ??
+    "";
   const roleValue =
     (source as ApiUser).role ??
     (source as ApiUser).roleName ??
@@ -71,7 +75,8 @@ const mapUserResponse = (source: ApiUser | User, fallbackEmail = ""): User => {
   return {
     id,
     email,
-    fullName,
+    firstName,
+    lastName,
     role: roleValue,
     isEmailVerified,
     emailVerified: isEmailVerified,
@@ -270,7 +275,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const updateProfile = async (data: Partial<User>) => {
     try {
       const response = await api.user.updateProfile({
-        fullName: data.fullName,
+        firstName: data.firstName,
+        lastName: data.lastName,
         phoneNumber: data.phoneNumber ?? undefined,
       });
       if (response.data) {

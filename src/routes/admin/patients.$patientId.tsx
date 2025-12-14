@@ -148,7 +148,7 @@ function AdminPatientDetail() {
                 </p>
                 <p>
                   <span className="font-medium text-gray-900">
-                    National ID:
+                    Citizen ID Card:
                   </span>{" "}
                   {patient?.nationalId || "Not recorded"}
                 </p>

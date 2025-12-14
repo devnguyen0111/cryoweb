@@ -9,7 +9,8 @@ export type UserRole = "Admin" | "Doctor" | "Lab Technician" | "Receptionist";
 export interface User {
   id: string;
   email: string;
-  fullName?: string;
+  firstName?: string;
+  lastName?: string;
   userName?: string | null;
   phone?: string | null;
   phoneNumber?: string | null;

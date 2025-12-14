@@ -212,7 +212,7 @@ export function AgreementDocument({
               <span>{patientCode}</span>
             </div>
             <div>
-              <span className="font-semibold">National ID: </span>
+              <span className="font-semibold">Citizen ID Card: </span>
               <span>{nationalId}</span>
             </div>
             <div>

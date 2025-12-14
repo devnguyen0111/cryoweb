@@ -15,6 +15,8 @@ import { ServiceRequestDetailModal } from "@/features/doctor/service-requests/Se
 import { CreateServiceRequestModal } from "@/features/doctor/service-requests/CreateServiceRequestModal";
 import { ServiceRequestActionModal } from "@/features/doctor/service-requests/ServiceRequestActionModal";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
+import { cn } from "@/utils/cn";
 
 export const Route = createFileRoute("/doctor/service-requests")({
   component: DoctorServiceRequestsComponent,
@@ -275,21 +277,8 @@ function DoctorServiceRequestsComponent() {
     }
   };
 
-  const getStatusBadgeVariant = (status: ServiceRequestStatus) => {
-    switch (status) {
-      case "Pending":
-        return "secondary";
-      case "Approved":
-        return "default";
-      case "Rejected":
-        return "destructive";
-      case "Completed":
-        return "default";
-      case "Cancelled":
-        return "outline";
-      default:
-        return "secondary";
-    }
+  const getStatusBadgeClass = (status: ServiceRequestStatus) => {
+    return getServiceRequestStatusBadgeClass(status);
   };
 
   const formatDate = (value?: string | null) => {
@@ -340,7 +329,7 @@ function DoctorServiceRequestsComponent() {
                 <CardTitle>Service Requests</CardTitle>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
-                    placeholder="Search by request code..."
+                    placeholder="Search patient code (e.g. PAT001)"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full sm:w-64"
@@ -439,13 +428,14 @@ function DoctorServiceRequestsComponent() {
                                   : "—"}
                               </td>
                               <td className="px-4 py-3">
-                                <Badge
-                                  variant={getStatusBadgeVariant(
-                                    request.status
+                                <span
+                                  className={cn(
+                                    "inline-flex rounded-full px-3 py-1 text-xs font-semibold border",
+                                    getStatusBadgeClass(request.status)
                                   )}
                                 >
                                   {request.status}
-                                </Badge>
+                                </span>
                               </td>
                               <td className="px-4 py-3 text-sm">
                                 {formatDate(

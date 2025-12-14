@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +18,7 @@ import {
   ensureAppointmentStatus,
   normalizeAppointmentStatus,
 } from "@/utils/appointments";
+import { getAppointmentStatusBadgeClass } from "@/utils/status-colors";
 
 export const Route = createFileRoute("/receptionist/appointments")({
   component: ReceptionistAppointmentsComponent,
@@ -25,6 +27,17 @@ export const Route = createFileRoute("/receptionist/appointments")({
 function ReceptionistAppointmentsComponent() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments"],
+      }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
@@ -64,28 +77,81 @@ function ReceptionistAppointmentsComponent() {
     return datePart || value;
   };
 
-  const formatTimeValue = (value?: string) => {
-    if (!value) return "--:--";
-    if (value.includes("T")) {
+  const formatTimeValue = (value?: string | null) => {
+    if (!value) return null;
+
+    try {
+      // Handle ISO datetime format
+      if (value.includes("T")) {
+        const parsed = new Date(value);
+        if (!Number.isNaN(parsed.getTime())) {
+          return parsed.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+        }
+      }
+
+      // Handle time string format (HH:mm:ss or HH:mm)
+      if (value.match(/^\d{2}:\d{2}/)) {
+        return value.slice(0, 5); // Extract HH:mm
+      }
+
+      // Try to parse as date
       const parsed = new Date(value);
       if (!Number.isNaN(parsed.getTime())) {
-        return parsed.toLocaleTimeString([], {
+        return parsed.toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
+          hour12: false,
         });
       }
+    } catch {
+      return null;
     }
-    return value.slice(0, 5);
+
+    return null;
   };
 
-  const renderTimeRange = (appointment: Appointment) => {
-    // Appointment doesn't have startTime/endTime directly, they're in slot
-    const start = formatTimeValue((appointment as any).startTime);
-    const end = formatTimeValue((appointment as any).endTime);
-    if (start === "--:--" && end === "--:--") {
-      return "No time set";
+  const renderTimeRange = (appointment: Appointment | any) => {
+    // Try to get time from slot first
+    const slot = (appointment as any).slot;
+    let startTime: string | null = null;
+    let endTime: string | null = null;
+
+    if (slot) {
+      startTime = formatTimeValue(slot.startTime);
+      endTime = formatTimeValue(slot.endTime);
     }
-    return `${start} – ${end}`;
+
+    // Fallback: try to get from appointment directly (for extended detail response)
+    if (!startTime || !endTime) {
+      startTime = formatTimeValue((appointment as any).startTime) || startTime;
+      endTime = formatTimeValue((appointment as any).endTime) || endTime;
+    }
+
+    // Fallback: extract time from appointmentDate if it's an ISO datetime
+    if ((!startTime || !endTime) && appointment.appointmentDate) {
+      if (appointment.appointmentDate.includes("T")) {
+        const date = new Date(appointment.appointmentDate);
+        if (!Number.isNaN(date.getTime())) {
+          const timeStr = date.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+          if (!startTime) startTime = timeStr;
+          if (!endTime) endTime = timeStr;
+        }
+      }
+    }
+
+    if (!startTime || !endTime) {
+      return "—";
+    }
+
+    return `${startTime} – ${endTime}`;
   };
 
   const normalizedStatusFilter = statusFilter
@@ -120,23 +186,7 @@ function ReceptionistAppointmentsComponent() {
   const totalPages = data?.metaData?.totalPages ?? 1;
 
   const statusBadgeClass = (status?: string) => {
-    const normalized = normalizeAppointmentStatus(status);
-    switch (normalized) {
-      case "Scheduled":
-        return "bg-blue-100 text-blue-700";
-      case "CheckedIn":
-        return "bg-cyan-100 text-cyan-700";
-      case "InProgress":
-        return "bg-amber-100 text-amber-700";
-      case "Completed":
-        return "bg-emerald-100 text-emerald-700";
-      case "Cancelled":
-        return "bg-rose-100 text-rose-700";
-      case "NoShow":
-        return "bg-gray-200 text-gray-700";
-      default:
-        return "bg-slate-100 text-slate-700";
-    }
+    return getAppointmentStatusBadgeClass(status);
   };
 
   const formatStatusLabel = (status?: string) => {
@@ -242,6 +292,16 @@ function ReceptionistAppointmentsComponent() {
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+                Refresh
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => navigate({ to: "/receptionist/dashboard" })}
               >
                 Back to dashboard
@@ -309,10 +369,10 @@ function ReceptionistAppointmentsComponent() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Search
+                    Search patient code
                   </label>
                   <Input
-                    placeholder="Search by patient, doctor, or notes..."
+                    placeholder="e.g. PAT001"
                     value={searchTerm}
                     onChange={(event) => {
                       setSearchTerm(event.target.value);

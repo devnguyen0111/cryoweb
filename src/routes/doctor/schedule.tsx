@@ -25,11 +25,11 @@ import {
   normalizeAppointmentStatus,
   ensureAppointmentStatus,
 } from "@/utils/appointments";
+import { getAppointmentStatusBadgeClass } from "@/utils/status-colors";
 import { DoctorAppointmentDetailModal } from "@/features/doctor/appointments/DoctorAppointmentDetailModal";
 import { Modal } from "@/components/ui/modal";
 import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
 
-// Default slots - 4 fixed slots (2 morning, 2 afternoon)
 const DEFAULT_SLOTS: (Slot & { notes?: string })[] = [
   {
     id: "00000000-0000-0000-0000-000000000001",
@@ -96,19 +96,16 @@ function DoctorScheduleComponent() {
       .join("/")}`;
   }, [selectedDate]);
 
-  // AccountId IS DoctorId - use user.id directly as doctorId
   const doctorId = user?.id ?? null;
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
     useDoctorProfile();
 
-  // Check if selected date is a weekend (Saturday = 6, Sunday = 0)
   const isWeekend = useMemo(() => {
     const date = new Date(`${selectedDate}T00:00:00`);
     const dayOfWeek = date.getDay();
-    return dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+    return dayOfWeek === 0 || dayOfWeek === 6;
   }, [selectedDate]);
 
-  // Query appointments for the selected date and doctor (filter by date here)
   const { data: appointmentsData, isFetching: isLoadingAppointments } =
     useQuery<PaginatedResponse<Appointment>>({
       queryKey: ["doctor", "appointments", doctorId, selectedDate],
@@ -175,7 +172,6 @@ function DoctorScheduleComponent() {
       },
     });
 
-  // Filter appointments by selected date (client-side to ensure accuracy)
   const appointments = useMemo(() => {
     if (!appointmentsData?.data) return [];
 
@@ -183,27 +179,22 @@ function DoctorScheduleComponent() {
       if (!appointment.appointmentDate) return false;
 
       try {
-        // Parse appointmentDate (can be ISO datetime or date only)
         const appointmentDateStr = appointment.appointmentDate;
 
-        // If already in YYYY-MM-DD format, use directly
         if (appointmentDateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
           return appointmentDateStr === selectedDate;
         }
 
-        // If ISO datetime, extract date part
         if (appointmentDateStr.includes("T")) {
           const datePart = appointmentDateStr.split("T")[0];
           return datePart === selectedDate;
         }
 
-        // Fallback: parse with Date and compare
         const appointmentDate = new Date(appointmentDateStr);
         if (isNaN(appointmentDate.getTime())) {
           return false;
         }
 
-        // Get date in local timezone to avoid timezone errors
         const year = appointmentDate.getFullYear();
         const month = String(appointmentDate.getMonth() + 1).padStart(2, "0");
         const day = String(appointmentDate.getDate()).padStart(2, "0");
@@ -221,14 +212,12 @@ function DoctorScheduleComponent() {
     });
   }, [appointmentsData?.data, selectedDate]);
 
-  // Map appointments to slots
   const appointmentsBySlotId = useMemo(() => {
     const map: Record<string, Appointment> = {};
     appointments.forEach((appointment) => {
       if (appointment.slotId) {
         map[appointment.slotId] = appointment;
       } else {
-        // If no slotId, try to match by time
         if (appointment.appointmentDate) {
           try {
             const appointmentDate = new Date(appointment.appointmentDate);
@@ -236,7 +225,6 @@ function DoctorScheduleComponent() {
             const appointmentMinute = appointmentDate.getMinutes();
             const appointmentTime = `${String(appointmentHour).padStart(2, "0")}:${String(appointmentMinute).padStart(2, "0")}:00`;
 
-            // Match with slot based on time
             const matchedSlot = DEFAULT_SLOTS.find((slot) => {
               const slotStart = slot.startTime.slice(0, 5); // HH:mm
               const appointmentTimeShort = appointmentTime.slice(0, 5); // HH:mm
@@ -259,7 +247,6 @@ function DoctorScheduleComponent() {
     return map;
   }, [appointments]);
 
-  // Create slots with booked status based on appointments for the day
   const slotsWithStatus = useMemo(() => {
     if (isWeekend) return [];
     return DEFAULT_SLOTS.map((slot) => {
@@ -272,7 +259,6 @@ function DoctorScheduleComponent() {
     });
   }, [appointmentsBySlotId, isWeekend]);
 
-  // Check-in mutation
   const checkInMutation = useMutation({
     mutationFn: (appointmentId: string) =>
       api.appointment.checkIn(appointmentId),
@@ -293,7 +279,6 @@ function DoctorScheduleComponent() {
     },
   });
 
-  // Check-out mutation
   const checkOutMutation = useMutation({
     mutationFn: (appointmentId: string) =>
       api.appointment.checkOut(appointmentId),
@@ -314,7 +299,6 @@ function DoctorScheduleComponent() {
     },
   });
 
-  // Update status mutation
   const updateStatusMutation = useMutation({
     mutationFn: ({
       appointmentId,
@@ -342,30 +326,6 @@ function DoctorScheduleComponent() {
       );
     },
   });
-
-  // Toggle schedule availability mutation (kept for future use)
-  // const toggleAvailabilityMutation = useMutation({
-  //   mutationFn: ({
-  //     scheduleId,
-  //     isAvailable,
-  //   }: {
-  //     scheduleId: string;
-  //     isAvailable: boolean;
-  //   }) =>
-  //     api.doctorSchedule.updateScheduleAvailability(scheduleId, isAvailable),
-  //   onSuccess: () => {
-  //     toast.success("Schedule availability updated.");
-  //     queryClient.invalidateQueries({
-  //       queryKey: ["doctor", "schedules", doctorId, selectedDate],
-  //     });
-  //   },
-  //   onError: (error: any) => {
-  //     toast.error(
-  //       error?.response?.data?.message ||
-  //         "Unable to update schedule availability. Please try again."
-  //     );
-  //   },
-  // });
 
   const handleShiftDay = (offset: number) => {
     const [year, month, day] = selectedDate.split("-").map(Number);
@@ -427,23 +387,7 @@ function DoctorScheduleComponent() {
   };
 
   const getStatusBadgeClass = (status?: string | null) => {
-    const normalized = normalizeAppointmentStatus(status) ?? "Scheduled";
-    switch (normalized) {
-      case "Scheduled":
-        return "bg-blue-100 text-blue-700 border-blue-200";
-      case "CheckedIn":
-        return "bg-amber-100 text-amber-700 border-amber-200";
-      case "InProgress":
-        return "bg-purple-100 text-purple-700 border-purple-200";
-      case "Completed":
-        return "bg-emerald-100 text-emerald-700 border-emerald-200";
-      case "Cancelled":
-        return "bg-rose-100 text-rose-700 border-rose-200";
-      case "NoShow":
-        return "bg-slate-100 text-slate-700 border-slate-200";
-      default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
-    }
+    return getAppointmentStatusBadgeClass(status);
   };
 
   const canCheckIn = (status?: string | null) => {

@@ -295,8 +295,13 @@ function DoctorEncountersComponent() {
 
     const patientName =
       patientDetails?.accountInfo?.username ||
-      userDetails?.fullName ||
+      (userDetails?.firstName && userDetails?.lastName
+        ? `${userDetails.firstName} ${userDetails.lastName}`.trim()
+        : userDetails?.firstName || userDetails?.lastName) ||
       userDetails?.userName ||
+      (patientDetails?.firstName && patientDetails?.lastName
+        ? `${patientDetails.firstName} ${patientDetails.lastName}`.trim()
+        : patientDetails?.firstName || patientDetails?.lastName) ||
       "Unknown";
     const patientCode = patientDetails?.patientCode;
     // Use patientCode if available, otherwise use short ID (last 4 chars)

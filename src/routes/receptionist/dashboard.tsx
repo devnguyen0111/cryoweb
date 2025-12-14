@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { isAxiosError } from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -9,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
+import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
 
 export const Route = createFileRoute("/receptionist/dashboard")({
   component: ReceptionistDashboardComponent,
@@ -23,9 +26,13 @@ function ReceptionistDashboardComponent() {
     setIsRefreshing(true);
     // Invalidate all queries to refresh dashboard data
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["receptionist", "appointments"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments"],
+      }),
       queryClient.invalidateQueries({ queryKey: ["receptionist", "patients"] }),
-      queryClient.invalidateQueries({ queryKey: ["receptionist", "service-requests"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "service-requests"],
+      }),
     ]);
     setIsRefreshing(false);
   };
@@ -36,17 +43,36 @@ function ReceptionistDashboardComponent() {
       "appointments",
       { pageNumber: 1, pageSize: 5, status: "Scheduled" },
     ],
-    queryFn: () =>
-      api.appointment.getAppointments({
-        pageNumber: 1,
-        pageSize: 5,
-        status: "Scheduled",
-      }),
+    queryFn: async () => {
+      try {
+        return await api.appointment.getAppointments({
+          pageNumber: 1,
+          pageSize: 5,
+          status: "Scheduled",
+        });
+      } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        }
+        console.error("Error fetching appointments:", error);
+        return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+      }
+    },
   });
 
   const { data: patientsData } = useQuery({
     queryKey: ["receptionist", "patients", { pageNumber: 1, pageSize: 5 }],
-    queryFn: () => api.patient.getPatients({ pageNumber: 1, pageSize: 5 }),
+    queryFn: async () => {
+      try {
+        return await api.patient.getPatients({ pageNumber: 1, pageSize: 5 });
+      } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        }
+        console.error("Error fetching patients:", error);
+        return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+      }
+    },
   });
 
   const { data: pendingRequestsData } = useQuery({
@@ -55,35 +81,51 @@ function ReceptionistDashboardComponent() {
       "service-requests",
       { pageNumber: 1, pageSize: 5, status: "Pending" },
     ],
-    queryFn: () =>
-      api.serviceRequest.getServiceRequests({
-        pageNumber: 1,
-        pageSize: 5,
-        status: "Pending",
-      }),
+    queryFn: async () => {
+      try {
+        return await api.serviceRequest.getServiceRequests({
+          pageNumber: 1,
+          pageSize: 5,
+          status: "Pending",
+        });
+      } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        }
+        console.error("Error fetching service requests:", error);
+        return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+      }
+    },
   });
 
+  // Helper function to extract totalCount from response
+  const getTotalCount = (response: any): number => {
+    if (!response) return 0;
+    // Try different possible response structures
+    if (response.metaData?.totalCount !== undefined) {
+      return response.metaData.totalCount;
+    }
+    if (response.metadata?.totalCount !== undefined) {
+      return response.metadata.totalCount;
+    }
+    if (response.totalCount !== undefined) {
+      return response.totalCount;
+    }
+    // If response has data array, we can't determine total from it
+    return 0;
+  };
+
   const pendingRequests = pendingRequestsData?.data ?? [];
-  const totalPendingRequests = pendingRequestsData?.metaData?.totalCount ?? 0;
+  const totalPendingRequests = getTotalCount(pendingRequestsData);
 
   const upcomingAppointments = appointmentsData?.data ?? [];
-  const totalAppointmentsToday = appointmentsData?.metaData?.totalCount ?? 0;
+  const totalAppointmentsToday = getTotalCount(appointmentsData);
 
   const recentPatients = patientsData?.data ?? [];
-  const totalPatients = patientsData?.metaData?.totalCount ?? 0;
+  const totalPatients = getTotalCount(patientsData);
 
   const statusBadgeClass = (status?: string) => {
-    switch (status) {
-      case "Pending":
-        return "bg-amber-100 text-amber-700";
-      case "Confirmed":
-        return "bg-emerald-100 text-emerald-700";
-      case "Cancelled":
-      case "Rejected":
-        return "bg-rose-100 text-rose-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
+    return getServiceRequestStatusBadgeClass(status);
   };
 
   const quickStats = useMemo(
@@ -127,7 +169,9 @@ function ReceptionistDashboardComponent() {
               onClick={handleRefresh}
               disabled={isRefreshing}
             >
-              <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+              />
               Refresh
             </Button>
           </div>
@@ -219,8 +263,27 @@ function ReceptionistDashboardComponent() {
                           #{getLast4Chars(request.id)}
                         </p>
                         <p className="text-xs text-gray-500">
-                          Patient ID: {request.patientId || "—"} · Preferred
-                          date: {request.requestedDate || "—"}
+                          Patient ID:{" "}
+                          {request.patientId
+                            ? getLast4Chars(request.patientId)
+                            : "—"}{" "}
+                          · Preferred date:{" "}
+                          {(() => {
+                            const dateStr =
+                              request.requestDate || request.requestedDate;
+                            if (!dateStr) return "—";
+                            try {
+                              const date = new Date(dateStr);
+                              if (isNaN(date.getTime())) return dateStr;
+                              return date.toLocaleDateString("en-GB", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                              });
+                            } catch {
+                              return dateStr.split("T")[0] || dateStr;
+                            }
+                          })()}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -279,7 +342,26 @@ function ReceptionistDashboardComponent() {
                             `appointment #${index + 1}`}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {appointment.appointmentDate || "—"}
+                          {(() => {
+                            if (!appointment.appointmentDate) return "—";
+                            try {
+                              const date = new Date(
+                                appointment.appointmentDate
+                              );
+                              if (isNaN(date.getTime()))
+                                return appointment.appointmentDate;
+                              return date.toLocaleDateString("en-GB", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                              });
+                            } catch {
+                              return (
+                                appointment.appointmentDate.split("T")[0] ||
+                                appointment.appointmentDate
+                              );
+                            }
+                          })()}
                         </p>
                       </div>
                       <Button
@@ -326,13 +408,29 @@ function ReceptionistDashboardComponent() {
                   >
                     <div>
                       <p className="font-medium text-gray-900">
-                        {patient.fullName ||
+                        {getFullNameFromObject(patient) ||
                           patient.patientCode ||
                           `Patient ${getLast4Chars(patient.id)}`}
                       </p>
                       <p className="text-xs text-gray-500">
-                        Email: {patient.email || "—"} · Phone:{" "}
-                        {patient.phoneNumber || "—"}
+                        Email:{" "}
+                        {(() => {
+                          const patientAny = patient as any;
+                          return (
+                            patientAny?.accountInfo?.email ||
+                            patient.email ||
+                            "—"
+                          );
+                        })()}{" "}
+                        · Phone:{" "}
+                        {(() => {
+                          const patientAny = patient as any;
+                          return (
+                            patientAny?.accountInfo?.phone ||
+                            patient.phoneNumber ||
+                            "—"
+                          );
+                        })()}
                       </p>
                     </div>
                     <Button

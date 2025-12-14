@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { isAxiosError } from "axios";
 import { z } from "zod";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
@@ -14,6 +15,7 @@ import {
   getPatientProperty,
 } from "@/utils/patient-helpers";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getStatusBadgeClass } from "@/utils/status-colors";
 
 export const Route = createFileRoute("/receptionist/patients")({
   validateSearch: z.object({
@@ -24,6 +26,17 @@ export const Route = createFileRoute("/receptionist/patients")({
 
 function ReceptionistPatientsComponent() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["receptionist", "patients"] }),
+      queryClient.invalidateQueries({ queryKey: ["receptionist", "patient"] }),
+    ]);
+    setIsRefreshing(false);
+  };
   const { viewId } = Route.useSearch();
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
@@ -134,22 +147,7 @@ function ReceptionistPatientsComponent() {
     });
 
   const statusBadgeClass = (status?: string) => {
-    switch (status) {
-      case "Pending":
-        return "bg-amber-100 text-amber-800";
-      case "Confirmed":
-      case "scheduled":
-        return "bg-blue-100 text-blue-700";
-      case "Completed":
-      case "completed":
-        return "bg-emerald-100 text-emerald-700";
-      case "Cancelled":
-      case "cancelled":
-      case "Rejected":
-        return "bg-rose-100 text-rose-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
+    return getStatusBadgeClass(status, "auto");
   };
 
   const handleViewDetails = (patientId: string) => {
@@ -216,6 +214,16 @@ function ReceptionistPatientsComponent() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+                Refresh
+              </Button>
               <Button
                 onClick={() =>
                   navigate({ to: "/receptionist/service-requests" })
@@ -293,7 +301,8 @@ function ReceptionistPatientsComponent() {
                                   </td>
                                   <td className="p-2 text-sm text-gray-600">
                                     <div>
-                                      Account ID: {getLast4Chars(patient.accountId)}
+                                      Account ID:{" "}
+                                      {getLast4Chars(patient.accountId)}
                                     </div>
                                     <div className="text-xs">
                                       Verified:{" "}
@@ -439,7 +448,7 @@ function ReceptionistPatientsComponent() {
                           </p>
                           <p>
                             <span className="font-medium text-gray-900">
-                              National ID:
+                              Citizen ID Card:
                             </span>{" "}
                             {patientDetail.nationalId || "Not recorded"}
                           </p>

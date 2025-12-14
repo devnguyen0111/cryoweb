@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { isAxiosError } from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -11,17 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
-import type {
-  PaginatedResponse,
-  Appointment,
-  Slot,
-  Doctor,
-} from "@/api/types";
+import type { PaginatedResponse, Appointment, Slot, Doctor } from "@/api/types";
 import { cn } from "@/utils/cn";
 import {
   APPOINTMENT_STATUS_LABELS,
   normalizeAppointmentStatus,
 } from "@/utils/appointments";
+import { getAppointmentStatusBadgeClass } from "@/utils/status-colors";
 import { AppointmentDetailForm } from "@/features/receptionist/appointments/AppointmentDetailForm";
 
 // Default slots - 4 fixed slots (2 morning, 2 afternoon)
@@ -73,9 +70,8 @@ function ReceptionistScheduleComponent() {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<
     string | null
   >(null);
-  const [selectedAppointment, setSelectedAppointment] = useState<
-    Appointment | null
-  >(null);
+  const [selectedAppointment, setSelectedAppointment] =
+    useState<Appointment | null>(null);
 
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -332,10 +328,17 @@ function ReceptionistScheduleComponent() {
     }
   };
 
-  const handleRefresh = () => {
-    queryClient.invalidateQueries({
-      queryKey: ["receptionist", "appointments", "schedule", selectedDate],
-    });
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments", "schedule", selectedDate],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments"],
+      }),
+    ]);
+    setIsRefreshing(false);
   };
 
   const handleAppointmentClick = (appointment: Appointment) => {
@@ -359,23 +362,7 @@ function ReceptionistScheduleComponent() {
   };
 
   const getStatusBadgeClass = (status?: string | null) => {
-    const normalized = normalizeAppointmentStatus(status) ?? "Scheduled";
-    switch (normalized) {
-      case "Scheduled":
-        return "bg-blue-100 text-blue-700 border-blue-200";
-      case "CheckedIn":
-        return "bg-amber-100 text-amber-700 border-amber-200";
-      case "InProgress":
-        return "bg-purple-100 text-purple-700 border-purple-200";
-      case "Completed":
-        return "bg-emerald-100 text-emerald-700 border-emerald-200";
-      case "Cancelled":
-        return "bg-rose-100 text-rose-700 border-rose-200";
-      case "NoShow":
-        return "bg-slate-100 text-slate-700 border-slate-200";
-      default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
-    }
+    return getAppointmentStatusBadgeClass(status);
   };
 
   const canCheckIn = (status?: string | null) => {
@@ -455,7 +442,14 @@ function ReceptionistScheduleComponent() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={handleRefresh}>
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
                 Refresh
               </Button>
               <Button
@@ -526,9 +520,7 @@ function ReceptionistScheduleComponent() {
                 </div>
                 {appointmentsWithoutDoctor.length > 0 && (
                   <div className="text-amber-600">
-                    <span className="font-medium">
-                      Need doctor assignment:
-                    </span>{" "}
+                    <span className="font-medium">Need doctor assignment:</span>{" "}
                     {appointmentsWithoutDoctor.length}
                   </div>
                 )}
@@ -539,7 +531,9 @@ function ReceptionistScheduleComponent() {
           {isWeekend ? (
             <Card>
               <CardContent className="py-12 text-center text-gray-500">
-                <p className="text-lg">No appointments scheduled on weekends.</p>
+                <p className="text-lg">
+                  No appointments scheduled on weekends.
+                </p>
               </CardContent>
             </Card>
           ) : isAppointmentsLoading ? (
@@ -668,7 +662,9 @@ function ReceptionistScheduleComponent() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleAppointmentClick(appointment)}
+                                onClick={() =>
+                                  handleAppointmentClick(appointment)
+                                }
                               >
                                 View Details
                               </Button>
@@ -724,7 +720,8 @@ function ReceptionistScheduleComponent() {
                         )
                         .map((appointment) => {
                           const doctorLabel = resolveDoctorLabel(appointment);
-                          const needsDoctor = doctorLabel === "No doctor assigned";
+                          const needsDoctor =
+                            doctorLabel === "No doctor assigned";
                           return (
                             <div
                               key={appointment.id}
@@ -777,7 +774,9 @@ function ReceptionistScheduleComponent() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleAppointmentClick(appointment)}
+                                  onClick={() =>
+                                    handleAppointmentClick(appointment)
+                                  }
                                 >
                                   View
                                 </Button>
@@ -826,4 +825,3 @@ function ReceptionistScheduleComponent() {
     </ProtectedRoute>
   );
 }
-

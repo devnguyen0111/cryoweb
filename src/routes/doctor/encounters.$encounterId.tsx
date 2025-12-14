@@ -55,7 +55,9 @@ function EncounterDetailPage() {
     queryFn: async () => {
       if (!encounterData?.patientId) return null;
       try {
-        const response = await api.patient.getPatientDetails(encounterData.patientId);
+        const response = await api.patient.getPatientDetails(
+          encounterData.patientId
+        );
         return response.data;
       } catch {
         return null;
@@ -82,25 +84,32 @@ function EncounterDetailPage() {
   // Merge patient information
   const patientInfo = useMemo(() => {
     if (!patientDetails && !userDetails) return null;
-    
-    const name = 
+
+    const name =
       patientDetails?.accountInfo?.username ||
       userDetails?.fullName ||
       userDetails?.userName ||
       "Unknown";
-    
+
     const patientCode = patientDetails?.patientCode;
     const nationalId = patientDetails?.nationalId;
     const age = userDetails?.age;
-    const gender = userDetails?.gender !== undefined
-      ? userDetails.gender ? "Male" : "Female"
-      : null;
-    const dob = userDetails?.dob 
+    const gender =
+      userDetails?.gender !== undefined
+        ? userDetails.gender
+          ? "Male"
+          : "Female"
+        : null;
+    const dob = userDetails?.dob
       ? new Date(userDetails.dob).toLocaleDateString("vi-VN")
       : null;
     const email = patientDetails?.accountInfo?.email || userDetails?.email;
-    const phone = patientDetails?.accountInfo?.phone || userDetails?.phone || userDetails?.phoneNumber;
-    const address = patientDetails?.accountInfo?.address || userDetails?.location;
+    const phone =
+      patientDetails?.accountInfo?.phone ||
+      userDetails?.phone ||
+      userDetails?.phoneNumber;
+    const address =
+      patientDetails?.accountInfo?.address || userDetails?.location;
     const bloodType = patientDetails?.bloodType;
     const emergencyContact = patientDetails?.emergencyContact;
     const emergencyPhone = patientDetails?.emergencyPhone;
@@ -288,9 +297,7 @@ function EncounterDetailPage() {
           <Card>
             <CardContent className="py-8 text-center">
               <p className="text-gray-500 mb-4">Encounter not found</p>
-              <Button
-                onClick={() => navigate({ to: "/doctor/encounters" })}
-              >
+              <Button onClick={() => navigate({ to: "/doctor/encounters" })}>
                 Back to Encounters
               </Button>
             </CardContent>
@@ -309,18 +316,28 @@ function EncounterDetailPage() {
               <div>
                 <h1 className="text-3xl font-bold">Encounter Details</h1>
                 <p className="text-gray-600">
-                  Code: <span className="font-semibold">{encounterData.treatmentCode || encounterId}</span>
+                  Code:{" "}
+                  <span className="font-semibold">
+                    {encounterData.treatmentCode || encounterId}
+                  </span>
                 </p>
                 {patientInfo && (
                   <div className="mt-2 text-sm text-gray-600">
                     <span className="font-medium">Patient: </span>
-                    <span className="font-semibold text-gray-900">{patientInfo.name}</span>
+                    <span className="font-semibold text-gray-900">
+                      {patientInfo.name}
+                    </span>
                     {patientInfo.patientCode && (
-                      <span className="text-gray-500"> ({patientInfo.patientCode})</span>
+                      <span className="text-gray-500">
+                        {" "}
+                        ({patientInfo.patientCode})
+                      </span>
                     )}
                     {patientInfo.age && (
                       <span className="text-gray-500">
-                        {" "}• {patientInfo.age} {patientInfo.gender ? `• ${patientInfo.gender}` : ""}
+                        {" "}
+                        • {patientInfo.age}{" "}
+                        {patientInfo.gender ? `• ${patientInfo.gender}` : ""}
                       </span>
                     )}
                   </div>
@@ -362,118 +379,193 @@ function EncounterDetailPage() {
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Full Name</p>
-                    <p className="text-sm font-semibold text-gray-900">{patientInfo.name}</p>
+                    <p className="text-xs font-medium text-gray-500 mb-1">
+                      Full Name
+                    </p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {patientInfo.name}
+                    </p>
                   </div>
                   {patientInfo.patientCode && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Patient Code</p>
-                      <p className="text-sm text-gray-700">{patientInfo.patientCode}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Patient Code
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.patientCode}
+                      </p>
                     </div>
                   )}
                   {patientInfo.nationalId && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">National ID</p>
-                      <p className="text-sm text-gray-700">{patientInfo.nationalId}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Citizen ID Card
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.nationalId}
+                      </p>
                     </div>
                   )}
                   {patientInfo.age && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Age</p>
-                      <p className="text-sm text-gray-700">{patientInfo.age} {patientInfo.gender ? `(${patientInfo.gender})` : ""}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Age
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.age}{" "}
+                        {patientInfo.gender ? `(${patientInfo.gender})` : ""}
+                      </p>
                     </div>
                   )}
                   {patientInfo.dob && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Date of Birth</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Date of Birth
+                      </p>
                       <p className="text-sm text-gray-700">{patientInfo.dob}</p>
                     </div>
                   )}
                   {patientInfo.email && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Email</p>
-                      <p className="text-sm text-gray-700">{patientInfo.email}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Email
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.email}
+                      </p>
                     </div>
                   )}
                   {patientInfo.phone && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Phone</p>
-                      <p className="text-sm text-gray-700">{patientInfo.phone}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Phone
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.phone}
+                      </p>
                     </div>
                   )}
                   {patientInfo.address && (
                     <div className="md:col-span-2">
-                      <p className="text-xs font-medium text-gray-500 mb-1">Address</p>
-                      <p className="text-sm text-gray-700">{patientInfo.address}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Address
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.address}
+                      </p>
                     </div>
                   )}
                   {patientInfo.bloodType && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Blood Type</p>
-                      <p className="text-sm text-gray-700">{patientInfo.bloodType}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Blood Type
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.bloodType}
+                      </p>
                     </div>
                   )}
                   {patientInfo.height && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Height</p>
-                      <p className="text-sm text-gray-700">{patientInfo.height} cm</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Height
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.height} cm
+                      </p>
                     </div>
                   )}
                   {patientInfo.weight && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Weight</p>
-                      <p className="text-sm text-gray-700">{patientInfo.weight} kg</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Weight
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.weight} kg
+                      </p>
                     </div>
                   )}
                   {patientInfo.bmi && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">BMI</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        BMI
+                      </p>
                       <p className="text-sm text-gray-700">{patientInfo.bmi}</p>
                     </div>
                   )}
                   {patientInfo.emergencyContact && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Emergency Contact</p>
-                      <p className="text-sm text-gray-700">{patientInfo.emergencyContact}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Emergency Contact
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.emergencyContact}
+                      </p>
                       {patientInfo.emergencyPhone && (
-                        <p className="text-xs text-gray-500 mt-1">{patientInfo.emergencyPhone}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {patientInfo.emergencyPhone}
+                        </p>
                       )}
                     </div>
                   )}
                   {patientInfo.insurance && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Insurance</p>
-                      <p className="text-sm text-gray-700">{patientInfo.insurance}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Insurance
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.insurance}
+                      </p>
                     </div>
                   )}
                   {patientInfo.occupation && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Occupation</p>
-                      <p className="text-sm text-gray-700">{patientInfo.occupation}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Occupation
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.occupation}
+                      </p>
                     </div>
                   )}
                   {patientInfo.medicalHistory && (
                     <div className="md:col-span-2">
-                      <p className="text-xs font-medium text-gray-500 mb-1">Medical History</p>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{patientInfo.medicalHistory}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Medical History
+                      </p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                        {patientInfo.medicalHistory}
+                      </p>
                     </div>
                   )}
                   {patientInfo.allergies && (
                     <div className="md:col-span-2">
-                      <p className="text-xs font-medium text-gray-500 mb-1">Allergies</p>
-                      <p className="text-sm text-gray-700">{patientInfo.allergies}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Allergies
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.allergies}
+                      </p>
                     </div>
                   )}
                   {patientInfo.treatmentCount !== undefined && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Total Treatments</p>
-                      <p className="text-sm text-gray-700">{patientInfo.treatmentCount}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Total Treatments
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.treatmentCount}
+                      </p>
                     </div>
                   )}
                   {patientInfo.labSampleCount !== undefined && (
                     <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Lab Samples</p>
-                      <p className="text-sm text-gray-700">{patientInfo.labSampleCount}</p>
+                      <p className="text-xs font-medium text-gray-500 mb-1">
+                        Lab Samples
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        {patientInfo.labSampleCount}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -612,10 +704,7 @@ function EncounterDetailPage() {
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={updateMutation.isPending}
-              >
+              <Button type="submit" disabled={updateMutation.isPending}>
                 {updateMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </div>

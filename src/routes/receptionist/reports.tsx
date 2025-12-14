@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,16 @@ export const Route = createFileRoute("/receptionist/reports")({
 
 function ReceptionistReportsRoute() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["receptionist", "reports"] }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   const { data: appointmentSnapshot } = useQuery({
     queryKey: ["receptionist", "reports", "appointments-summary"],
@@ -99,12 +110,24 @@ function ReceptionistReportsRoute() {
                 Lightweight insights focused on service intake and scheduling.
               </p>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => navigate({ to: "/receptionist/dashboard" })}
-            >
-              Back to dashboard
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+                Refresh
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate({ to: "/receptionist/dashboard" })}
+              >
+                Back to dashboard
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">

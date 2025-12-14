@@ -591,7 +591,7 @@ function DoctorTreatmentCyclesComponent() {
                     <h2 className="text-2xl font-bold text-gray-900">
                       {patientName}
                       {age && (
-                        <span className="ml-2 text-gray-600">, {age}</span>
+                        <span className="ml-2 text-gray-600">| Age: {age}</span>
                       )}
                     </h2>
                     {cycleWithType.treatmentType && (
@@ -625,7 +625,7 @@ function DoctorTreatmentCyclesComponent() {
                   </div>
                   <div className="mt-1 space-y-0.5 text-sm text-gray-600">
                     <div>
-                      <span className="font-medium">ID: </span>
+                      <span className="font-medium">PatientCode: </span>
                       {shortId}
                     </div>
                     {formattedPhone && (

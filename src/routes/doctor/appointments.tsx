@@ -28,6 +28,8 @@ import { DoctorAppointmentDetailModal } from "@/features/doctor/appointments/Doc
 import { Modal } from "@/components/ui/modal";
 import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getAppointmentStatusBadgeClass } from "@/utils/status-colors";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 export const Route = createFileRoute("/doctor/appointments")({
   component: DoctorAppointmentsComponent,
@@ -208,7 +210,7 @@ function DoctorAppointmentsComponent() {
           { appointmentId: variables.appointmentId },
         ],
       });
-      
+
       // Send notification to patient
       if (data.appointment?.patientId) {
         const { sendAppointmentNotification } = await import(
@@ -250,20 +252,7 @@ function DoctorAppointmentsComponent() {
   };
 
   const statusBadgeClass = (status?: string) => {
-    switch (status) {
-      case "scheduled":
-      case "confirmed":
-        return "bg-blue-100 text-blue-700";
-      case "in-progress":
-        return "bg-yellow-100 text-yellow-700";
-      case "completed":
-        return "bg-green-100 text-green-700";
-      case "cancelled":
-      case "no-show":
-        return "bg-red-100 text-red-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
+    return getAppointmentStatusBadgeClass(status);
   };
 
   const formatAppointmentType = (
@@ -319,7 +308,8 @@ function DoctorAppointmentsComponent() {
               <div>
                 <h1 className="text-3xl font-bold">Appointment management</h1>
                 <p className="text-gray-600">
-                  Monitor schedules, update statuses, and start patient encounters.
+                  Monitor schedules, update statuses, and start patient
+                  encounters.
                 </p>
               </div>
               <Button
@@ -327,7 +317,9 @@ function DoctorAppointmentsComponent() {
                 onClick={handleRefresh}
                 disabled={isRefreshing}
               >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
                 Refresh
               </Button>
             </div>
@@ -414,10 +406,10 @@ function DoctorAppointmentsComponent() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Search
+                    Search patient code
                   </label>
                   <Input
-                    placeholder="Enter patient name or description..."
+                    placeholder="e.g. PAT001"
                     value={searchTerm}
                     onChange={(event) => {
                       setSearchTerm(event.target.value);
@@ -470,8 +462,21 @@ function DoctorAppointmentsComponent() {
                         const patient = appointmentPatientId
                           ? patientsMap.get(appointmentPatientId)
                           : null;
-                        const patientName =
-                          patient?.fullName || patient?.patientCode || null;
+                        // Get patient name with priority: accountInfo > patient object
+                        const patientName = (() => {
+                          if (!patient) return "";
+                          const patientWithAccount = patient as any;
+                          // Try to get name from accountInfo first (if PatientDetailResponse)
+                          if (patientWithAccount.accountInfo) {
+                            const accountFullName = getFullNameFromObject(
+                              patientWithAccount.accountInfo
+                            );
+                            if (accountFullName) return accountFullName;
+                          }
+                          // Fallback to patient object directly
+                          return getFullNameFromObject(patient);
+                        })();
+                        const patientCode = patient?.patientCode || null;
                         const patientIndex = appointmentPatientId
                           ? patientIds.findIndex(
                               (id) => id === appointmentPatientId
@@ -485,25 +490,26 @@ function DoctorAppointmentsComponent() {
                         return (
                           <tr key={appointment.id} className="hover:bg-gray-50">
                             <td className="px-4 py-3 font-medium text-gray-900">
-                              {patientName && patient ? (
+                              {(patientName || patientCode) && patient ? (
                                 <>
-                                  <div className="font-semibold">
-                                    {patientName}
-                                  </div>
-                                  <p className="text-xs text-gray-500">
-                                    {patient.patientCode && (
-                                      <>Code: {patient.patientCode}</>
-                                    )}
-                                    {patient.patientCode &&
-                                      appointmentPatientId &&
-                                      " • "}
-                                    {appointmentPatientId && (
-                                      <>
-                                        ID:{" "}
-                                        {getLast4Chars(appointmentPatientId)}
-                                      </>
-                                    )}
-                                  </p>
+                                  {patientName.trim() ? (
+                                    <>
+                                      <div className="font-semibold">
+                                        {patientName}
+                                      </div>
+                                      {patientCode && (
+                                        <p className="text-xs text-gray-500">
+                                          {patientCode}
+                                        </p>
+                                      )}
+                                    </>
+                                  ) : (
+                                    patientCode && (
+                                      <div className="font-semibold">
+                                        {patientCode}
+                                      </div>
+                                    )
+                                  )}
                                 </>
                               ) : isPatientLoading ? (
                                 <>
@@ -680,7 +686,15 @@ function DoctorAppointmentsComponent() {
           {doctorId ? (
             <DoctorCreateAppointmentForm
               doctorId={doctorId}
-              doctorName={doctorProfile?.fullName}
+              doctorName={
+                doctorProfile
+                  ? doctorProfile.firstName && doctorProfile.lastName
+                    ? `${doctorProfile.firstName} ${doctorProfile.lastName}`.trim()
+                    : doctorProfile.firstName ||
+                      doctorProfile.lastName ||
+                      undefined
+                  : undefined
+              }
               onClose={() => setIsCreateModalOpen(false)}
               onCreated={(appointmentId) => {
                 setIsCreateModalOpen(false);

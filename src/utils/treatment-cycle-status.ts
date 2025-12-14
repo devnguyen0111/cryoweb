@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Calendar,
 } from "lucide-react";
+import { getTreatmentCycleStatusBadgeClass as getBadgeClassFromUtils } from "./status-colors";
 
 export interface TreatmentCycleStatusConfig {
   value: number;
@@ -129,27 +130,11 @@ export function getTreatmentCycleStatusIcon(
 
 /**
  * Get Tailwind CSS classes for status badge based on color
+ * This function now uses the centralized status-colors utility for consistency
  */
 export function getTreatmentCycleStatusBadgeClass(
   status: TreatmentCycleStatus | number | string | undefined | null
 ): string {
-  const normalizedStatus = normalizeTreatmentCycleStatus(status);
-
-  switch (normalizedStatus) {
-    case "Completed":
-      return "bg-green-100 text-green-700 border-green-200";
-    case "InProgress":
-      return "bg-amber-100 text-amber-700 border-amber-200";
-    case "Cancelled":
-      return "bg-red-100 text-red-700 border-red-200";
-    case "Failed":
-      return "bg-red-100 text-red-700 border-red-200";
-    case "OnHold":
-      return "bg-orange-100 text-orange-700 border-orange-200";
-    case "Scheduled":
-      return "bg-blue-100 text-blue-700 border-blue-200";
-    case "Planned":
-    default:
-      return "bg-slate-100 text-slate-700 border-slate-200";
-  }
+  // Use centralized utility for consistency
+  return getBadgeClassFromUtils(status);
 }

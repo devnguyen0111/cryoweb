@@ -30,6 +30,7 @@ import {
 } from "@/api/types";
 import { TreatmentCycleStatusBadge } from "@/components/treatment-cycle-status-badge";
 import { useNavigate } from "@tanstack/react-router";
+import { getAppointmentStatusBadgeClass } from "@/utils/status-colors";
 
 interface PatientDetailModalProps {
   patientId: string;
@@ -491,42 +492,7 @@ function getAppointmentStatusLabel(
 function getAppointmentStatusColor(
   status: string | number | undefined
 ): string {
-  const statusStr = String(status).toLowerCase();
-
-  if (statusStr === "completed" || statusStr === "5") {
-    return "bg-green-100 text-green-700";
-  }
-  if (statusStr === "confirmed" || statusStr === "2") {
-    return "bg-blue-100 text-blue-700";
-  }
-  if (
-    statusStr === "checkedin" ||
-    statusStr === "checked in" ||
-    statusStr === "3"
-  ) {
-    return "bg-cyan-100 text-cyan-700";
-  }
-  if (
-    statusStr === "inprogress" ||
-    statusStr === "in progress" ||
-    statusStr === "4"
-  ) {
-    return "bg-purple-100 text-purple-700";
-  }
-  if (statusStr === "cancelled" || statusStr === "6") {
-    return "bg-red-100 text-red-700";
-  }
-  if (statusStr === "noshow" || statusStr === "no show" || statusStr === "7") {
-    return "bg-orange-100 text-orange-700";
-  }
-  if (statusStr === "rescheduled" || statusStr === "8") {
-    return "bg-yellow-100 text-yellow-700";
-  }
-  if (statusStr === "scheduled" || statusStr === "1") {
-    return "bg-gray-100 text-gray-700";
-  }
-
-  return "bg-gray-100 text-gray-700";
+  return getAppointmentStatusBadgeClass(status);
 }
 
 // Appointments Tab Component

@@ -264,7 +264,6 @@ export function TreatmentDetailForm({
   );
   const [showSignatureModal, setShowSignatureModal] = useState(false);
 
-  // Fetch treatment basic info
   const { data: treatmentData, isLoading: treatmentLoading } = useQuery({
     queryKey: ["treatment", treatmentId],
     queryFn: async () => {
@@ -274,7 +273,6 @@ export function TreatmentDetailForm({
     retry: false,
   });
 
-  // Fetch IUI details if treatment type is IUI
   const { data: iuiData, isLoading: iuiLoading } = useQuery({
     queryKey: ["treatment-iui", treatmentId],
     queryFn: async () => {
@@ -293,7 +291,6 @@ export function TreatmentDetailForm({
     retry: false,
   });
 
-  // Fetch IVF details if treatment type is IVF
   const { data: ivfData, isLoading: ivfLoading } = useQuery({
     queryKey: ["treatment-ivf", treatmentId],
     queryFn: async () => {
@@ -312,7 +309,6 @@ export function TreatmentDetailForm({
     retry: false,
   });
 
-  // Fetch patient details
   const { data: patientDetails } = useQuery({
     queryKey: ["patient-details", treatmentData?.patientId],
     queryFn: async () => {
@@ -332,7 +328,6 @@ export function TreatmentDetailForm({
   const isLoading = treatmentLoading || iuiLoading || ivfLoading;
   const treatmentType = treatmentData?.treatmentType;
 
-  // Fetch all cycles for this treatment to show progress (same as HorizontalTreatmentTimeline)
   const { data: allCycles } = useQuery({
     queryKey: ["treatment-cycles", "treatment", treatmentId],
     queryFn: async () => {
@@ -353,7 +348,6 @@ export function TreatmentDetailForm({
     retry: false,
   });
 
-  // Fetch current step from backend API (most accurate source) - same as HorizontalTreatmentTimeline
   const { data: currentStepFromApi } = useQuery({
     queryKey: ["treatment-current-step", treatmentId, treatmentType],
     queryFn: async () => {
@@ -607,147 +601,6 @@ export function TreatmentDetailForm({
   const completedStepsSet = useMemo(() => {
     return new Set(completedSteps);
   }, [completedSteps]);
-
-  // Mutation to update treatment status - currently unused
-  /* const updateStatusMutation = useMutation({
-    mutationFn: async (newStatus: string) => {
-      // Update IUI/IVF specific status if applicable
-      if (treatmentType === "IUI" && iuiData) {
-        // Get IUI ID - ensure it exists
-        const iuiId = (iuiData as any).id;
-        if (!iuiId) {
-          throw new Error("IUI treatment ID is missing");
-        }
-
-        // Build full IUI payload with ALL required fields as per API spec
-        // API requires all fields to be present, even if empty
-        // Use nullish coalescing (??) to ensure we always have values
-        const iuiPayload: TreatmentIUICreateUpdateRequest = {
-          treatmentId: treatmentId,
-          protocol: String((iuiData as any).protocol ?? ""),
-          medications: String((iuiData as any).medications ?? ""),
-          monitoring: String((iuiData as any).monitoring ?? ""),
-          motileSpermCount: Number((iuiData as any).motileSpermCount ?? 0),
-          numberOfAttempts: Number((iuiData as any).numberOfAttempts ?? 0),
-          outcome: String((iuiData as any).outcome ?? ""),
-          notes: String(iuiData?.notes ?? (iuiData as any).notes ?? ""),
-          status: newStatus as IUICycleStatus, // Use IUICycleStatus enum value
-        };
-
-        // Always include date fields - API expects them in the payload
-        // Format dates as ISO strings if they exist
-        const ovulationDate = (iuiData as any).ovulationTriggerDate;
-        if (ovulationDate) {
-          // Ensure it's formatted as ISO string
-          iuiPayload.ovulationTriggerDate =
-            ovulationDate instanceof Date
-              ? ovulationDate.toISOString()
-              : String(ovulationDate);
-        } else {
-          // Include as null if not present - API may require the field to be present
-          (iuiPayload as any).ovulationTriggerDate = null;
-        }
-
-        const inseminationDate =
-          (iuiData as any).inseminationDate ?? iuiData.inseminationDate;
-        if (inseminationDate) {
-          // Ensure it's formatted as ISO string
-          iuiPayload.inseminationDate =
-            inseminationDate instanceof Date
-              ? inseminationDate.toISOString()
-              : String(inseminationDate);
-        } else {
-          // Include as null if not present - API may require the field to be present
-          (iuiPayload as any).inseminationDate = null;
-        }
-
-        // Ensure all required fields are present
-        console.log("Updating IUI with payload:", {
-          iuiId,
-          payload: iuiPayload,
-        });
-
-        // Call API with full payload
-        await api.treatmentIUI.updateIUI(iuiId, iuiPayload);
-      } else if (treatmentType === "IVF" && ivfData) {
-        // Build full IVF payload with all required fields
-        const ivfPayload: any = {
-          treatmentId: treatmentId,
-          protocol: (ivfData as any).protocol || "",
-          notes: (ivfData as any).notes || "",
-          status: newStatus,
-        };
-
-        // Include all IVF fields
-        if ((ivfData as any).stimulationStartDate) {
-          ivfPayload.stimulationStartDate = (
-            ivfData as any
-          ).stimulationStartDate;
-        }
-        if ((ivfData as any).oocyteRetrievalDate) {
-          ivfPayload.oocyteRetrievalDate = (ivfData as any).oocyteRetrievalDate;
-        }
-        if ((ivfData as any).fertilizationDate) {
-          ivfPayload.fertilizationDate = (ivfData as any).fertilizationDate;
-        }
-        if ((ivfData as any).transferDate) {
-          ivfPayload.transferDate = (ivfData as any).transferDate;
-        }
-        if ((ivfData as any).oocytesRetrieved !== undefined) {
-          ivfPayload.oocytesRetrieved = (ivfData as any).oocytesRetrieved;
-        }
-        if ((ivfData as any).oocytesMature !== undefined) {
-          ivfPayload.oocytesMature = (ivfData as any).oocytesMature;
-        }
-        if ((ivfData as any).oocytesFertilized !== undefined) {
-          ivfPayload.oocytesFertilized = (ivfData as any).oocytesFertilized;
-        }
-        if ((ivfData as any).embryosCultured !== undefined) {
-          ivfPayload.embryosCultured = (ivfData as any).embryosCultured;
-        }
-        if ((ivfData as any).embryosTransferred !== undefined) {
-          ivfPayload.embryosTransferred = (ivfData as any).embryosTransferred;
-        }
-        if ((ivfData as any).embryosCryopreserved !== undefined) {
-          ivfPayload.embryosCryopreserved = (
-            ivfData as any
-          ).embryosCryopreserved;
-        }
-        if ((ivfData as any).embryosFrozen !== undefined) {
-          ivfPayload.embryosFrozen = (ivfData as any).embryosFrozen;
-        }
-        if ((ivfData as any).outcome) {
-          ivfPayload.outcome = (ivfData as any).outcome;
-        }
-        if ((ivfData as any).complications) {
-          ivfPayload.complications = (ivfData as any).complications;
-        }
-
-        await api.treatmentIVF.updateIVF((ivfData as any).id, ivfPayload);
-      }
-
-      // For IUI/IVF, we don't update main treatment status via /status endpoint
-      // because the status values are different (IUICycleStatus vs TreatmentStatus)
-      // The IUI/IVF specific status update is sufficient
-      // If needed, we can update treatment status separately using TreatmentStatus enum values
-      // For now, we only update IUI/IVF specific status
-    },
-    onSuccess: () => {
-      toast.success("Treatment status has been updated!");
-      queryClient.invalidateQueries({
-        queryKey: ["treatment", treatmentId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["treatment-iui", treatmentId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["treatment-ivf", treatmentId],
-      });
-    },
-    onError: (error: any) => {
-      toast.error(error?.response?.data?.message || "Unable to update status");
-    },
-  }); */
 
   // Note: Step progression should be handled through treatment cycles, not directly through treatment status
   // This form is for viewing only. To update steps, use the treatment cycles page.

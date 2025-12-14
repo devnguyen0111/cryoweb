@@ -65,7 +65,8 @@ export interface RegisterRequest {
   email: string;
   password: string;
   confirmPassword: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   phoneNumber?: string;
 }
 
@@ -127,7 +128,8 @@ export type UserRole =
 export interface User {
   id: string;
   email: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   phoneNumber?: string;
   phone?: string;
   userName?: string;
@@ -160,13 +162,15 @@ export interface UserDetailResponse extends User {
 export interface CreateUserRequest {
   email: string;
   password: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   phoneNumber?: string;
   role: UserRole;
 }
 
 export interface UpdateUserRequest {
-  fullName?: string;
+  firstName?: string;
+  lastName?: string;
   phoneNumber?: string;
 }
 
@@ -188,7 +192,8 @@ export interface Patient {
   id: string;
   patientCode: string;
   nationalId: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: string; // ISO date
   gender: Gender;
   phoneNumber: string;
@@ -205,8 +210,8 @@ export interface PatientDetailResponse {
   id: string;
   patientCode: string;
   nationalId: string;
-  // These fields may not be in details API, but in Patient object from appointment
-  fullName?: string;
+  firstName?: string;
+  lastName?: string;
   dateOfBirth?: string;
   gender?: Gender;
   phoneNumber?: string;
@@ -247,7 +252,8 @@ export interface PatientDetailResponse {
 
 export interface CreatePatientRequest {
   nationalId: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: string;
   gender: Gender;
   phoneNumber: string;
@@ -259,7 +265,8 @@ export interface CreatePatientRequest {
 
 export interface UpdatePatientRequest {
   nationalId?: string;
-  fullName?: string;
+  firstName?: string;
+  lastName?: string;
   dateOfBirth?: string;
   gender?: Gender;
   phoneNumber?: string;
@@ -286,7 +293,8 @@ export interface GetPatientsRequest {
 export interface PatientSearchResult {
   id: string;
   patientCode: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   nationalId: string;
   phoneNumber: string;
 }
@@ -301,7 +309,8 @@ export interface PatientStatisticsResponse {
 export interface RelatedPatientInfo {
   id: string;
   patientCode: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   relationshipType: RelationshipType;
 }
 
@@ -320,7 +329,8 @@ export interface PatientListQuery extends GetPatientsRequest {
 export interface Doctor {
   id: string;
   badgeId: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   specialty: string;
   phoneNumber: string;
   email?: string;
@@ -337,7 +347,8 @@ export interface DoctorDetailResponse extends Doctor {
 
 export interface CreateDoctorRequest {
   badgeId: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   specialty: string;
   phoneNumber: string;
   email?: string;
@@ -346,7 +357,8 @@ export interface CreateDoctorRequest {
 }
 
 export interface UpdateDoctorRequest {
-  fullName?: string;
+  firstName?: string;
+  lastName?: string;
   specialty?: string;
   phoneNumber?: string;
   email?: string;
@@ -460,7 +472,8 @@ export interface AppointmentExtendedDetailResponse {
         id: string;
         badgeId: string;
         specialty: string;
-        fullName: string;
+        firstName: string;
+        lastName: string;
       };
     };
   };
@@ -470,7 +483,8 @@ export interface AppointmentExtendedDetailResponse {
     doctorId: string;
     badgeId: string;
     specialty: string;
-    fullName: string;
+    firstName: string;
+    lastName: string;
     role: string;
     notes?: string | null;
   }>;
@@ -1236,6 +1250,13 @@ export interface GetServiceRequestsRequest {
   status?: ServiceRequestStatus;
   appointmentId?: string;
   patientId?: string;
+  requestDateFrom?: string; // ISO date-time
+  requestDateTo?: string; // ISO date-time
+  minAmount?: number;
+  maxAmount?: number;
+  searchTerm?: string;
+  sort?: string;
+  order?: string;
 }
 
 // Legacy compatibility
@@ -1955,7 +1976,8 @@ export interface AgreementDetailResponse extends Agreement {
   };
   patient?: {
     id: string;
-    fullName: string;
+    firstName: string;
+    lastName: string;
     email: string;
     phoneNumber: string;
     dob: string;

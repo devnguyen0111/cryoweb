@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { isAxiosError } from "axios";
+import axios, { isAxiosError } from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import {
   isPatientDetailResponse,
   getPatientProperty,
 } from "@/utils/patient-helpers";
+import { getStatusBadgeClass } from "@/utils/status-colors";
 
 export const Route = createFileRoute("/receptionist/patients/$patientId")({
   component: ReceptionistPatientDetail,
@@ -61,14 +62,59 @@ function ReceptionistPatientDetail() {
       }),
   });
 
+  // Query patient appointments
   const { data: patientAppointments } = useQuery({
-    queryKey: ["receptionist", "appointments", { patientId }],
-    queryFn: () =>
-      api.appointment.getAppointments({
-        pageNumber: 1,
-        pageSize: 10,
-        ...(patientId ? { patientId: patientId } : {}),
-      }),
+    queryKey: ["receptionist", "patient", "appointments", patientId],
+    queryFn: async () => {
+      try {
+        return await api.appointment.getAppointments({
+          patientId: patientId,
+          pageNumber: 1,
+          pageSize: 10,
+        });
+      } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 403) {
+          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        }
+        throw error;
+      }
+    },
+    enabled: Boolean(patientId),
+  });
+
+  // Query cryo storage contracts for current patient
+  const { data: patientCryoContracts } = useQuery({
+    queryKey: ["receptionist", "cryo-storage-contracts", { patientId }],
+    queryFn: async () => {
+      // TODO: Replace with actual API call when CryoStorageContract API module is available
+      // For now, using direct axios call as API integration is pending
+      try {
+        const API_BASE_URL =
+          import.meta.env.VITE_API_URL || "https://cryofert.runasp.net/api";
+        const token = localStorage.getItem("authToken");
+        const response = await axios.get(
+          `${API_BASE_URL}/CryoStorageContract`,
+          {
+            params: {
+              patientId: patientId,
+              pageNumber: 1,
+              pageSize: 50,
+            },
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        return {
+          data: response.data?.data || [],
+          metaData: response.data?.metaData || { totalCount: 0, totalPages: 0 },
+        };
+      } catch {
+        return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+      }
+    },
+    enabled: Boolean(patientId),
   });
 
   useEffect(() => {
@@ -90,7 +136,9 @@ function ReceptionistPatientDetail() {
     (patient && isPatientDetailResponse(patient)
       ? patient.accountInfo?.username
       : null) ||
-    patient?.fullName ||
+    (patient?.firstName && patient?.lastName
+      ? `${patient.firstName} ${patient.lastName}`.trim()
+      : patient?.firstName || patient?.lastName) ||
     patient?.patientCode ||
     "Patient detail";
 
@@ -111,7 +159,9 @@ function ReceptionistPatientDetail() {
   const [showCreateTransactionModal, setShowCreateTransactionModal] =
     useState(false);
   const [createTransactionFormData, setCreateTransactionFormData] = useState({
-    relatedEntityType: "ServiceRequest" as "ServiceRequest" | "Appointment" | "CryoStorageContract",
+    relatedEntityType: "ServiceRequest" as
+      | "ServiceRequest"
+      | "CryoStorageContract",
     relatedEntityId: "",
   });
   const [showQRCode, setShowQRCode] = useState(false);
@@ -153,7 +203,8 @@ function ReceptionistPatientDetail() {
     mutationFn: () =>
       api.patient.updatePatient(patientId, {
         nationalId: formState.nationalId || undefined,
-        fullName: patient?.fullName || undefined,
+        firstName: patient?.firstName || undefined,
+        lastName: patient?.lastName || undefined,
         dateOfBirth: patient?.dateOfBirth || undefined,
         gender: patient?.gender as any,
         phoneNumber: formState.phone || undefined,
@@ -186,7 +237,9 @@ function ReceptionistPatientDetail() {
       }),
     onSuccess: (response) => {
       if (response.data) {
-        setPaymentUrl(response.data.paymentUrl || response.data.vnPayUrl || null);
+        setPaymentUrl(
+          response.data.paymentUrl || response.data.vnPayUrl || null
+        );
         setCreatedTransactionId(response.data.id);
         setShowCreateTransactionModal(false);
         setShowQRCode(true);
@@ -211,22 +264,7 @@ function ReceptionistPatientDetail() {
   });
 
   const statusBadgeClass = (status?: string) => {
-    switch (status) {
-      case "Pending":
-        return "bg-amber-100 text-amber-800";
-      case "Confirmed":
-      case "scheduled":
-        return "bg-blue-100 text-blue-700";
-      case "Completed":
-      case "completed":
-        return "bg-emerald-100 text-emerald-700";
-      case "Cancelled":
-      case "cancelled":
-      case "Rejected":
-        return "bg-rose-100 text-rose-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
+    return getStatusBadgeClass(status, "auto");
   };
 
   const recentRequests = patientServiceRequests?.data ?? [];
@@ -344,7 +382,7 @@ function ReceptionistPatientDetail() {
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">
-                        National ID
+                        Citizen ID Card
                       </label>
                       <Input
                         value={formState.nationalId}
@@ -447,7 +485,7 @@ function ReceptionistPatientDetail() {
                     </p>
                     <p>
                       <span className="font-medium text-gray-900">
-                        National ID:
+                        Citizen ID Card:
                       </span>{" "}
                       {patient?.nationalId || "Not recorded"}
                     </p>
@@ -597,7 +635,7 @@ function ReceptionistPatientDetail() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-gray-700">
                 {recentAppointments.length ? (
-                  recentAppointments.map((appointment, index) => (
+                  recentAppointments.map((appointment: any, index: number) => (
                     <div
                       key={appointment.id}
                       className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
@@ -671,7 +709,6 @@ function ReceptionistPatientDetail() {
                     ...prev,
                     relatedEntityType: e.target.value as
                       | "ServiceRequest"
-                      | "Appointment"
                       | "CryoStorageContract",
                     relatedEntityId: "", // Reset when type changes
                   }));
@@ -679,7 +716,6 @@ function ReceptionistPatientDetail() {
                 className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <option value="ServiceRequest">Service Request</option>
-                <option value="Appointment">Appointment</option>
                 <option value="CryoStorageContract">
                   Cryo Storage Contract
                 </option>
@@ -717,10 +753,11 @@ function ReceptionistPatientDetail() {
               </div>
             )}
 
-            {createTransactionFormData.relatedEntityType === "Appointment" && (
+            {createTransactionFormData.relatedEntityType ===
+              "CryoStorageContract" && (
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">
-                  Appointment <span className="text-red-500">*</span>
+                  Cryo Storage Contract <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={createTransactionFormData.relatedEntityId}
@@ -733,45 +770,23 @@ function ReceptionistPatientDetail() {
                   className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   <option value="">
-                    {patientAppointments?.data?.length
-                      ? "Select an appointment"
-                      : "No appointments found"}
+                    {patientCryoContracts?.data?.length
+                      ? "Select a cryo storage contract"
+                      : "No cryo storage contracts found"}
                   </option>
-                  {patientAppointments?.data?.map((appointment) => (
-                    <option key={appointment.id} value={appointment.id}>
-                      {appointment.appointmentDate
-                        ? new Date(appointment.appointmentDate).toLocaleDateString(
-                            "vi-VN"
-                          )
-                        : "No date"}{" "}
-                      - {appointment.status || "Pending"}
+                  {patientCryoContracts?.data?.map((contract: any) => (
+                    <option key={contract.id} value={contract.id}>
+                      {contract.contractNumber || contract.id.slice(0, 8)} -{" "}
+                      {contract.status || "Active"}
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
-
-            {createTransactionFormData.relatedEntityType ===
-              "CryoStorageContract" && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Cryo Storage Contract <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="text"
-                  value={createTransactionFormData.relatedEntityId}
-                  onChange={(e) =>
-                    setCreateTransactionFormData((prev) => ({
-                      ...prev,
-                      relatedEntityId: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter contract ID (UUID)"
-                />
-                <p className="text-xs text-gray-500">
-                  Note: CryoStorageContract API integration pending. Please
-                  enter the contract ID manually.
-                </p>
+                {patientCryoContracts?.data?.length === 0 && (
+                  <p className="text-xs text-gray-500">
+                    No cryo storage contracts found for this patient. You may
+                    need to enter the contract ID manually.
+                  </p>
+                )}
               </div>
             )}
 
@@ -821,7 +836,8 @@ function ReceptionistPatientDetail() {
               <div className="space-y-4">
                 <div className="text-center text-sm text-gray-600">
                   <p>
-                    Click the button below to open the payment page and complete the transaction.
+                    Click the button below to open the payment page and complete
+                    the transaction.
                   </p>
                   {createdTransactionId && (
                     <p className="mt-2 text-xs text-gray-500">

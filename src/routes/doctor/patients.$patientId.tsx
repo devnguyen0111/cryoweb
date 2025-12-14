@@ -356,7 +356,9 @@ function DoctorPatientProfile() {
                 {(patient && isPatientDetailResponse(patient)
                   ? patient.accountInfo?.username
                   : null) ||
-                  patient?.fullName ||
+                  (patient?.firstName && patient?.lastName
+                    ? `${patient.firstName} ${patient.lastName}`.trim()
+                    : patient?.firstName || patient?.lastName) ||
                   patient?.patientCode ||
                   "Unnamed patient"}
               </h1>
@@ -399,7 +401,9 @@ function DoctorPatientProfile() {
                       patient?.phoneNumber ||
                       "Not provided"}
                   </p>
-                  <p>National ID: {patient?.nationalId || "Not provided"}</p>
+                  <p>
+                    Citizen ID Card: {patient?.nationalId || "Not provided"}
+                  </p>
                   <p>
                     Emergency contact:{" "}
                     {getPatientProperty(patient, "emergencyContact", null)

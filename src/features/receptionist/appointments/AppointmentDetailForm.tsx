@@ -18,6 +18,7 @@ import {
   APPOINTMENT_STATUS_LABELS,
   normalizeAppointmentStatus,
 } from "@/utils/appointments";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 // Appointment types as specified by user
 const APPOINTMENT_TYPES = [
@@ -213,7 +214,7 @@ export function AppointmentDetailForm({
 
   const doctors = doctorsData ?? [];
 
-  // Get schedules for selected doctor
+  // Get schedules for selected doctor (query all, then filter by date on client)
   const { data: doctorSchedulesData, isLoading: isLoadingSchedules } = useQuery(
     {
       queryKey: ["receptionist", "doctor-schedules", selectedDoctorId],
@@ -221,11 +222,12 @@ export function AppointmentDetailForm({
       queryFn: async () => {
         if (!selectedDoctorId) return [];
         try {
+          // Query all schedules for the doctor (API may not support dateFrom/dateTo)
           const response = await api.doctorSchedule.getSchedulesByDoctorId(
             selectedDoctorId,
             {
               pageNumber: 1,
-              pageSize: 100,
+              pageSize: 200, // Get more schedules to ensure we have enough
             }
           );
           return response.data ?? [];
@@ -237,19 +239,34 @@ export function AppointmentDetailForm({
     }
   );
 
-  // Filter schedules by appointment date
+  // Filter schedules by appointment date on client side
   const schedulesForDate = useMemo(() => {
     if (!doctorSchedulesData || !appointmentDate) return [];
+
+    // Normalize appointment date to YYYY-MM-DD format
+    const normalizedAppointmentDate = appointmentDate.includes("T")
+      ? appointmentDate.split("T")[0]
+      : appointmentDate.split(" ")[0];
+
     return doctorSchedulesData.filter((schedule) => {
       try {
         const scheduleDate = schedule.workDate;
         if (!scheduleDate) return false;
-        // Compare date part only (YYYY-MM-DD)
-        const scheduleDateOnly = scheduleDate.includes("T")
-          ? scheduleDate.split("T")[0]
-          : scheduleDate.split(" ")[0];
-        return scheduleDateOnly === appointmentDate;
-      } catch {
+
+        // Normalize schedule date to YYYY-MM-DD format
+        let scheduleDateOnly: string;
+        if (scheduleDate.includes("T")) {
+          scheduleDateOnly = scheduleDate.split("T")[0];
+        } else if (scheduleDate.includes(" ")) {
+          scheduleDateOnly = scheduleDate.split(" ")[0];
+        } else {
+          scheduleDateOnly = scheduleDate; // Already in YYYY-MM-DD format
+        }
+
+        // Compare dates
+        return scheduleDateOnly === normalizedAppointmentDate;
+      } catch (error) {
+        console.error("Error filtering schedule by date:", error, schedule);
         return false;
       }
     });
@@ -339,7 +356,9 @@ export function AppointmentDetailForm({
       return randomDoctor;
     },
     onSuccess: (doctor) => {
-      toast.success(`Assigned doctor: ${doctor.fullName}`);
+      const doctorName =
+        getFullNameFromObject(doctor) || doctor.badgeId || doctor.id;
+      toast.success(`Assigned doctor: ${doctorName}`);
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments", "detail", appointmentId],
       });
@@ -396,9 +415,12 @@ export function AppointmentDetailForm({
     },
     onSuccess: async ({ doctorId, slotId }) => {
       const doctor = doctors.find((d) => d.id === doctorId);
+      const doctorName = doctor
+        ? getFullNameFromObject(doctor) || doctor.badgeId || doctorId
+        : doctorId;
       const message = slotId
-        ? `Changed doctor to: ${doctor?.fullName || doctorId} with new slot`
-        : `Changed doctor to: ${doctor?.fullName || doctorId}`;
+        ? `Changed doctor to: ${doctorName} with new slot`
+        : `Changed doctor to: ${doctorName}`;
       toast.success(message);
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments", "detail", appointmentId],
@@ -406,24 +428,23 @@ export function AppointmentDetailForm({
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments"],
       });
-      
+
       // Send notification to patient
       if (appointment?.patientId) {
         const { sendAppointmentNotification } = await import(
           "@/utils/notifications"
         );
-        await sendAppointmentNotification(
-          appointment.patientId,
-          "updated",
-          {
-            appointmentId: appointmentId,
-            appointmentDate: appointment.appointmentDate,
-            appointmentType: appointment.type,
-            doctorName: doctor?.fullName,
-          }
-        );
+        const doctorName = doctor
+          ? getFullNameFromObject(doctor) || doctor.badgeId
+          : undefined;
+        await sendAppointmentNotification(appointment.patientId, "updated", {
+          appointmentId: appointmentId,
+          appointmentDate: appointment.appointmentDate,
+          appointmentType: appointment.type,
+          doctorName: doctorName,
+        });
       }
-      
+
       // Reset selections
       setSelectedSlotId("");
     },
@@ -447,7 +468,7 @@ export function AppointmentDetailForm({
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments"],
       });
-      
+
       // Send notification to patient
       if (appointment?.patientId) {
         const { sendAppointmentNotification } = await import(
@@ -483,7 +504,7 @@ export function AppointmentDetailForm({
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments"],
       });
-      
+
       // Send notification to patient
       if (appointment?.patientId) {
         const { sendAppointmentNotification } = await import(
@@ -524,21 +545,17 @@ export function AppointmentDetailForm({
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "appointments"],
       });
-      
+
       // Send notification to patient
       if (appointment?.patientId) {
         const { sendAppointmentNotification } = await import(
           "@/utils/notifications"
         );
-        await sendAppointmentNotification(
-          appointment.patientId,
-          "cancelled",
-          {
-            appointmentId: appointmentId,
-            appointmentDate: appointment.appointmentDate,
-            appointmentType: appointment.type,
-          }
-        );
+        await sendAppointmentNotification(appointment.patientId, "cancelled", {
+          appointmentId: appointmentId,
+          appointmentDate: appointment.appointmentDate,
+          appointmentType: appointment.type,
+        });
       }
     },
     onError: (error: any) => {
@@ -551,13 +568,19 @@ export function AppointmentDetailForm({
 
   const patientName = useMemo(() => {
     if (patient) {
-      return (
-        (patient as any).accountInfo?.fullName ?? patient.fullName ?? patient.id
-      );
+      const accountFullName = (patient as any).accountInfo
+        ? getFullNameFromObject((patient as any).accountInfo)
+        : null;
+      return accountFullName || getFullNameFromObject(patient) || patient.id;
     }
     if (appointment?.patient) {
       const p = appointment.patient as any;
-      return p.accountInfo?.fullName ?? p.fullName ?? appointment.patientId;
+      const accountFullName = p.accountInfo
+        ? getFullNameFromObject(p.accountInfo)
+        : null;
+      return (
+        accountFullName || getFullNameFromObject(p) || appointment.patientId
+      );
     }
     return appointment?.patientId ?? "Unknown";
   }, [patient, appointment]);
@@ -645,7 +668,7 @@ export function AppointmentDetailForm({
                 <Label className="text-sm font-semibold">Assigned Doctor</Label>
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm text-gray-700">
-                    {assignedDoctor.fullName ||
+                    {getFullNameFromObject(assignedDoctor) ||
                       assignedDoctor.badgeId ||
                       "Unknown Doctor"}
                   </p>
@@ -817,12 +840,18 @@ export function AppointmentDetailForm({
                 }}
               >
                 <option value="">Select a doctor</option>
-                {doctors.map((doctor) => (
-                  <option key={doctor.id} value={doctor.id}>
-                    {doctor.fullName || doctor.email || doctor.id}
-                    {doctor.specialty && ` - ${doctor.specialty}`}
-                  </option>
-                ))}
+                {doctors.map((doctor) => {
+                  const displayName =
+                    getFullNameFromObject(doctor) ||
+                    doctor.email ||
+                    `Doctor ${doctor.badgeId || doctor.id}`;
+                  return (
+                    <option key={doctor.id} value={doctor.id}>
+                      {displayName}
+                      {doctor.specialty && ` - ${doctor.specialty}`}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 

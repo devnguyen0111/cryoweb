@@ -2,8 +2,8 @@ import { useState, useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { isAxiosError } from "axios";
-import { Printer } from "lucide-react";
+import axios, { isAxiosError } from "axios";
+import { Printer, RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,8 +13,16 @@ import { Modal } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/badge";
 import { AppointmentDetailForm } from "@/features/receptionist/appointments/AppointmentDetailForm";
 import { api } from "@/api/client";
-import type { TransactionStatus, TransactionType, ServiceRequest, ServiceRequestDetail, Service, Patient } from "@/api/types";
+import type {
+  TransactionStatus,
+  TransactionType,
+  ServiceRequest,
+  ServiceRequestDetail,
+  Service,
+  Patient,
+} from "@/api/types";
 import { cn } from "@/utils/cn";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 export const Route = createFileRoute("/receptionist/transactions")({
   component: ReceptionistTransactionsComponent,
@@ -23,6 +31,17 @@ export const Route = createFileRoute("/receptionist/transactions")({
 function ReceptionistTransactionsComponent() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "transactions"],
+      }),
+    ]);
+    setIsRefreshing(false);
+  };
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
@@ -46,7 +65,9 @@ function ReceptionistTransactionsComponent() {
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [createFormData, setCreateFormData] = useState({
     patientId: "", // Used only for UI filtering, not sent to API
-    relatedEntityType: "ServiceRequest" as "ServiceRequest" | "Appointment" | "CryoStorageContract",
+    relatedEntityType: "ServiceRequest" as
+      | "ServiceRequest"
+      | "CryoStorageContract",
     relatedEntityId: "",
   });
 
@@ -168,42 +189,83 @@ function ReceptionistTransactionsComponent() {
   });
 
   // Query service requests for selected patient
-  const { data: serviceRequestsData } = useQuery({
+  const {
+    data: serviceRequestsData,
+    isLoading: isLoadingServiceRequests,
+    error: serviceRequestsError,
+  } = useQuery({
     queryKey: [
       "receptionist",
       "service-requests",
+      "for-transaction",
       { patientId: createFormData.patientId },
     ],
-    queryFn: () =>
-      api.serviceRequest.getServiceRequests({
-        patientId: createFormData.patientId,
-        pageNumber: 1,
-        pageSize: 50,
-      }),
-    enabled: Boolean(
-      showCreateModal &&
-        createFormData.patientId &&
-        createFormData.relatedEntityType === "ServiceRequest"
-    ),
+    queryFn: async () => {
+      if (!createFormData.patientId) {
+        return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+      }
+      try {
+        console.log(
+          "Fetching service requests for patient:",
+          createFormData.patientId
+        );
+        const response = await api.serviceRequest.getServiceRequests({
+          patientId: createFormData.patientId,
+          pageNumber: 1,
+          pageSize: 50,
+        });
+        console.log("Service requests response:", response);
+        console.log("Service requests data:", response.data);
+        console.log("First request:", response.data?.[0]);
+        return response;
+      } catch (error) {
+        console.error("Error fetching service requests:", error);
+        throw error;
+      }
+    },
+    enabled: Boolean(showCreateModal && createFormData.patientId),
   });
 
-  // Query appointments for selected patient
-  const { data: appointmentsData } = useQuery({
+  // Query cryo storage contracts for selected patient
+  const { data: cryoContractsData } = useQuery({
     queryKey: [
       "receptionist",
-      "appointments",
+      "cryo-storage-contracts",
       { patientId: createFormData.patientId },
     ],
-    queryFn: () =>
-      api.appointment.getAppointments({
-        patientId: createFormData.patientId,
-        pageNumber: 1,
-        pageSize: 50,
-      }),
+    queryFn: async () => {
+      // TODO: Replace with actual API call when CryoStorageContract API module is available
+      // For now, using direct axios call as API integration is pending
+      try {
+        const API_BASE_URL =
+          import.meta.env.VITE_API_URL || "https://cryofert.runasp.net/api";
+        const token = localStorage.getItem("authToken");
+        const response = await axios.get(
+          `${API_BASE_URL}/CryoStorageContract`,
+          {
+            params: {
+              patientId: createFormData.patientId,
+              pageNumber: 1,
+              pageSize: 50,
+            },
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        return {
+          data: response.data?.data || [],
+          metaData: response.data?.metaData || { totalCount: 0, totalPages: 0 },
+        };
+      } catch {
+        return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+      }
+    },
     enabled: Boolean(
       showCreateModal &&
         createFormData.patientId &&
-        createFormData.relatedEntityType === "Appointment"
+        createFormData.relatedEntityType === "CryoStorageContract"
     ),
   });
 
@@ -216,7 +278,9 @@ function ReceptionistTransactionsComponent() {
       }),
     onSuccess: (response) => {
       if (response.data) {
-        setPaymentUrl(response.data.paymentUrl || response.data.vnPayUrl || null);
+        setPaymentUrl(
+          response.data.paymentUrl || response.data.vnPayUrl || null
+        );
         setCreatedTransactionId(response.data.id);
         setShowCreateModal(false);
         setShowQRCode(true);
@@ -410,7 +474,7 @@ function ReceptionistTransactionsComponent() {
             <div class="info-section">
               <h3>Transaction Information</h3>
               <p><strong>Transaction Code:</strong> ${transaction.transactionCode || transaction.id}</p>
-              <p><strong>Transaction ID:</strong> ${transaction.id}</p>
+              <p><strong>Transaction ID:</strong> ${getLast4Chars(transaction.id)}</p>
               <p><strong>Date:</strong> ${invoiceDate}</p>
               <p><strong>Type:</strong> ${transaction.transactionType || "Payment"}</p>
               <p><strong>Status:</strong> <span class="status-badge status-${transaction.status?.toLowerCase() || "pending"}">${transaction.status || "Pending"}</span></p>
@@ -420,9 +484,9 @@ function ReceptionistTransactionsComponent() {
             <div class="info-section">
               <h3>Patient Information</h3>
               ${transaction.patientName ? `<p><strong>Name:</strong> ${transaction.patientName}</p>` : ""}
-              ${transaction.patientId ? `<p><strong>Patient ID:</strong> ${transaction.patientId}</p>` : ""}
+              ${transaction.patientId ? `<p><strong>Patient ID:</strong> ${getLast4Chars(transaction.patientId)}</p>` : ""}
               ${transaction.relatedEntityType ? `<p><strong>Related To:</strong> ${transaction.relatedEntityType}</p>` : ""}
-              ${transaction.relatedEntityId ? `<p><strong>Entity ID:</strong> ${transaction.relatedEntityId}</p>` : ""}
+              ${transaction.relatedEntityId ? `<p><strong>Entity ID:</strong> ${getLast4Chars(transaction.relatedEntityId)}</p>` : ""}
             </div>
           </div>
 
@@ -465,13 +529,17 @@ function ReceptionistTransactionsComponent() {
             </div>
           </div>
 
-          ${transaction.description || transaction.notes ? `
+          ${
+            transaction.description || transaction.notes
+              ? `
           <div class="info-section" style="margin-top: 30px;">
             <h3>Notes</h3>
             <p>${transaction.description || ""}</p>
             ${transaction.notes ? `<p>${transaction.notes}</p>` : ""}
           </div>
-          ` : ""}
+          `
+              : ""
+          }
 
           <div class="footer">
             <p>This is a computer-generated invoice. No signature required.</p>
@@ -509,33 +577,44 @@ function ReceptionistTransactionsComponent() {
   }, [transactionDetail?.data]);
 
   // Query service request detail when showing in transaction modal
-  const { data: serviceRequest, isLoading: serviceRequestLoading } = useQuery<ServiceRequest | null>({
-    enabled: Boolean(showServiceRequestInTransaction && serviceRequestId),
-    queryKey: ["receptionist", "service-request", "detail", serviceRequestId],
-    retry: false,
-    queryFn: async () => {
-      if (!serviceRequestId) return null;
-      try {
-        const response = await api.serviceRequest.getServiceRequestById(serviceRequestId);
-        return response.data ?? null;
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
+  const { data: serviceRequest, isLoading: serviceRequestLoading } =
+    useQuery<ServiceRequest | null>({
+      enabled: Boolean(showServiceRequestInTransaction && serviceRequestId),
+      queryKey: ["receptionist", "service-request", "detail", serviceRequestId],
+      retry: false,
+      queryFn: async () => {
+        if (!serviceRequestId) return null;
+        try {
+          const response =
+            await api.serviceRequest.getServiceRequestById(serviceRequestId);
+          return response.data ?? null;
+        } catch (error) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            return null;
+          }
+          throw error;
         }
-        throw error;
-      }
-    },
-  });
+      },
+    });
 
   // Query service request details
-  const { data: requestDetails, isLoading: detailsLoading } = useQuery<ServiceRequestDetail[]>({
-    enabled: Boolean(showServiceRequestInTransaction && serviceRequestId && !serviceRequest?.serviceDetails),
+  const { data: requestDetails, isLoading: detailsLoading } = useQuery<
+    ServiceRequestDetail[]
+  >({
+    enabled: Boolean(
+      showServiceRequestInTransaction &&
+        serviceRequestId &&
+        !serviceRequest?.serviceDetails
+    ),
     queryKey: ["receptionist", "service-request-details", serviceRequestId],
     retry: false,
     queryFn: async () => {
       if (!serviceRequestId) return [];
       try {
-        const response = await api.serviceRequestDetails.getServiceRequestDetailsByServiceRequest(serviceRequestId);
+        const response =
+          await api.serviceRequestDetails.getServiceRequestDetailsByServiceRequest(
+            serviceRequestId
+          );
         return response.data ?? [];
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
@@ -578,13 +657,16 @@ function ReceptionistTransactionsComponent() {
   }, [serviceRequest?.patientId]);
 
   const { data: serviceRequestPatient } = useQuery<Patient | null>({
-    enabled: showServiceRequestInTransaction && Boolean(serviceRequestPatientId),
+    enabled:
+      showServiceRequestInTransaction && Boolean(serviceRequestPatientId),
     queryKey: ["patient", serviceRequestPatientId],
     retry: false,
     queryFn: async () => {
       if (!serviceRequestPatientId) return null;
       try {
-        const response = await api.patient.getPatientById(serviceRequestPatientId);
+        const response = await api.patient.getPatientById(
+          serviceRequestPatientId
+        );
         return response.data ?? null;
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
@@ -595,10 +677,15 @@ function ReceptionistTransactionsComponent() {
     },
   });
 
-  const totalAmount = serviceRequest?.totalAmount ?? serviceDetails.reduce(
-    (sum, detail) => sum + (detail.totalPrice ?? (detail.unitPrice ?? detail.price ?? 0) * (detail.quantity ?? 0)),
-    0
-  );
+  const totalAmount =
+    serviceRequest?.totalAmount ??
+    serviceDetails.reduce(
+      (sum, detail) =>
+        sum +
+        (detail.totalPrice ??
+          (detail.unitPrice ?? detail.price ?? 0) * (detail.quantity ?? 0)),
+      0
+    );
 
   const statusOptions: { value: TransactionStatus | ""; label: string }[] = [
     { value: "", label: "All statuses" },
@@ -627,8 +714,16 @@ function ReceptionistTransactionsComponent() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
-                onClick={() => setShowCreateModal(true)}
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
               >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+                Refresh
+              </Button>
+              <Button onClick={() => setShowCreateModal(true)}>
                 Create Transaction
               </Button>
               <Button
@@ -794,7 +889,9 @@ function ReceptionistTransactionsComponent() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => handleViewDetails(transaction.id)}
+                                    onClick={() =>
+                                      handleViewDetails(transaction.id)
+                                    }
                                   >
                                     View Details
                                   </Button>
@@ -965,7 +1062,7 @@ function ReceptionistTransactionsComponent() {
                   </p>
                   {selectedTransactionId && (
                     <p className="mt-2 text-xs">
-                      Transaction ID: {selectedTransactionId.slice(0, 8)}
+                      Transaction ID: {getLast4Chars(selectedTransactionId)}
                     </p>
                   )}
                 </div>
@@ -1012,8 +1109,16 @@ function ReceptionistTransactionsComponent() {
             setSelectedTransactionDetailId(null);
             setShowServiceRequestInTransaction(false);
           }}
-          title={showServiceRequestInTransaction ? "Service Request Details" : "Transaction Details"}
-          description={showServiceRequestInTransaction ? "View detailed information about the service request" : "View complete transaction information"}
+          title={
+            showServiceRequestInTransaction
+              ? "Service Request Details"
+              : "Transaction Details"
+          }
+          description={
+            showServiceRequestInTransaction
+              ? "View detailed information about the service request"
+              : "View complete transaction information"
+          }
           size="xl"
         >
           {showServiceRequestInTransaction && serviceRequestId ? (
@@ -1025,7 +1130,10 @@ function ReceptionistTransactionsComponent() {
             ) : !serviceRequest ? (
               <div className="space-y-4 py-6 text-center text-sm text-red-600">
                 <p>Service request not found.</p>
-                <Button variant="outline" onClick={() => setShowServiceRequestInTransaction(false)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowServiceRequestInTransaction(false)}
+                >
                   Back to Transaction
                 </Button>
               </div>
@@ -1044,8 +1152,18 @@ function ReceptionistTransactionsComponent() {
                 <Card>
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">Request Information</CardTitle>
-                      <Badge variant={serviceRequest.status === "Approved" ? "default" : serviceRequest.status === "Rejected" ? "destructive" : "secondary"}>
+                      <CardTitle className="text-lg">
+                        Request Information
+                      </CardTitle>
+                      <Badge
+                        variant={
+                          serviceRequest.status === "Approved"
+                            ? "default"
+                            : serviceRequest.status === "Rejected"
+                              ? "destructive"
+                              : "secondary"
+                        }
+                      >
                         {serviceRequest.status}
                       </Badge>
                     </div>
@@ -1056,20 +1174,27 @@ function ReceptionistTransactionsComponent() {
                         <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                           Request Code
                         </label>
-                        <p className="text-sm text-gray-900">{serviceRequest.requestCode}</p>
+                        <p className="text-sm text-gray-900">
+                          {serviceRequest.requestCode}
+                        </p>
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                           Status
                         </label>
-                        <p className="text-sm text-gray-900">{serviceRequest.status}</p>
+                        <p className="text-sm text-gray-900">
+                          {serviceRequest.status}
+                        </p>
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                           Requested Date
                         </label>
                         <p className="text-sm text-gray-900">
-                          {formatDate(serviceRequest.requestDate ?? serviceRequest.requestedDate)}
+                          {formatDate(
+                            serviceRequest.requestDate ??
+                              serviceRequest.requestedDate
+                          )}
                         </p>
                       </div>
                       {serviceRequest.approvedDate && (
@@ -1087,7 +1212,9 @@ function ReceptionistTransactionsComponent() {
                           <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                             Approved By
                           </label>
-                          <p className="text-sm text-gray-900">{serviceRequest.approvedBy}</p>
+                          <p className="text-sm text-gray-900">
+                            {serviceRequest.approvedBy}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -1096,7 +1223,9 @@ function ReceptionistTransactionsComponent() {
                         <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                           Notes
                         </label>
-                        <p className="text-sm text-gray-900 whitespace-pre-wrap">{serviceRequest.notes}</p>
+                        <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                          {serviceRequest.notes}
+                        </p>
                       </div>
                     )}
                   </CardContent>
@@ -1105,7 +1234,9 @@ function ReceptionistTransactionsComponent() {
                 {serviceRequestPatient && (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-lg">Patient Information</CardTitle>
+                      <CardTitle className="text-lg">
+                        Patient Information
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="grid gap-4 md:grid-cols-2">
@@ -1113,26 +1244,34 @@ function ReceptionistTransactionsComponent() {
                           <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                             Name
                           </label>
-                          <p className="text-sm text-gray-900">{serviceRequestPatient.fullName}</p>
+                          <p className="text-sm text-gray-900">
+                            {serviceRequestPatient.fullName}
+                          </p>
                         </div>
                         <div className="space-y-1">
                           <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                             Patient Code
                           </label>
-                          <p className="text-sm text-gray-900">{serviceRequestPatient.patientCode}</p>
+                          <p className="text-sm text-gray-900">
+                            {serviceRequestPatient.patientCode}
+                          </p>
                         </div>
                         <div className="space-y-1">
                           <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                             Phone
                           </label>
-                          <p className="text-sm text-gray-900">{serviceRequestPatient.phoneNumber}</p>
+                          <p className="text-sm text-gray-900">
+                            {serviceRequestPatient.phoneNumber}
+                          </p>
                         </div>
                         {serviceRequestPatient.email && (
                           <div className="space-y-1">
                             <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                               Email
                             </label>
-                            <p className="text-sm text-gray-900">{serviceRequestPatient.email}</p>
+                            <p className="text-sm text-gray-900">
+                              {serviceRequestPatient.email}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -1167,13 +1306,20 @@ function ReceptionistTransactionsComponent() {
                             </thead>
                             <tbody>
                               {serviceDetails.map((detail) => {
-                                const service = services?.[detail.serviceId ?? ""];
-                                const unitPrice = detail.unitPrice ?? detail.price ?? 0;
-                                const total = detail.totalPrice ?? unitPrice * (detail.quantity ?? 0);
+                                const service =
+                                  services?.[detail.serviceId ?? ""];
+                                const unitPrice =
+                                  detail.unitPrice ?? detail.price ?? 0;
+                                const total =
+                                  detail.totalPrice ??
+                                  unitPrice * (detail.quantity ?? 0);
                                 return (
                                   <tr key={detail.id} className="border-b">
                                     <td className="px-4 py-2 text-sm">
-                                      {detail.serviceName ?? service?.name ?? service?.serviceName ?? "—"}
+                                      {detail.serviceName ??
+                                        service?.name ??
+                                        service?.serviceName ??
+                                        "—"}
                                     </td>
                                     <td className="px-4 py-2 text-sm">
                                       {detail.quantity ?? 0}
@@ -1202,7 +1348,9 @@ function ReceptionistTransactionsComponent() {
                         </div>
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-500">No service details found</p>
+                      <p className="text-sm text-gray-500">
+                        No service details found
+                      </p>
                     )}
                   </CardContent>
                 </Card>
@@ -1224,7 +1372,9 @@ function ReceptionistTransactionsComponent() {
               {/* Basic Information */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Transaction Information</CardTitle>
+                  <CardTitle className="text-lg">
+                    Transaction Information
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
@@ -1242,7 +1392,7 @@ function ReceptionistTransactionsComponent() {
                         Transaction ID
                       </label>
                       <p className="text-sm font-mono text-gray-900">
-                        {transactionDetail.data.id}
+                        {getLast4Chars(transactionDetail.data.id)}
                       </p>
                     </div>
                     <div className="space-y-1">
@@ -1252,7 +1402,9 @@ function ReceptionistTransactionsComponent() {
                       <span
                         className={cn(
                           "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                          getTypeBadgeClass(transactionDetail.data.transactionType)
+                          getTypeBadgeClass(
+                            transactionDetail.data.transactionType
+                          )
                         )}
                       >
                         {transactionDetail.data.transactionType || "—"}
@@ -1379,7 +1531,9 @@ function ReceptionistTransactionsComponent() {
                 transactionDetail.data.patientName) && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Patient Information</CardTitle>
+                    <CardTitle className="text-lg">
+                      Patient Information
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-2">
@@ -1400,7 +1554,7 @@ function ReceptionistTransactionsComponent() {
                           </label>
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-mono text-gray-900">
-                              {transactionDetail.data.patientId}
+                              {getLast4Chars(transactionDetail.data.patientId)}
                             </p>
                             <Button
                               size="sm"
@@ -1410,7 +1564,8 @@ function ReceptionistTransactionsComponent() {
                                 navigate({
                                   to: "/receptionist/patients/$patientId",
                                   params: {
-                                    patientId: transactionDetail.data!.patientId!,
+                                    patientId:
+                                      transactionDetail.data!.patientId!,
                                   },
                                 });
                               }}
@@ -1451,7 +1606,9 @@ function ReceptionistTransactionsComponent() {
                           </label>
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-mono text-gray-900">
-                              {transactionDetail.data.relatedEntityId}
+                              {getLast4Chars(
+                                transactionDetail.data.relatedEntityId
+                              )}
                             </p>
                             {transactionDetail.data.relatedEntityType ===
                               "ServiceRequest" && (
@@ -1493,7 +1650,9 @@ function ReceptionistTransactionsComponent() {
                 transactionDetail.data.notes) && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Additional Information</CardTitle>
+                    <CardTitle className="text-lg">
+                      Additional Information
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {transactionDetail.data.description && (
@@ -1519,37 +1678,6 @@ function ReceptionistTransactionsComponent() {
                   </CardContent>
                 </Card>
               )}
-
-              {/* Timestamps */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Timestamps</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {transactionDetail.data.createdAt && (
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                          Created At
-                        </label>
-                        <p className="text-sm text-gray-900">
-                          {formatDate(transactionDetail.data.createdAt)}
-                        </p>
-                      </div>
-                    )}
-                    {transactionDetail.data.updatedAt && (
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                          Updated At
-                        </label>
-                        <p className="text-sm text-gray-900">
-                          {formatDate(transactionDetail.data.updatedAt)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
 
               {/* Actions */}
               <div className="flex gap-2 pt-4">
@@ -1639,7 +1767,6 @@ function ReceptionistTransactionsComponent() {
                     ...prev,
                     relatedEntityType: e.target.value as
                       | "ServiceRequest"
-                      | "Appointment"
                       | "CryoStorageContract",
                     relatedEntityId: "", // Reset when type changes
                   }));
@@ -1647,7 +1774,6 @@ function ReceptionistTransactionsComponent() {
                 className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <option value="ServiceRequest">Service Request</option>
-                <option value="Appointment">Appointment</option>
                 <option value="CryoStorageContract">
                   Cryo Storage Contract
                 </option>
@@ -1673,24 +1799,34 @@ function ReceptionistTransactionsComponent() {
                   <option value="">
                     {!createFormData.patientId
                       ? "Please select a patient first"
-                      : serviceRequestsData?.data?.length
-                        ? "Select a service request"
-                        : "No service requests found"}
+                      : isLoadingServiceRequests
+                        ? "Loading service requests..."
+                        : serviceRequestsError
+                          ? "Error loading service requests"
+                          : serviceRequestsData?.data?.length
+                            ? "Select a service request"
+                            : "No service requests found"}
                   </option>
-                  {serviceRequestsData?.data?.map((request) => (
-                    <option key={request.id} value={request.id}>
-                      {request.requestCode || request.id.slice(0, 8)} -{" "}
-                      {request.status || "Pending"}
-                    </option>
-                  ))}
+                  {serviceRequestsData?.data &&
+                    Array.isArray(serviceRequestsData.data) &&
+                    serviceRequestsData.data.length > 0 && (
+                      <>
+                        {serviceRequestsData.data.map((request) => (
+                          <option key={request.id} value={request.id}>
+                            {request.requestCode || getLast4Chars(request.id)} -{" "}
+                            {request.status || "Pending"}
+                          </option>
+                        ))}
+                      </>
+                    )}
                 </select>
               </div>
             )}
 
-            {createFormData.relatedEntityType === "Appointment" && (
+            {createFormData.relatedEntityType === "CryoStorageContract" && (
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">
-                  Appointment <span className="text-red-500">*</span>
+                  Cryo Storage Contract <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={createFormData.relatedEntityId}
@@ -1706,46 +1842,24 @@ function ReceptionistTransactionsComponent() {
                   <option value="">
                     {!createFormData.patientId
                       ? "Please select a patient first"
-                      : appointmentsData?.data?.length
-                        ? "Select an appointment"
-                        : "No appointments found"}
+                      : cryoContractsData?.data?.length
+                        ? "Select a cryo storage contract"
+                        : "No cryo storage contracts found"}
                   </option>
-                  {appointmentsData?.data?.map((appointment) => (
-                    <option key={appointment.id} value={appointment.id}>
-                      {appointment.appointmentDate
-                        ? new Date(appointment.appointmentDate).toLocaleDateString(
-                            "vi-VN"
-                          )
-                        : "No date"}{" "}
-                      - {appointment.status || "Pending"}
+                  {cryoContractsData?.data?.map((contract: any) => (
+                    <option key={contract.id} value={contract.id}>
+                      {contract.contractNumber || contract.id.slice(0, 8)} -{" "}
+                      {contract.status || "Active"}
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
-
-            {createFormData.relatedEntityType === "CryoStorageContract" && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Cryo Storage Contract <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="text"
-                  value={createFormData.relatedEntityId}
-                  onChange={(e) =>
-                    setCreateFormData((prev) => ({
-                      ...prev,
-                      relatedEntityId: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter contract ID (UUID)"
-                  disabled={!createFormData.patientId}
-                  className="disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-                <p className="text-xs text-gray-500">
-                  Note: CryoStorageContract API integration pending. Please
-                  enter the contract ID manually.
-                </p>
+                {cryoContractsData?.data?.length === 0 &&
+                  createFormData.patientId && (
+                    <p className="text-xs text-gray-500">
+                      No cryo storage contracts found for this patient. You may
+                      need to enter the contract ID manually.
+                    </p>
+                  )}
               </div>
             )}
 
@@ -1797,11 +1911,12 @@ function ReceptionistTransactionsComponent() {
               <div className="space-y-4">
                 <div className="text-center text-sm text-gray-600">
                   <p>
-                    Click the button below to open the payment page and complete the transaction.
+                    Click the button below to open the payment page and complete
+                    the transaction.
                   </p>
                   {createdTransactionId && (
                     <p className="mt-2 text-xs text-gray-500">
-                      Transaction ID: {createdTransactionId.slice(0, 8)}
+                      Transaction ID: {getLast4Chars(createdTransactionId)}
                     </p>
                   )}
                 </div>
@@ -1818,7 +1933,9 @@ function ReceptionistTransactionsComponent() {
                     <Button
                       variant="outline"
                       className="flex-1"
-                      onClick={() => navigate({ to: "/receptionist/transactions" })}
+                      onClick={() =>
+                        navigate({ to: "/receptionist/transactions" })
+                      }
                     >
                       View All Transactions
                     </Button>

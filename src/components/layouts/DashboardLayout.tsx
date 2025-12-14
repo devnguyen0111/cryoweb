@@ -345,7 +345,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="p-4 border-t border-gray-200">
             <div className="mb-3 px-4 py-2">
               <p className="text-sm font-medium text-gray-900">
-                {user?.fullName || user?.email}
+{(() => {
+                const fullName = user?.firstName && user?.lastName 
+                  ? `${user.firstName} ${user.lastName}`.trim()
+                  : user?.firstName || user?.lastName || user?.email;
+                return fullName;
+              })()}
               </p>
               <p className="text-xs text-gray-500">{userRole}</p>
             </div>

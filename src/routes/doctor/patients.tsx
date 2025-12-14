@@ -443,11 +443,11 @@ function DoctorPatientsComponent() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <div className="space-y-2 xl:col-span-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Search by patient code, national ID, phone or email
+                    Search by patient code
                   </label>
                   <Input
                     value={searchTerm}
-                    placeholder="e.g. PAT001, 090..., patient@cryo.com"
+                    placeholder="e.g. PAT001"
                     onChange={(event) => {
                       setSearchTerm(event.target.value);
                       setPage(1);
@@ -521,7 +521,9 @@ function DoctorPatientsComponent() {
                         (isDetail
                           ? (patient as any).accountInfo?.username
                           : null) ||
-                        patient.fullName ||
+                        (patient.firstName && patient.lastName
+                          ? `${patient.firstName} ${patient.lastName}`.trim()
+                          : patient.firstName || patient.lastName) ||
                         patient.patientCode ||
                         "Unnamed patient";
                       const email =

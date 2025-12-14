@@ -29,20 +29,49 @@ export class ServiceRequestApi {
       statusValue !== null &&
       String(statusValue) !== ""
     ) {
+      // Map params for status endpoint
+      const statusParams: Record<string, unknown> = {
+        Page: params?.pageNumber ?? (params as any)?.Page,
+        Size: params?.pageSize ?? (params as any)?.Size,
+        PatientId: params?.patientId ?? (params as any)?.PatientId,
+        AppointmentId: params?.appointmentId ?? (params as any)?.AppointmentId,
+        RequestDateFrom: params?.requestDateFrom ?? (params as any)?.RequestDateFrom,
+        RequestDateTo: params?.requestDateTo ?? (params as any)?.RequestDateTo,
+        MinAmount: params?.minAmount ?? (params as any)?.MinAmount,
+        MaxAmount: params?.maxAmount ?? (params as any)?.MaxAmount,
+        SearchTerm: params?.searchTerm ?? (params as any)?.SearchTerm ?? (params as any)?.searchTerm,
+        Sort: params?.sort ?? (params as any)?.Sort,
+        Order: params?.order ?? (params as any)?.Order,
+      };
+      
+      // Remove undefined values
+      Object.keys(statusParams).forEach((key) => {
+        if (statusParams[key] === undefined || statusParams[key] === null) {
+          delete statusParams[key];
+        }
+      });
+
       const response = await this.client.get<DynamicResponse<ServiceRequest>>(
         `${STATUS_PATH}/${encodeURIComponent(String(statusValue))}`,
-        { params: rest }
+        { params: statusParams }
       );
       return response.data;
     }
 
     // Map params to API format
     const apiParams: Record<string, unknown> = {
+      Status: statusValue,
       Page: params?.pageNumber ?? (params as any)?.Page,
       Size: params?.pageSize ?? (params as any)?.Size,
-      Status: statusValue,
+      PatientId: params?.patientId ?? (params as any)?.PatientId,
       AppointmentId: params?.appointmentId ?? (params as any)?.AppointmentId,
-      SearchTerm: (params as any)?.SearchTerm ?? (params as any)?.searchTerm,
+      RequestDateFrom: params?.requestDateFrom ?? (params as any)?.RequestDateFrom,
+      RequestDateTo: params?.requestDateTo ?? (params as any)?.RequestDateTo,
+      MinAmount: params?.minAmount ?? (params as any)?.MinAmount,
+      MaxAmount: params?.maxAmount ?? (params as any)?.MaxAmount,
+      SearchTerm: params?.searchTerm ?? (params as any)?.SearchTerm ?? (params as any)?.searchTerm,
+      Sort: params?.sort ?? (params as any)?.Sort,
+      Order: params?.order ?? (params as any)?.Order,
     };
 
     // Remove undefined values

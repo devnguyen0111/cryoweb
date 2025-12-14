@@ -265,10 +265,16 @@ export function TreatmentPlanForm({
 
       // Prepare notes with signature data
       // For IUI/IVF, automatically pre-sign as doctor when creating the plan
+      // Truncate additionalNotes if too long to prevent issues
+      const maxNoteLength = 5000; // Maximum length for additional notes
+      const truncatedNotes = data.notes && data.notes.length > maxNoteLength
+        ? data.notes.substring(0, maxNoteLength) + "..."
+        : data.notes;
+
       const notesData: any = {
         estimatedDuration: data.estimatedDuration,
         phases: data.phases,
-        additionalNotes: data.notes,
+        additionalNotes: truncatedNotes,
       };
 
       // Automatically pre-sign doctor's signature for IUI/IVF treatment plans
@@ -293,7 +299,7 @@ export function TreatmentPlanForm({
         status: "Planned", // Changed from "Planning" to "Planned" to match API enum
         diagnosis: data.overallGoals,
         goals: data.overallGoals,
-        notes: JSON.stringify(notesData),
+        notes: JSON.stringify(notesData, null, 2), // Format with 2-space indentation for readability
         estimatedCost: 0,
         actualCost: 0,
         autoCreate: shouldAutoCreateCycle,
@@ -510,6 +516,12 @@ export function TreatmentPlanForm({
           ).toISOString()
         : undefined;
 
+      // Truncate additionalNotes if too long to prevent issues
+      const maxNoteLength = 5000; // Maximum length for additional notes
+      const truncatedNotes = data.notes && data.notes.length > maxNoteLength
+        ? data.notes.substring(0, maxNoteLength) + "..."
+        : data.notes;
+
       const treatmentPayload: any = {
         treatmentName: data.planName,
         treatmentType: data.treatmentType,
@@ -520,8 +532,8 @@ export function TreatmentPlanForm({
         notes: JSON.stringify({
           estimatedDuration: data.estimatedDuration,
           phases: data.phases,
-          additionalNotes: data.notes,
-        }),
+          additionalNotes: truncatedNotes,
+        }, null, 2), // Format with 2-space indentation for readability
         // estimatedCost and actualCost can be updated separately if needed
       };
 
@@ -1018,7 +1030,7 @@ export function TreatmentPlanForm({
               {patientDetails?.nationalId && (
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-gray-500">
-                    National ID
+                    Citizen ID Card
                   </p>
                   <p className="text-base">{patientDetails.nationalId}</p>
                 </div>

@@ -21,6 +21,11 @@ import { StructuredNote } from "@/components/StructuredNote";
 import { HorizontalTreatmentTimeline } from "@/features/doctor/treatment-cycles/HorizontalTreatmentTimeline";
 import { normalizeTreatmentCycleStatus } from "@/api/types";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
+import {
+  getAppointmentStatusBadgeClass,
+  getTreatmentCycleStatusBadgeClass,
+} from "@/utils/status-colors";
 
 interface DoctorAppointmentDetailModalProps {
   appointmentId: string | null;
@@ -190,7 +195,6 @@ export function DoctorAppointmentDetailModal({
     "overview"
   );
 
-  // Reset tab to overview when modal opens or appointment changes
   useEffect(() => {
     if (isOpen) {
       setActiveTab("overview");
@@ -217,8 +221,6 @@ export function DoctorAppointmentDetailModal({
     },
   });
 
-  // Get patientId from props, appointment API, or patient object
-  // Try multiple possible field names (case variations)
   const patientId = useMemo(() => {
     if (propPatientId) return propPatientId;
     if (!appointment) return null;
@@ -246,7 +248,6 @@ export function DoctorAppointmentDetailModal({
     finalPatientId: patientId,
   });
 
-  // Fetch user/account details (has fullName, dob, gender, email, phone)
   const {
     data: userDetails,
     isLoading: userLoading,
@@ -270,7 +271,6 @@ export function DoctorAppointmentDetailModal({
     },
   });
 
-  // Fetch detailed patient info (has emergency contact, treatments, medical info, etc)
   const {
     data: patientDetails,
     isLoading: detailsLoading,
@@ -296,7 +296,6 @@ export function DoctorAppointmentDetailModal({
     },
   });
 
-  // Merge user details with patient details to get complete patient information
   const patient = useMemo(() => {
     if (!userDetails && !patientDetails) {
       console.log("No patient data available");
@@ -306,19 +305,10 @@ export function DoctorAppointmentDetailModal({
     console.log("User details:", userDetails);
     console.log("Patient details:", patientDetails);
 
-    // Get name from user details (fullName or userName) or patient accountInfo
-    const name =
-      userDetails?.fullName ||
-      userDetails?.userName ||
-      patientDetails?.accountInfo?.username ||
-      "Unknown";
-
-    // Get date of birth from user details
     const dateOfBirth = userDetails?.dob
       ? new Date(userDetails.dob).toISOString()
       : patientDetails?.dateOfBirth || null;
 
-    // Get gender from user details (boolean: true = Male, false = Female)
     const gender =
       userDetails?.gender !== undefined
         ? userDetails.gender
@@ -326,18 +316,15 @@ export function DoctorAppointmentDetailModal({
           : "Female"
         : patientDetails?.gender || null;
 
-    // Get age from user details
     const age = userDetails?.age ?? null;
 
-    // Merge all information
     const merged = {
       ...(patientDetails || {}),
-      // Override with user details for name, dob, gender
-      fullName: name,
+      firstName: userDetails?.firstName || patientDetails?.firstName || "",
+      lastName: userDetails?.lastName || patientDetails?.lastName || "",
       dateOfBirth: dateOfBirth,
       gender: gender,
       age: age,
-      // Contact information from user or patient accountInfo
       phoneNumber:
         patientDetails?.accountInfo?.phone ||
         userDetails?.phone ||
@@ -355,7 +342,6 @@ export function DoctorAppointmentDetailModal({
   const patientLoading = userLoading || detailsLoading;
   const patientFetching = userFetching || detailsFetching;
 
-  // Store IUI/IVF treatments for display when no cycles are available
   const [iuiTreatmentsData, setIuiTreatmentsData] = useState<any[]>([]);
   const [ivfTreatmentsData, setIvfTreatmentsData] = useState<any[]>([]);
 
@@ -385,19 +371,16 @@ export function DoctorAppointmentDetailModal({
         let cycles: TreatmentCycle[] = [];
         let treatmentsMap = new Map<string, Treatment>();
 
-        // Strategy 1: Fetch IUI and IVF treatments directly by patientId using new APIs
         console.log(
           "[AppointmentModal] Fetching IUI and IVF treatments by patientId"
         );
         try {
-          // Fetch IUI treatments
           const iuiResponse =
             await api.treatmentIUI.getIUIByPatientId(patientId);
           const iuiTreatments = Array.isArray(iuiResponse.data)
             ? iuiResponse.data
             : (iuiResponse as any).data?.data || [];
 
-          // Store IUI treatments for later use
           setIuiTreatmentsData(iuiTreatments);
 
           console.log(
@@ -411,14 +394,12 @@ export function DoctorAppointmentDetailModal({
             }))
           );
 
-          // Fetch IVF treatments
           const ivfResponse =
             await api.treatmentIVF.getIVFByPatientId(patientId);
           const ivfTreatments = Array.isArray(ivfResponse.data)
             ? ivfResponse.data
             : (ivfResponse as any).data?.data || [];
 
-          // Store IVF treatments for later use
           setIvfTreatmentsData(ivfTreatments);
           console.log(
             "[AppointmentModal] IVF treatments raw:",
@@ -440,22 +421,15 @@ export function DoctorAppointmentDetailModal({
             );
           };
 
-          // Create a map of treatmentId -> Treatment for quick lookup
-          // IMPORTANT: In the database schema, TreatmentIUIs.Id and TreatmentIVFs.Id
-          // are foreign keys to Treatments.Id, so the IUI/IVF `id` IS the Treatment ID.
-          // The `treatmentId` field in the API response may be empty/invalid.
-          // We should use `id` as the primary source for Treatment ID.
           const allTreatmentIds = [
             ...iuiTreatments
               .map((t: any) => {
-                // Use id first (it's the FK to Treatment), fallback to treatmentId if id is empty
                 const treatmentId = !isEmptyGuid(t.id) ? t.id : t.treatmentId;
                 return treatmentId;
               })
               .filter((id: any) => id && !isEmptyGuid(id)),
             ...ivfTreatments
               .map((t: any) => {
-                // Use id first (it's the FK to Treatment), fallback to treatmentId if id is empty
                 const treatmentId = !isEmptyGuid(t.id) ? t.id : t.treatmentId;
                 return treatmentId;
               })
@@ -468,7 +442,6 @@ export function DoctorAppointmentDetailModal({
             allTreatmentIds
           );
 
-          // Fetch base treatment details for each treatmentId
           const baseTreatments = await Promise.all(
             allTreatmentIds.map(async (treatmentId: string) => {
               if (isEmptyGuid(treatmentId)) {
@@ -499,7 +472,6 @@ export function DoctorAppointmentDetailModal({
             })
           );
 
-          // Map treatments
           baseTreatments.forEach((treatment) => {
             if (treatment?.id) {
               treatmentsMap.set(treatment.id, treatment);
@@ -522,7 +494,6 @@ export function DoctorAppointmentDetailModal({
           );
         }
 
-        // Strategy 2: Fetch treatment cycles
         if (doctorId) {
           console.log(
             "[AppointmentModal] Fetching cycles by doctorId and filtering by patientId"
@@ -544,8 +515,6 @@ export function DoctorAppointmentDetailModal({
             }))
           );
 
-          // Filter cycles by patientId (check both cycle.patientId and treatment.patientId)
-          // First pass: filter cycles that we can immediately match
           const cyclesToCheck: Array<{
             cycle: TreatmentCycle;
             needsTreatmentFetch: boolean;
@@ -560,7 +529,6 @@ export function DoctorAppointmentDetailModal({
               raw.PatientID ??
               null;
 
-            // Check if cycle has matching patientId directly
             if (cyclePatientId === patientId) {
               console.log(
                 `[AppointmentModal] Cycle ${cycle.id} matches by cycle.patientId: ${cyclePatientId} === ${patientId}`
@@ -569,7 +537,6 @@ export function DoctorAppointmentDetailModal({
               return;
             }
 
-            // Check if treatment (from map) has matching patientId
             if (cycle.treatmentId) {
               const treatment = treatmentsMap.get(cycle.treatmentId);
               if (treatment) {
@@ -585,7 +552,6 @@ export function DoctorAppointmentDetailModal({
                   );
                 }
               } else {
-                // Treatment not in map, need to fetch it
                 console.log(
                   `[AppointmentModal] Cycle ${cycle.id} treatment not found in map, will fetch: ${cycle.treatmentId}`
                 );
@@ -601,7 +567,6 @@ export function DoctorAppointmentDetailModal({
             }
           });
 
-          // Second pass: fetch treatments for cycles that weren't in the map
           if (cyclesToCheck.length > 0) {
             console.log(
               `[AppointmentModal] Fetching ${cyclesToCheck.length} treatments for cycles not in map`
@@ -632,7 +597,6 @@ export function DoctorAppointmentDetailModal({
               })
             );
 
-            // Filter cycles based on fetched treatments
             fetchedTreatments.forEach((result) => {
               if (!result) return;
               const { cycle, treatment } = result;
@@ -641,7 +605,6 @@ export function DoctorAppointmentDetailModal({
                   `[AppointmentModal] Cycle ${cycle.id} matches by fetched treatment.patientId: ${treatment.patientId} === ${patientId}`
                 );
                 cycles.push(cycle);
-                // Also add to treatmentsMap for later use
                 if (treatment?.id) {
                   treatmentsMap.set(treatment.id, treatment);
                 }
@@ -661,7 +624,6 @@ export function DoctorAppointmentDetailModal({
           );
         }
 
-        // Strategy 3: If no cycles found, try fetching by patientId only
         if (cycles.length === 0) {
           console.log(
             "[AppointmentModal] No cycles from doctorId query, trying patientId only"
@@ -678,10 +640,8 @@ export function DoctorAppointmentDetailModal({
           );
         }
 
-        // Map cycles with treatment data from treatmentsMap or fetch if needed
         const cyclesWithTreatment = await Promise.all(
           cycles.map(async (cycle) => {
-            // First try to get treatment from map
             if (cycle.treatmentId && treatmentsMap.has(cycle.treatmentId)) {
               const treatment = treatmentsMap.get(cycle.treatmentId)!;
               console.log(
@@ -694,7 +654,6 @@ export function DoctorAppointmentDetailModal({
               };
             }
 
-            // If not in map, try to fetch it
             if (cycle.treatmentId) {
               try {
                 const treatmentResponse = await api.treatment.getTreatmentById(
@@ -785,7 +744,6 @@ export function DoctorAppointmentDetailModal({
     },
   });
 
-  // Helper function to map IUI cycleStatus to timeline phase
   const mapIUIStatusToPhase = (status: string): number => {
     const normalized = normalize(status);
     if (normalized.includes("planning") || normalized.includes("planned")) {
@@ -856,13 +814,11 @@ export function DoctorAppointmentDetailModal({
       ivfTreatmentsData.length
     );
 
-    // If no cycles, try to use IUI/IVF treatments directly
     if (!treatmentCycles.length) {
       console.log(
         "[AppointmentModal] No treatment cycles available, checking IUI/IVF treatments"
       );
 
-      // Find the most recent active IUI treatment
       const activeIUI = iuiTreatmentsData
         .filter((t: any) => {
           const status = normalize(t.status || t.cycleStatus);
@@ -874,7 +830,6 @@ export function DoctorAppointmentDetailModal({
           return bDate - aDate;
         })[0];
 
-      // Find the most recent active IVF treatment
       const activeIVF = ivfTreatmentsData
         .filter((t: any) => {
           const status = normalize(t.status || t.cycleStatus);
@@ -886,7 +841,6 @@ export function DoctorAppointmentDetailModal({
           return bDate - aDate;
         })[0];
 
-      // Prefer IUI over IVF if both exist
       const activeTreatmentData = activeIUI || activeIVF;
       const treatmentType = activeIUI ? "IUI" : activeIVF ? "IVF" : null;
 
@@ -1118,22 +1072,7 @@ export function DoctorAppointmentDetailModal({
   }, [patientAppointments, appointmentId]);
 
   const statusBadgeClass = (status?: string) => {
-    switch (status) {
-      case "scheduled":
-      case "confirmed":
-        return "bg-blue-100 text-blue-700";
-      case "in-progress":
-      case "inprogress":
-        return "bg-yellow-100 text-yellow-700";
-      case "completed":
-        return "bg-green-100 text-green-700";
-      case "cancelled":
-      case "no-show":
-      case "noshow":
-        return "bg-red-100 text-red-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
+    return getAppointmentStatusBadgeClass(status);
   };
 
   const isLoading =
@@ -1211,20 +1150,23 @@ export function DoctorAppointmentDetailModal({
                   <div className="flex gap-4">
                     {/* Patient Avatar */}
                     <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xl font-semibold text-gray-700">
-                      {patient?.fullName?.charAt(0).toUpperCase() || "P"}
+                      {(() => {
+                        const fullName = getFullNameFromObject(patient);
+                        return fullName?.charAt(0).toUpperCase() || "P";
+                      })()}
                     </div>
 
                     <div className="space-y-1.5">
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">
-                          {patient?.fullName ||
+                          {getFullNameFromObject(patient) ||
                             patient?.patientCode ||
                             patient?.id ||
                             "Patient"}
                         </h3>
                         <p className="text-sm text-gray-600">
                           {(patient?.patientCode || patient?.id) &&
-                            `Patient ID: ${patient.patientCode || getLast4Chars(patient.id)}`}
+                            `Patient code: ${patient.patientCode || getLast4Chars(patient.id)}`}
                           {patient?.gender && ` • ${patient.gender}`}
                           {patient?.bloodType &&
                             ` • Blood: ${patient.bloodType}`}
@@ -1392,11 +1334,16 @@ export function DoctorAppointmentDetailModal({
                           className="flex items-center gap-3 rounded border border-gray-200 bg-gray-50 p-3"
                         >
                           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-gray-200 text-sm font-semibold text-gray-700">
-                            {doctor.fullName?.charAt(0).toUpperCase() || "D"}
+                            {(() => {
+                              const doctorName = getFullNameFromObject(doctor);
+                              return doctorName?.charAt(0).toUpperCase() || "D";
+                            })()}
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-semibold text-gray-900">
-                              {doctor.fullName}
+                              {getFullNameFromObject(doctor) ||
+                                doctor.badgeId ||
+                                "Doctor"}
                             </p>
                             <p className="text-xs text-gray-600">
                               {doctor.specialty}
@@ -1636,7 +1583,6 @@ export function DoctorAppointmentDetailModal({
                                 const normalizedStatus =
                                   normalizeTreatmentCycleStatus(cycle.status);
                                 const status = normalizedStatus || "Unknown";
-                                const statusLower = status.toLowerCase();
                                 const startDate = cycle.startDate
                                   ? new Date(
                                       cycle.startDate
@@ -1652,13 +1598,12 @@ export function DoctorAppointmentDetailModal({
                                         {cycleType} Cycle
                                       </span>
                                       <span
-                                        className={`rounded-full px-2 py-1 text-xs ${
-                                          statusLower.includes("completed")
-                                            ? "bg-green-100 text-green-700"
-                                            : statusLower.includes("cancelled")
-                                              ? "bg-red-100 text-red-700"
-                                              : "bg-gray-100 text-gray-700"
-                                        }`}
+                                        className={cn(
+                                          "rounded-full px-2 py-1 text-xs border",
+                                          getTreatmentCycleStatusBadgeClass(
+                                            status
+                                          )
+                                        )}
                                       >
                                         {status}
                                       </span>
@@ -1713,17 +1658,12 @@ export function DoctorAppointmentDetailModal({
                                           IUI Treatment
                                         </span>
                                         <span
-                                          className={`rounded-full px-2 py-1 text-xs ${
-                                            status
-                                              .toLowerCase()
-                                              .includes("completed")
-                                              ? "bg-green-100 text-green-700"
-                                              : status
-                                                    .toLowerCase()
-                                                    .includes("cancelled")
-                                                ? "bg-red-100 text-red-700"
-                                                : "bg-blue-100 text-blue-700"
-                                          }`}
+                                          className={cn(
+                                            "rounded-full px-2 py-1 text-xs border",
+                                            getTreatmentCycleStatusBadgeClass(
+                                              status
+                                            )
+                                          )}
                                         >
                                           {status}
                                         </span>
@@ -1761,17 +1701,12 @@ export function DoctorAppointmentDetailModal({
                                           IVF Treatment
                                         </span>
                                         <span
-                                          className={`rounded-full px-2 py-1 text-xs ${
-                                            status
-                                              .toLowerCase()
-                                              .includes("completed")
-                                              ? "bg-green-100 text-green-700"
-                                              : status
-                                                    .toLowerCase()
-                                                    .includes("cancelled")
-                                                ? "bg-red-100 text-red-700"
-                                                : "bg-blue-100 text-blue-700"
-                                          }`}
+                                          className={cn(
+                                            "rounded-full px-2 py-1 text-xs border",
+                                            getTreatmentCycleStatusBadgeClass(
+                                              status
+                                            )
+                                          )}
                                         >
                                           {status}
                                         </span>
@@ -2016,7 +1951,7 @@ export function DoctorAppointmentDetailModal({
                     </div>
                     <div className="rounded border border-gray-200 bg-gray-50 p-3">
                       <p className="text-xs font-medium text-gray-500">
-                        National ID
+                        Citizen ID Card
                       </p>
                       <p className="mt-1 text-sm font-semibold text-gray-900">
                         {patient?.nationalId || "—"}

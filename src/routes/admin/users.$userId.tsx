@@ -27,7 +27,8 @@ import { Badge } from "@/components/ui/badge";
 import { capitalize } from "@/utils/capitalize";
 
 type UserDetailForm = {
-  fullName?: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   roleName?: string;
   phone?: string;
@@ -49,7 +50,8 @@ function AdminUserDetailComponent() {
   const { register, handleSubmit, reset, watch, setValue } =
     useForm<UserDetailForm>({
       defaultValues: {
-        fullName: "",
+        firstName: "",
+        lastName: "",
         email: "",
         roleName: "",
         phone: "",
@@ -83,9 +85,10 @@ function AdminUserDetailComponent() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (payload: Partial<UserDetailForm>) =>
+      mutationFn: (payload: Partial<UserDetailForm>) =>
       api.user.createUser({
-        fullName: payload.fullName || "",
+        firstName: payload.firstName || "",
+        lastName: payload.lastName || "",
         email: payload.email || "",
         password: "TempPassword123!", // TODO: Generate secure password or prompt user
         phoneNumber: payload.phone,
@@ -149,7 +152,8 @@ function AdminUserDetailComponent() {
 
   const onSubmit = handleSubmit((formValues) => {
     const payload = {
-      fullName: formValues.fullName,
+      firstName: formValues.firstName,
+      lastName: formValues.lastName,
       email: formValues.email,
       roleName: formValues.roleName,
       phone: formValues.phone,
@@ -197,7 +201,8 @@ function AdminUserDetailComponent() {
     if (user) {
       reset(
         {
-          fullName: user.fullName ?? user.userName ?? "",
+          firstName: user.firstName ?? "",
+          lastName: user.lastName ?? "",
           email: user.email ?? "",
           roleName: user.roleName ?? user.role ?? "",
           phone: user.phone ?? "",
@@ -208,7 +213,8 @@ function AdminUserDetailComponent() {
     } else if (isCreate) {
       reset(
         {
-          fullName: "",
+          firstName: "",
+          lastName: "",
           email: "",
           roleName: "",
           phone: "",
@@ -225,7 +231,9 @@ function AdminUserDetailComponent() {
         <div className="space-y-8">
           <AdminPageHeader
             title={
-              user?.fullName ??
+              (user?.firstName && user?.lastName
+                ? `${user.firstName} ${user.lastName}`.trim()
+                : user?.firstName || user?.lastName) ??
               user?.email ??
               (isCreate ? "Create user" : "User")
             }
@@ -237,7 +245,9 @@ function AdminUserDetailComponent() {
             breadcrumbs={[
               { label: "Dashboard", href: "/admin/dashboard" },
               { label: "Users", href: "/admin/users" },
-              { label: user?.fullName ?? (isCreate ? "Create" : "Details") },
+              { label: (user?.firstName && user?.lastName
+                ? `${user.firstName} ${user.lastName}`.trim()
+                : user?.firstName || user?.lastName) ?? (isCreate ? "Create" : "Details") },
             ]}
             actions={
               !isCreate && user ? (
@@ -283,15 +293,27 @@ function AdminUserDetailComponent() {
                 <CardContent className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="fullName">Full name</Label>
+                      <Label htmlFor="firstName">First name</Label>
                       <Input
-                        id="fullName"
+                        id="firstName"
                         disabled={
                           !allowEdit ||
                           updateMutation.isPending ||
                           createMutation.isPending
                         }
-                        {...register("fullName")}
+                        {...register("firstName")}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last name</Label>
+                      <Input
+                        id="lastName"
+                        disabled={
+                          !allowEdit ||
+                          updateMutation.isPending ||
+                          createMutation.isPending
+                        }
+                        {...register("lastName")}
                       />
                     </div>
                     <div className="space-y-2">

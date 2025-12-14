@@ -11,8 +11,9 @@ import type {
 } from "@/api/types";
 import { Modal } from "@/components/ui/modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
+import { cn } from "@/utils/cn";
 
 interface ServiceRequestDetailModalProps {
   requestId: string;
@@ -39,21 +40,8 @@ const formatCurrency = (value?: number | null) => {
   }).format(value);
 };
 
-const getStatusBadgeVariant = (status: string) => {
-  switch (status) {
-    case "Pending":
-      return "secondary";
-    case "Approved":
-      return "default";
-    case "Rejected":
-      return "destructive";
-    case "Completed":
-      return "default";
-    case "Cancelled":
-      return "outline";
-    default:
-      return "secondary";
-  }
+const getStatusBadgeClass = (status: string) => {
+  return getServiceRequestStatusBadgeClass(status);
 };
 
 export function ServiceRequestDetailModal({
@@ -214,9 +202,14 @@ export function ServiceRequestDetailModal({
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Request Information</CardTitle>
-                <Badge variant={getStatusBadgeVariant(request.status)}>
+                <span
+                  className={cn(
+                    "inline-flex rounded-full px-3 py-1 text-xs font-semibold border",
+                    getStatusBadgeClass(request.status)
+                  )}
+                >
                   {request.status}
-                </Badge>
+                </span>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">

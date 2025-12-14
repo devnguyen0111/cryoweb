@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/utils/cn";
 import { StructuredNote } from "@/components/StructuredNote";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 import { getLast4Chars } from "@/utils/id-helpers";
 
 interface DoctorPatientDetailModalProps {
@@ -167,10 +168,10 @@ export function DoctorPatientDetailModal({
 
     // Get full name from user details or patient
     const fullName =
-      userDetails?.fullName ||
+      getFullNameFromObject(userDetails) ||
       userDetails?.userName ||
       patientDetail?.accountInfo?.username ||
-      patient.fullName ||
+      getFullNameFromObject(patient) ||
       patient.patientCode ||
       "Patient";
 
@@ -312,14 +313,17 @@ export function DoctorPatientDetailModal({
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <DetailField label="Full name" value={mergedPatient.fullName} />
+              <DetailField
+                label="Full name"
+                value={getFullNameFromObject(mergedPatient)}
+              />
               <DetailField
                 label="Date of birth"
                 value={formatDate(mergedPatient.dateOfBirth)}
               />
               <DetailField label="Gender" value={mergedPatient.gender} />
               <DetailField
-                label="National ID"
+                label="Citizen ID Card"
                 value={mergedPatient.nationalId}
               />
               <DetailField

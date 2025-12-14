@@ -568,7 +568,7 @@ export function CreateEncounterForm({
                           {encounterNationalId && (
                             <div className="space-y-1">
                               <p className="text-sm font-medium text-gray-500">
-                                National ID
+                                Citizen ID Card
                               </p>
                               <p className="text-base">{encounterNationalId}</p>
                             </div>
@@ -1048,7 +1048,7 @@ export function CreateEncounterForm({
                       {encounterNationalId && (
                         <div className="space-y-1">
                           <p className="text-sm font-medium text-gray-500">
-                            National ID
+                            Citizen ID Card
                           </p>
                           <p className="text-base">{encounterNationalId}</p>
                         </div>
@@ -1539,7 +1539,7 @@ export function CreateEncounterForm({
                             {encounterNationalId && (
                               <div className="space-y-1">
                                 <p className="text-sm font-medium text-gray-500">
-                                  National ID
+                                  Citizen ID Card
                                 </p>
                                 <p className="text-base">
                                   {encounterNationalId}

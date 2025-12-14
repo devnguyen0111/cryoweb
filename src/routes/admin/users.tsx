@@ -34,7 +34,9 @@ function AdminUsersComponent() {
     return users.filter((user) => {
       const matchesSearch =
         !searchTerm ||
-        user.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.firstName && user.lastName
+          ? `${user.firstName} ${user.lastName}`.trim().toLowerCase()
+          : (user.firstName || user.lastName || "").toLowerCase()).includes(searchTerm.toLowerCase()) ||
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.roleName?.toLowerCase().includes(searchTerm.toLowerCase());
 

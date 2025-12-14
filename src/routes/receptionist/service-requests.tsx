@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -24,7 +26,19 @@ export const Route = createFileRoute("/receptionist/service-requests")({
 
 function ReceptionistServiceRequestsRoute() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [page, setPage] = useState(1);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "service-requests"],
+      }),
+    ]);
+    setIsRefreshing(false);
+  };
   const [pageSize] = useState(10);
   const [status, setStatus] = useState("");
   const [serviceId, setServiceId] = useState("");
@@ -112,17 +126,7 @@ function ReceptionistServiceRequestsRoute() {
   };
 
   const statusBadgeClass = (value?: string) => {
-    switch (value) {
-      case "Pending":
-        return "bg-amber-100 text-amber-700";
-      case "Confirmed":
-        return "bg-emerald-100 text-emerald-700";
-      case "Rejected":
-      case "Cancelled":
-        return "bg-rose-100 text-rose-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
+    return getServiceRequestStatusBadgeClass(value);
   };
 
   return (
@@ -140,12 +144,24 @@ function ReceptionistServiceRequestsRoute() {
                 Results: {total} requests · Page {page} / {totalPages}
               </p>
             </div>
-            <Button
-              variant="ghost"
-              onClick={() => navigate({ to: "/receptionist/dashboard" })}
-            >
-              Back to dashboard
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+                Refresh
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => navigate({ to: "/receptionist/dashboard" })}
+              >
+                Back to dashboard
+              </Button>
+            </div>
           </div>
 
           <Card>
@@ -227,10 +243,10 @@ function ReceptionistServiceRequestsRoute() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Search
+                    Search patient code
                   </label>
                   <Input
-                    placeholder="Search by patient, service, or notes..."
+                    placeholder="e.g. PAT001"
                     value={searchTerm}
                     onChange={(event) => {
                       setSearchTerm(event.target.value);
@@ -270,7 +286,9 @@ function ReceptionistServiceRequestsRoute() {
                                 </div>
                                 <div className="text-xs text-gray-500">
                                   Patient ID:{" "}
-                                  {request.patientId ? getLast4Chars(request.patientId) : "Unassigned"}
+                                  {request.patientId
+                                    ? getLast4Chars(request.patientId)
+                                    : "Unassigned"}
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-gray-600">

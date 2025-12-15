@@ -27,6 +27,7 @@ import {
   type TreatmentCycle,
 } from "@/api/types";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 export const Route = createFileRoute("/doctor/treatment-cycles")({
   component: DoctorTreatmentCyclesComponent,
@@ -495,9 +496,11 @@ function DoctorTreatmentCyclesComponent() {
     });
 
     const patientName =
-      patientDetails?.accountInfo?.username ||
-      userDetails?.fullName ||
+      getFullNameFromObject(userDetails) ||
+      getFullNameFromObject(patientDetails?.accountInfo) ||
+      getFullNameFromObject(patientDetails) ||
       userDetails?.userName ||
+      patientDetails?.accountInfo?.username ||
       patient.patientName ||
       "Unknown";
     const patientCode = patientDetails?.patientCode || patient.patientCode;

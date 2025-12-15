@@ -15,6 +15,7 @@ import { TreatmentViewModal } from "@/features/doctor/encounters/TreatmentViewMo
 import { isAxiosError } from "axios";
 import { StructuredNote } from "@/components/StructuredNote";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 export const Route = createFileRoute("/doctor/encounters")({
   component: DoctorEncountersComponent,
@@ -294,14 +295,11 @@ function DoctorEncountersComponent() {
     if (!patientId) return <span className="text-gray-500">N/A</span>;
 
     const patientName =
-      patientDetails?.accountInfo?.username ||
-      (userDetails?.firstName && userDetails?.lastName
-        ? `${userDetails.firstName} ${userDetails.lastName}`.trim()
-        : userDetails?.firstName || userDetails?.lastName) ||
+      getFullNameFromObject(userDetails) ||
+      getFullNameFromObject(patientDetails?.accountInfo) ||
+      getFullNameFromObject(patientDetails) ||
       userDetails?.userName ||
-      (patientDetails?.firstName && patientDetails?.lastName
-        ? `${patientDetails.firstName} ${patientDetails.lastName}`.trim()
-        : patientDetails?.firstName || patientDetails?.lastName) ||
+      patientDetails?.accountInfo?.username ||
       "Unknown";
     const patientCode = patientDetails?.patientCode;
     // Use patientCode if available, otherwise use short ID (last 4 chars)
@@ -447,16 +445,6 @@ function DoctorEncountersComponent() {
                               <span className="font-medium">Patient: </span>
                               <PatientInfo patientId={treatment.patientId} />
                             </div>
-                            {treatment.notes && (
-                              <div className="md:col-span-2">
-                                <span className="font-medium">Notes: </span>
-                                <TreatmentNotesDisplay
-                                  notes={treatment.notes}
-                                  treatmentId={treatment.id}
-                                  treatmentType={treatment.treatmentType}
-                                />
-                              </div>
-                            )}
                           </div>
                         </div>
                         <div className="flex gap-2 ml-4">

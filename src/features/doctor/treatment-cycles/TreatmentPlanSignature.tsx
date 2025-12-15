@@ -448,22 +448,7 @@ export function TreatmentPlanSignature({
                     </p>
                     <p className="text-xs text-gray-500">
                       Patient needs to sign through their portal or in person.
-                      You can sign on their behalf if they are present.{" "}
-                      {doctorSigned &&
-                        "Signing on behalf of patient will also confirm your signature."}
                     </p>
-                    <Button
-                      onClick={handlePatientSign}
-                      disabled={isSigning}
-                      variant="outline"
-                      className="w-full"
-                    >
-                      {isSigning
-                        ? "Signing..."
-                        : doctorSigned
-                          ? "Sign on Behalf of Patient (Doctor already signed)"
-                          : "Sign on Behalf of Patient (Will also sign as Doctor)"}
-                    </Button>
                   </div>
                 )}
               </div>

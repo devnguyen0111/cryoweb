@@ -13,6 +13,7 @@ import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { TreatmentPlanSignature } from "./TreatmentPlanSignature";
 import type { TreatmentType } from "@/api/types";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 type TreatmentPhase = {
   id: string;
@@ -24,6 +25,7 @@ type TreatmentPhase = {
   goals: string;
   status: "Planned" | "InProgress" | "Completed" | "Cancelled";
   cycleNumber?: number;
+  stepType?: string; // TreatmentStepType enum from backend (e.g., "IUI_PreCyclePreparation", "IVF_StimulationStart")
 };
 
 type TreatmentPlanFormValues = {
@@ -45,6 +47,119 @@ interface TreatmentPlanFormProps {
   onSaved?: (treatmentId: string, agreementId?: string) => void;
   showNextStep?: boolean; // Show "Next Step" button instead of/in addition to "Create Plan"
 }
+
+// IUI Step definitions (7 steps matching backend TreatmentStepType enum)
+const IUI_STEP_PLAN = [
+  {
+    cycleNumber: 1,
+    cycleName: "Pre-Cycle Preparation",
+    stepType: "IUI_PreCyclePreparation",
+    expectedDurationDays: 14,
+    notes: "Preparation phase begins at baseline.",
+  },
+  {
+    cycleNumber: 2,
+    cycleName: "Assessment",
+    stepType: "IUI_Day2_3_Assessment",
+    expectedDurationDays: 1,
+    notes: "Baseline ultrasound/bloodwork (Day 2-3).",
+  },
+  {
+    cycleNumber: 3,
+    cycleName: "Follicle Monitoring",
+    stepType: "IUI_Day7_10_FollicleMonitoring",
+    expectedDurationDays: 1,
+    notes: "Mid-cycle follicle monitoring (Day 7-10).",
+  },
+  {
+    cycleNumber: 4,
+    cycleName: "Trigger",
+    stepType: "IUI_Day10_12_Trigger",
+    expectedDurationDays: 1,
+    notes: "Ovulation trigger planning (Day 10-12).",
+  },
+  {
+    cycleNumber: 5,
+    cycleName: "IUI Procedure",
+    stepType: "IUI_Procedure",
+    expectedDurationDays: 1,
+    notes: "Intrauterine insemination procedure.",
+  },
+  {
+    cycleNumber: 6,
+    cycleName: "Post-IUI Monitoring",
+    stepType: "IUI_PostIUI",
+    expectedDurationDays: 1,
+    notes: "Immediate post-procedure care.",
+  },
+  {
+    cycleNumber: 7,
+    cycleName: "Beta HCG",
+    stepType: "IUI_BetaHCGTest",
+    expectedDurationDays: 1,
+    notes: "Pregnancy test 14 days after procedure (14 days).",
+  },
+];
+
+// IVF Step definitions (8 steps matching backend TreatmentStepType enum)
+const IVF_STEP_PLAN = [
+  {
+    cycleNumber: 1,
+    cycleName: "Pre-Cycle Preparation",
+    stepType: "IVF_PreCyclePreparation",
+    expectedDurationDays: 14,
+    notes: "Patient prep and protocol confirmation starts at baseline.",
+  },
+  {
+    cycleNumber: 2,
+    cycleName: "Controlled Ovarian Stimulation",
+    stepType: "IVF_StimulationStart",
+    expectedDurationDays: 10,
+    notes: "Stimulation start (COS day 1).",
+  },
+  {
+    cycleNumber: 3,
+    cycleName: "Mid-Stimulation Monitoring",
+    stepType: "IVF_Monitoring",
+    expectedDurationDays: 1,
+    notes: "Ultrasound/bloodwork mid stimulation.",
+  },
+  {
+    cycleNumber: 4,
+    cycleName: "Ovulation Trigger",
+    stepType: "IVF_Trigger",
+    expectedDurationDays: 1,
+    notes: "Trigger shot ~day 10.",
+  },
+  {
+    cycleNumber: 5,
+    cycleName: "Oocyte Pick-Up (OPU)",
+    stepType: "IVF_OPU",
+    expectedDurationDays: 1,
+    notes: "Oocyte retrieval ~36h post trigger.",
+  },
+  {
+    cycleNumber: 6,
+    cycleName: "Fertilization/Lab",
+    stepType: "IVF_Fertilization",
+    expectedDurationDays: 1,
+    notes: "Fertilization/ICSI lab work.",
+  },
+  {
+    cycleNumber: 7,
+    cycleName: "Embryo Culture",
+    stepType: "IVF_EmbryoCulture",
+    expectedDurationDays: 3,
+    notes: "Embryo assessment (Day 3 checkpoint).",
+  },
+  {
+    cycleNumber: 8,
+    cycleName: "Embryo Transfer",
+    stepType: "IVF_EmbryoTransfer",
+    expectedDurationDays: 1,
+    notes: "Default day-5 transfer.",
+  },
+];
 
 export function TreatmentPlanForm({
   treatmentId,
@@ -267,13 +382,29 @@ export function TreatmentPlanForm({
       // For IUI/IVF, automatically pre-sign as doctor when creating the plan
       // Truncate additionalNotes if too long to prevent issues
       const maxNoteLength = 5000; // Maximum length for additional notes
-      const truncatedNotes = data.notes && data.notes.length > maxNoteLength
-        ? data.notes.substring(0, maxNoteLength) + "..."
-        : data.notes;
+      const maxDescriptionLength = 200; // Maximum length for phase description (1-2 lines)
+      const maxGoalsLength = 200; // Maximum length for phase goals (1-2 lines)
+      const truncatedNotes =
+        data.notes && data.notes.length > maxNoteLength
+          ? data.notes.substring(0, maxNoteLength) + "..."
+          : data.notes;
+
+      // Truncate phases description and goals to keep notes concise
+      const optimizedPhases = data.phases.map((phase: any) => ({
+        ...phase,
+        description:
+          phase.description && phase.description.length > maxDescriptionLength
+            ? phase.description.substring(0, maxDescriptionLength) + "..."
+            : phase.description,
+        goals:
+          phase.goals && phase.goals.length > maxGoalsLength
+            ? phase.goals.substring(0, maxGoalsLength) + "..."
+            : phase.goals,
+      }));
 
       const notesData: any = {
         estimatedDuration: data.estimatedDuration,
-        phases: data.phases,
+        phases: optimizedPhases,
         additionalNotes: truncatedNotes,
       };
 
@@ -518,9 +649,25 @@ export function TreatmentPlanForm({
 
       // Truncate additionalNotes if too long to prevent issues
       const maxNoteLength = 5000; // Maximum length for additional notes
-      const truncatedNotes = data.notes && data.notes.length > maxNoteLength
-        ? data.notes.substring(0, maxNoteLength) + "..."
-        : data.notes;
+      const maxDescriptionLength = 200; // Maximum length for phase description (1-2 lines)
+      const maxGoalsLength = 200; // Maximum length for phase goals (1-2 lines)
+      const truncatedNotes =
+        data.notes && data.notes.length > maxNoteLength
+          ? data.notes.substring(0, maxNoteLength) + "..."
+          : data.notes;
+
+      // Truncate phases description and goals to keep notes concise
+      const optimizedPhases = data.phases.map((phase: any) => ({
+        ...phase,
+        description:
+          phase.description && phase.description.length > maxDescriptionLength
+            ? phase.description.substring(0, maxDescriptionLength) + "..."
+            : phase.description,
+        goals:
+          phase.goals && phase.goals.length > maxGoalsLength
+            ? phase.goals.substring(0, maxGoalsLength) + "..."
+            : phase.goals,
+      }));
 
       const treatmentPayload: any = {
         treatmentName: data.planName,
@@ -529,11 +676,15 @@ export function TreatmentPlanForm({
         endDate,
         diagnosis: data.overallGoals,
         goals: data.overallGoals,
-        notes: JSON.stringify({
-          estimatedDuration: data.estimatedDuration,
-          phases: data.phases,
-          additionalNotes: truncatedNotes,
-        }, null, 2), // Format with 2-space indentation for readability
+        notes: JSON.stringify(
+          {
+            estimatedDuration: data.estimatedDuration,
+            phases: optimizedPhases,
+            additionalNotes: truncatedNotes,
+          },
+          null,
+          2
+        ), // Format with 2-space indentation for readability
         // estimatedCost and actualCost can be updated separately if needed
       };
 
@@ -769,105 +920,51 @@ export function TreatmentPlanForm({
     const suggestedPhases: TreatmentPhase[] = [];
 
     if (formState.treatmentType === "IUI") {
-      // IUI typically has 3 cycles, each cycle follows the standard protocol
-      for (let i = 1; i <= 3; i++) {
-        // Calculate cycle start date (cycles are typically 2 months apart)
-        const cycleStart = new Date(startDate);
-        cycleStart.setMonth(cycleStart.getMonth() + (i - 1) * 2);
-
-        // Cycle end date: approximately 30 days (includes 14 days wait after IUI)
-        const cycleEnd = new Date(cycleStart);
-        cycleEnd.setDate(cycleEnd.getDate() + 30);
-
-        suggestedPhases.push({
-          id: `phase-${Date.now()}-${i}`,
-          phaseName: `IUI Cycle ${i}`,
-          phaseType: "IUI",
-          startDate: cycleStart.toISOString().split("T")[0],
-          endDate: cycleEnd.toISOString().split("T")[0],
-          description: `IUI Cycle ${i} - Complete IUI treatment protocol: (1) Pre-cycle preparation (1-2 weeks before): Gynecological examination, hormone tests (AMH, FSH, LH, E2, PRL, TSH), HSG/hysterosalpingo-sonography for tubal patency, semen analysis, infectious disease screening, treatment of infections if present. (2) Day 2-3: Transvaginal ultrasound, basic hormone tests, start ovarian stimulation medications (clomiphene citrate, letrozole, or gonadotropin). (3) Day 7-10: Follow-up ultrasound to monitor follicle development, measure endometrial thickness (≥7mm required for implantation), adjust medication dosage if needed. (4) Day 10-12: When follicles reach ≥18-20mm → administer hCG trigger injection, schedule IUI procedure 34-36 hours later. (5) IUI procedure day: Semen sample collection, sperm washing and preparation, intrauterine insemination using soft catheter under sterile conditions. (6) Post-insemination: Rest for 15-30 minutes, prescribe luteal phase support (progesterone ± estrogen). (7) Day 14 post-IUI: β-hCG blood test, if positive perform ultrasound to confirm intrauterine gestational sac after 2 weeks.`,
-          goals: `Successfully complete IUI Cycle ${i} with optimal insemination timing, achieve successful fertilization and implantation, confirm pregnancy outcome through β-hCG testing. Monitor patient response to medications and adjust protocol if needed for subsequent cycles. Ensure follicles develop to ≥18-20mm, endometrial thickness ≥7mm, and perform IUI at the correct timing of 34-36 hours after trigger injection.`,
-          status: "Planned",
-          cycleNumber: i,
-        });
-      }
-    } else if (formState.treatmentType === "IVF") {
-      // IVF phases following standard protocol
-      const phases = [
-        {
-          name: "Phase 1: Pre-cycle Preparation",
-          type: "Consultation" as const,
-          durationDays: 14, // 1-2 weeks
-          description: `Pre-cycle IVF preparation includes: (1) Medical history taking, comprehensive gynecological/andrological examination. (2) Mandatory tests: HIV, HBsAg, Anti-HCV, Syphilis, Rubella. (3) Female hormone tests: AMH, FSH, LH, E2, PRL, TSH. (4) Transvaginal ultrasound of uterus and ovaries, antral follicle count (AFC). (5) Male: semen analysis (≥2 times), hormone tests (FSH, LH, Testosterone). (6) Diagnosis of underlying causes: tubal blockage, poor sperm quality, PCOS, endometriosis. (7) Counseling and IVF contract signing (including embryo/sperm/oocyte storage).`,
-          goals: `Complete comprehensive assessment, confirm patient eligibility for IVF treatment, select optimal stimulation protocol based on ovarian reserve and medical history, ensure all pre-treatment requirements are met, and obtain informed consent.`,
-        },
-        {
-          name: "Phase 2: Controlled Ovarian Stimulation (COS)",
-          type: "IVF" as const,
-          durationDays: 12, // 8-12 days
-          description: `Controlled Ovarian Stimulation (COS): (1) Start on day 2-3 of menstrual cycle. (2) Daily gonadotropin injections (FSH/hMG) for 8-12 days. (3) Regular follow-up visits: ultrasound to measure follicle size, endometrial thickness. (4) Blood tests for monitoring: Estradiol (E2), LH, Progesterone (P4). (5) When follicles reach ≥18-20mm → administer hCG or agonist trigger injection. Monitor follicle development, adjust medication dosage based on response, prevent premature ovulation with GnRH antagonist/agonist.`,
-          goals: `Achieve optimal ovarian response with multiple mature follicles (target: 8-15 follicles), prevent premature ovulation, maintain appropriate hormone levels throughout stimulation, minimize risk of OHSS, and time trigger injection precisely for optimal oocyte maturity at retrieval.`,
-        },
-        {
-          name: "Phase 3: Oocyte Retrieval & Quality Assessment",
-          type: "IVF" as const,
-          durationDays: 1, // Same day procedure
-          description: `Oocyte retrieval: (1) Performed 34-36 hours after trigger injection. (2) Short anesthesia, transvaginal ultrasound-guided oocyte aspiration. (3) Oocytes immediately transferred to laboratory. Oocyte quality assessment: GV (Germinal Vesicle) - immature oocyte → discard; MI (Metaphase I) - incomplete → may culture for few more hours; MII (Metaphase II) - mature, first polar body extruded → suitable for fertilization. Morphological criteria: homogeneous cytoplasm, round zona pellucida, narrow perivitelline space (PVS), intact polar body.`,
-          goals: `Successfully retrieve adequate number of mature oocytes (MII), accurately assess oocyte quality, ensure oocytes meet fertilization standards, and transfer oocytes to laboratory under optimal conditions.`,
-        },
-        {
-          name: "Phase 4: Sperm Collection & Preparation",
-          type: "IVF" as const,
-          durationDays: 1, // Same day
-          description: `Sperm collection and preparation: (1) Male partner provides semen sample or surgical procedure (TESA/PESA/Micro-TESE) if needed. (2) Laboratory washing and selection of progressive motile sperm. Sperm quality assessment: Volume ≥1.4ml, concentration ≥16 million/ml, progressive motility (PR) ≥30%, normal morphology ≥4%, viability ≥58%.`,
-          goals: `Obtain quality sperm sample, wash and select best progressive motile sperm, accurately assess sperm quality, and prepare for fertilization.`,
-        },
-        {
-          name: "Phase 5: In Vitro Fertilization",
-          type: "IVF" as const,
-          durationDays: 1, // Same day
-          description: `In vitro fertilization: (1) Conventional IVF: mix oocytes and sperm in culture dish. (2) After 16-18 hours → check fertilization (appearance of 2 pronuclei – PN). Ensure optimal culture conditions, monitor fertilization process, and confirm zygote formation.`,
-          goals: `Achieve high fertilization rate (target: 70-80%), ensure good zygote quality, and prepare for subsequent embryo culture phase.`,
-        },
-        {
-          name: "Phase 6: Embryo Culture in Laboratory",
-          type: "IVF" as const,
-          durationDays: 6, // Day 0 to Day 5-6
-          description: `Embryo culture in laboratory: (1) Embryos placed in incubator with standard culture medium. (2) Day 3: 6-8 cell embryos (Cleavage stage). (3) Day 5-6: blastocysts. Embryo quality assessment: Day 3 - 6-8 cells, even blastomeres, fragmentation <20%, no multinucleation (Grade 1-2 = good; Grade 3-4 = poor). Day 5-6 (Blastocyst – Gardner & Schoolcraft) - Expansion 1-6: ≥3 is acceptable, 5-6 = excellent; ICM (inner cell mass): A = many, well-compacted; B = moderate; C = few; TE (trophectoderm): A = even, many; B = moderate; C = poor. Examples: 4AA, 5AA = ideal; ≥3BB = suitable for transfer/storage.`,
-          goals: `Culture high-quality embryos, accurately assess embryo quality according to Gardner & Schoolcraft standards, achieve good blastocysts (≥3BB) for transfer or storage, and determine optimal transfer timing (day 3 or day 5-6).`,
-        },
-        {
-          name: "Phase 7: Embryo Transfer (ET)",
-          type: "IVF" as const,
-          durationDays: 1, // Same day
-          description: `Embryo Transfer (ET): (1) Performed on day 3 or day 5-6 (prefer blastocyst). (2) Can transfer fresh embryos or frozen embryos (FET). (3) Performed using soft catheter, under ultrasound guidance, no anesthesia required. Ensure optimal transfer technique, accurate transfer position, and favorable endometrial conditions.`,
-          goals: `Successfully transfer high-quality embryos with optimal technique, ensure accurate transfer position, and create best conditions for embryo implantation.`,
-        },
-        {
-          name: "Phase 8: Luteal Support & Monitoring",
-          type: "Monitoring" as const,
-          durationDays: 14, // 12-14 days
-          description: `Luteal support & monitoring: (1) Use progesterone ± estrogen to support endometrial lining. (2) After 12-14 days: β-hCG blood test. (3) If positive: ultrasound to confirm gestational sac after 2-3 weeks to confirm intrauterine pregnancy. Close patient monitoring, ensure adequate luteal support, and provide post-transfer care instructions.`,
-          goals: `Maintain adequate luteal support to promote implantation, confirm pregnancy through β-hCG testing, verify healthy early pregnancy development via ultrasound, assess implantation success, and provide appropriate follow-up care for positive results or plan next cycle if negative.`,
-        },
-      ];
-
+      // IUI: 7 phases (1 step = 1 phase) following standard protocol from backend
       let currentDate = new Date(startDate);
-      phases.forEach((phase, index) => {
+
+      IUI_STEP_PLAN.forEach((step, stepIndex) => {
         const phaseStart = new Date(currentDate);
         const phaseEnd = new Date(phaseStart);
-        phaseEnd.setDate(phaseEnd.getDate() + phase.durationDays);
+        phaseEnd.setDate(phaseEnd.getDate() + step.expectedDurationDays);
 
         suggestedPhases.push({
-          id: `phase-${Date.now()}-${index}`,
-          phaseName: phase.name,
-          phaseType: phase.type,
+          id: `phase-${Date.now()}-${stepIndex}`,
+          phaseName: step.cycleName,
+          phaseType: "IUI",
           startDate: phaseStart.toISOString().split("T")[0],
           endDate: phaseEnd.toISOString().split("T")[0],
-          description: phase.description,
-          goals: phase.goals,
+          description: step.notes, // Short note from backend (1-2 lines)
+          goals: step.notes, // Use same short note for goals
           status: "Planned",
-          cycleNumber: index + 1,
+          cycleNumber: step.cycleNumber, // Use cycleNumber from step plan (1-7)
+          stepType: step.stepType, // Link to backend TreatmentStepType enum
+        });
+
+        // Next phase starts the day after current phase ends
+        currentDate = new Date(phaseEnd);
+        currentDate.setDate(currentDate.getDate() + 1);
+      });
+    } else if (formState.treatmentType === "IVF") {
+      // IVF phases following standard 8-step protocol from backend
+      let currentDate = new Date(startDate);
+
+      IVF_STEP_PLAN.forEach((step, stepIndex) => {
+        const phaseStart = new Date(currentDate);
+        const phaseEnd = new Date(phaseStart);
+        phaseEnd.setDate(phaseEnd.getDate() + step.expectedDurationDays);
+
+        suggestedPhases.push({
+          id: `phase-${Date.now()}-${stepIndex}`,
+          phaseName: step.cycleName,
+          phaseType: "IVF",
+          startDate: phaseStart.toISOString().split("T")[0],
+          endDate: phaseEnd.toISOString().split("T")[0],
+          description: step.notes, // Short note from backend (1-2 lines)
+          goals: step.notes, // Use same short note for goals
+          status: "Planned",
+          cycleNumber: step.cycleNumber,
+          stepType: step.stepType, // Link to backend TreatmentStepType enum
         });
 
         // Next phase starts the day after current phase ends
@@ -916,10 +1013,10 @@ export function TreatmentPlanForm({
 
   // Get patient name for display
   const patientName =
-    patientDetails?.accountInfo?.username ||
-    userDetails?.fullName ||
+    getFullNameFromObject(userDetails) ||
     userDetails?.userName ||
-    patientDetails?.fullName ||
+    patientDetails?.accountInfo?.username ||
+    getFullNameFromObject(patientDetails) ||
     "Unknown";
 
   return (
@@ -939,10 +1036,10 @@ export function TreatmentPlanForm({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                Search Patient (by name, code, or national ID)
+                Search Patient (by patient code)
               </label>
               <Input
-                placeholder="Enter at least 2 characters to search..."
+                placeholder="e.g. PAT001"
                 value={patientSearch}
                 onChange={(e) => setPatientSearch(e.target.value)}
               />
@@ -980,8 +1077,7 @@ export function TreatmentPlanForm({
                     >
                       <p className="font-medium">{patient.fullName}</p>
                       <p className="text-sm text-gray-600">
-                        {patient.patientCode} • {patient.nationalId} •{" "}
-                        {patient.gender}
+                        {patient.patientCode}
                       </p>
                     </button>
                   ))}
@@ -1130,10 +1226,10 @@ export function TreatmentPlanForm({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                Search Patient (by name, code, or national ID)
+                Search Patient (by patient code)
               </label>
               <Input
-                placeholder="Enter at least 2 characters to search..."
+                placeholder="e.g. PAT001"
                 value={patientSearch}
                 onChange={(e) => setPatientSearch(e.target.value)}
               />
@@ -1159,8 +1255,7 @@ export function TreatmentPlanForm({
                     >
                       <p className="font-medium">{patient.fullName}</p>
                       <p className="text-sm text-gray-600">
-                        {patient.patientCode} • {patient.nationalId} •{" "}
-                        {patient.gender}
+                        {patient.patientCode}
                       </p>
                     </button>
                   ))}

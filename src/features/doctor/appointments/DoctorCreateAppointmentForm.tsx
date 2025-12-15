@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 // Default slots - 4 fixed slots (2 morning, 2 afternoon) - same as in doctor schedule
 const DEFAULT_SLOTS: (Slot & { notes?: string })[] = [
@@ -210,12 +211,13 @@ export function DoctorCreateAppointmentForm({
     enabled: disablePatientSelection && !!formState.patientId,
   });
 
-  // Get locked patient display info
+  // Get locked patient display info - use same logic as AgreementDocument
   const lockedPatientName =
-    lockedPatientDetails?.accountInfo?.username ||
-    lockedUserDetails?.fullName ||
+    getFullNameFromObject(lockedUserDetails) ||
+    getFullNameFromObject(lockedPatientDetails?.accountInfo) ||
+    getFullNameFromObject(lockedPatientDetails) ||
     lockedUserDetails?.userName ||
-    lockedPatientDetails?.fullName ||
+    lockedPatientDetails?.accountInfo?.username ||
     "Unknown";
   const lockedPatientCode = lockedPatientDetails?.patientCode;
 

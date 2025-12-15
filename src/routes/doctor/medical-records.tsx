@@ -19,6 +19,7 @@ import { api } from "@/api/client";
 import { CreateMedicalRecordForm } from "@/features/doctor/medical-records/CreateMedicalRecordForm";
 import { DoctorAppointmentDetailModal } from "@/features/doctor/appointments/DoctorAppointmentDetailModal";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 import type {
   PaginatedResponse,
   MedicalRecord,
@@ -71,7 +72,9 @@ function DoctorMedicalRecordsComponent() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["doctor", "medical-records"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "medical-records"],
+      }),
     ]);
     setIsRefreshing(false);
   };
@@ -113,6 +116,141 @@ function DoctorMedicalRecordsComponent() {
       return response.data;
     },
   });
+
+  // Fetch appointment details to get patientId if not in record
+  const { data: appointmentDetails } = useQuery({
+    queryKey: [
+      "appointment-details",
+      selectedRecord?.appointmentId,
+      "medical-record",
+    ],
+    enabled: !!selectedRecord?.appointmentId && !selectedRecord?.patient,
+    queryFn: async () => {
+      if (!selectedRecord?.appointmentId) return null;
+      try {
+        const response = await api.appointment.getAppointmentDetails(
+          selectedRecord.appointmentId
+        );
+        return response.data;
+      } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return null;
+        }
+        // Try getAppointmentById as fallback
+        try {
+          const fallback = await api.appointment.getAppointmentById(
+            selectedRecord.appointmentId
+          );
+          return fallback.data;
+        } catch {
+          return null;
+        }
+      }
+    },
+  });
+
+  // Get patientId from record, appointment in record, or fetched appointment details
+  const patientId = useMemo(() => {
+    if (!selectedRecord) return null;
+
+    // Try from patient in record
+    if (selectedRecord.patient) {
+      const patientIdFromPatient =
+        (selectedRecord.patient as any)?.id ||
+        selectedRecord.patient?.id ||
+        (selectedRecord.patient as any)?.accountId;
+      if (patientIdFromPatient) return patientIdFromPatient;
+    }
+
+    // Try from appointment in record
+    if (selectedRecord.appointment) {
+      const raw = selectedRecord.appointment as unknown as Record<string, any>;
+      const patientIdFromAppointment =
+        (selectedRecord.appointment as any)?.patientId ||
+        raw.patientID ||
+        raw.PatientId ||
+        raw.PatientID ||
+        raw.patient?.id ||
+        raw.patient?.patientId ||
+        raw.patient?.accountId ||
+        raw.patientAccountId ||
+        raw.patientAccountID;
+      if (patientIdFromAppointment) return patientIdFromAppointment;
+    }
+
+    // Try from fetched appointment details
+    if (appointmentDetails) {
+      const raw = appointmentDetails as unknown as Record<string, any>;
+      const patientIdFromDetails =
+        appointmentDetails.patientId ||
+        raw.patientID ||
+        raw.PatientId ||
+        raw.PatientID ||
+        raw.patient?.id ||
+        raw.patient?.patientId ||
+        raw.patient?.accountId ||
+        raw.patientAccountId ||
+        raw.patientAccountID;
+      if (patientIdFromDetails) return patientIdFromDetails;
+    }
+
+    return null;
+  }, [selectedRecord, appointmentDetails]);
+
+  // Fetch patient details if not included in response
+  const { data: patientDetails } = useQuery({
+    queryKey: ["patient-details", patientId, "medical-record"],
+    enabled: !!patientId && !selectedRecord?.patient,
+    queryFn: async () => {
+      if (!patientId) return null;
+      try {
+        const response = await api.patient.getPatientDetails(patientId);
+        return response.data;
+      } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 403) {
+          try {
+            const fallback = await api.patient.getPatientById(patientId);
+            return fallback.data;
+          } catch {
+            return null;
+          }
+        }
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return null;
+        }
+        return null;
+      }
+    },
+  });
+
+  // Fetch user details for patient name
+  const { data: userDetails } = useQuery({
+    queryKey: ["user-details", patientId, "medical-record"],
+    enabled: !!patientId,
+    queryFn: async () => {
+      if (!patientId) return null;
+      try {
+        const response = await api.user.getUserDetails(patientId);
+        return response.data;
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  // Merge patient data - also check appointment details for patient
+  const displayPatient = useMemo(() => {
+    if (selectedRecord?.patient) {
+      return selectedRecord.patient;
+    }
+    if ((appointmentDetails as any)?.patient) {
+      return (appointmentDetails as any).patient;
+    }
+    if (patientDetails) {
+      return patientDetails;
+    }
+    return null;
+  }, [selectedRecord?.patient, appointmentDetails, patientDetails]);
 
   const { data: editingRecord } = useQuery<MedicalRecordDetailResponse>({
     queryKey: ["medical-record", editingRecordId],
@@ -208,7 +346,7 @@ function DoctorMedicalRecordsComponent() {
       if (query.data?.data?.patient) {
         const patient = query.data.data.patient;
         const name =
-          patient.fullName ||
+          getFullNameFromObject(patient) ||
           patient.patientCode ||
           getLast4Chars(query.data.data.patientId) ||
           "Unknown";
@@ -254,6 +392,19 @@ function DoctorMedicalRecordsComponent() {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const formatDateTime = (dateString?: string | null) => {
+    if (!dateString) return "—";
+    try {
+      return new Date(dateString).toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
       });
@@ -285,7 +436,9 @@ function DoctorMedicalRecordsComponent() {
                 onClick={handleRefresh}
                 disabled={isRefreshing}
               >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
                 Refresh
               </Button>
               <Button onClick={() => setIsCreateModalOpen(true)}>
@@ -501,212 +654,307 @@ function DoctorMedicalRecordsComponent() {
           >
             {selectedRecord ? (
               <div className="space-y-6 max-h-[80vh] overflow-y-auto">
-                {/* Header Information */}
+                {/* Patient Information - Matching Create Medical Record Form */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">
-                      Record Information
+                      Patient Information
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                          Appointment ID
+                  <CardContent className="space-y-4">
+                    {displayPatient && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Patient
                         </label>
-                        <p className="text-sm font-mono text-gray-900">
-                          {selectedRecord.appointmentId}
-                        </p>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="font-medium text-gray-900">
+                            {getFullNameFromObject(userDetails) ||
+                              getFullNameFromObject(displayPatient) ||
+                              (displayPatient as any)?.accountInfo?.username ||
+                              "—"}
+                          </p>
+                          {displayPatient.patientCode ? (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Patient Code: {displayPatient.patientCode}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Patient Code: —
+                            </p>
+                          )}
+                        </div>
                       </div>
+                    )}
+                    {!displayPatient && patientId && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Patient
+                        </label>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="text-gray-500 text-sm">
+                            Loading patient information...
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {!displayPatient && !patientId && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Patient
+                        </label>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="text-xs text-gray-500">Patient: —</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Patient Code: —
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">
+                        Appointment
+                      </label>
+                      <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                        <p className="font-medium text-gray-900">
+                          {(selectedRecord.appointment as any)
+                            ?.appointmentCode ||
+                            getLast4Chars(selectedRecord.appointmentId)}
+                        </p>
+                        {selectedRecord.appointment && (
+                          <>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Date:{" "}
+                              {new Date(
+                                selectedRecord.appointment.appointmentDate
+                              ).toLocaleDateString("en-GB", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                              })}
+                            </p>
+                            {(selectedRecord.appointment as any)?.slot
+                              ?.startTime && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Time:{" "}
+                                {new Date(
+                                  `2000-01-01T${(selectedRecord.appointment as any).slot.startTime}`
+                                ).toLocaleTimeString("en-GB", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </p>
+                            )}
+                            {(selectedRecord.appointment as any)
+                              ?.doctors?.[0] && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Doctor:{" "}
+                                {getFullNameFromObject(
+                                  (selectedRecord.appointment as any).doctors[0]
+                                ) ||
+                                  getFullNameFromObject(
+                                    (selectedRecord.appointment as any)?.slot
+                                      ?.schedule?.doctor
+                                  ) ||
+                                  "—"}
+                              </p>
+                            )}
+                            {selectedRecord.appointment.status && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Status: {selectedRecord.appointment.status}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {(selectedRecord.appointment as any)?.treatmentCycleId && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Treatment Cycle
+                        </label>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="text-xs text-gray-500">
+                            Cycle ID:{" "}
+                            {getLast4Chars(
+                              (selectedRecord.appointment as any)
+                                .treatmentCycleId
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2 pt-2 border-t">
                       <div className="space-y-1">
-                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <label className="text-sm font-medium text-gray-700">
                           Created At
                         </label>
-                        <p className="text-sm text-gray-900">
-                          {formatDate(selectedRecord.createdAt)}
-                        </p>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="text-gray-900">
+                            {formatDateTime(selectedRecord.createdAt)}
+                          </p>
+                        </div>
                       </div>
                       {selectedRecord.updatedAt && (
                         <div className="space-y-1">
-                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          <label className="text-sm font-medium text-gray-700">
                             Last Updated
                           </label>
-                          <p className="text-sm text-gray-900">
-                            {formatDate(selectedRecord.updatedAt)}
-                          </p>
-                        </div>
-                      )}
-                      {selectedRecord.patient && (
-                        <div className="space-y-1">
-                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                            Patient
-                          </label>
-                          <p className="text-sm text-gray-900">
-                            {selectedRecord.patient.fullName ||
-                              selectedRecord.patient.patientCode ||
-                              "—"}
-                          </p>
+                          <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                            <p className="text-gray-900">
+                              {formatDateTime(selectedRecord.updatedAt)}
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* Chief Complaint */}
-                {selectedRecord.chiefComplaint && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Chief Complaint</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                        {selectedRecord.chiefComplaint}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                {/* Medical Information - Matching Create Medical Record Form */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      Medical Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {selectedRecord.chiefComplaint && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Chief Complaint
+                        </label>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="text-gray-900 whitespace-pre-wrap">
+                            {selectedRecord.chiefComplaint}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
-                {/* History */}
-                {selectedRecord.history && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Medical History</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                        {selectedRecord.history}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                    {selectedRecord.history && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          History
+                        </label>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="text-gray-900 whitespace-pre-wrap">
+                            {selectedRecord.history}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
-                {/* Physical Examination */}
-                {selectedRecord.physicalExamination && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">
-                        Physical Examination
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                        {selectedRecord.physicalExamination}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                    {selectedRecord.physicalExamination && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Physical Examination
+                        </label>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="text-gray-900 whitespace-pre-wrap">
+                            {selectedRecord.physicalExamination}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
-                {/* Diagnosis */}
-                {selectedRecord.diagnosis && (
-                  <Card className="border-blue-200 bg-blue-50/50">
-                    <CardHeader>
-                      <CardTitle className="text-lg text-blue-900">
-                        Diagnosis
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                        {selectedRecord.diagnosis}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                    {selectedRecord.diagnosis && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Diagnosis
+                        </label>
+                        <div className="rounded-md border border-blue-200 bg-blue-50/50 px-3 py-2 text-sm">
+                          <p className="text-gray-900 whitespace-pre-wrap">
+                            {selectedRecord.diagnosis}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
-                {/* Treatment Plan */}
-                {selectedRecord.treatmentPlan && (
-                  <Card className="border-green-200 bg-green-50/50">
-                    <CardHeader>
-                      <CardTitle className="text-lg text-green-900">
-                        Treatment Plan
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                        {selectedRecord.treatmentPlan}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                    {selectedRecord.treatmentPlan && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Treatment Plan
+                        </label>
+                        <div className="rounded-md border border-green-200 bg-green-50/50 px-3 py-2 text-sm">
+                          <p className="text-gray-900 whitespace-pre-wrap">
+                            {selectedRecord.treatmentPlan}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
-                {/* Follow-up Instructions */}
-                {selectedRecord.followUpInstructions && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">
-                        Follow-up Instructions
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                        {selectedRecord.followUpInstructions}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                    {selectedRecord.followUpInstructions && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Follow-up Instructions
+                        </label>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="text-gray-900 whitespace-pre-wrap">
+                            {selectedRecord.followUpInstructions}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
-                {/* Vital Signs & Lab Results */}
-                {(selectedRecord.vitalSigns || selectedRecord.labResults) && (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {selectedRecord.vitalSigns && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-base">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {selectedRecord.vitalSigns && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-gray-700">
                             Vital Signs
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                            {selectedRecord.vitalSigns}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    )}
-                    {selectedRecord.labResults && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-base">
+                          </label>
+                          <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                            <p className="text-gray-900 whitespace-pre-wrap">
+                              {selectedRecord.vitalSigns}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedRecord.labResults && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-gray-700">
                             Lab Results
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                            {selectedRecord.labResults}
+                          </label>
+                          <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                            <p className="text-gray-900 whitespace-pre-wrap">
+                              {selectedRecord.labResults}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedRecord.imagingResults && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Imaging Results
+                        </label>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="text-gray-900 whitespace-pre-wrap">
+                            {selectedRecord.imagingResults}
                           </p>
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     )}
-                  </div>
-                )}
 
-                {/* Imaging Results */}
-                {selectedRecord.imagingResults && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Imaging Results</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                        {selectedRecord.imagingResults}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Notes */}
-                {selectedRecord.notes && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">
-                        Additional Notes
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                        {selectedRecord.notes}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                    {selectedRecord.notes && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Notes
+                        </label>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                          <p className="text-gray-900 whitespace-pre-wrap">
+                            {selectedRecord.notes}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
                 {/* Actions */}
                 <div className="flex justify-end gap-2 pt-4 border-t">

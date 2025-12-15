@@ -31,6 +31,8 @@ import {
 import { TreatmentCycleStatusBadge } from "@/components/treatment-cycle-status-badge";
 import { useNavigate } from "@tanstack/react-router";
 import { getAppointmentStatusBadgeClass } from "@/utils/status-colors";
+import { getFullNameFromObject } from "@/utils/name-helpers";
+import { getLast4Chars } from "@/utils/id-helpers";
 
 interface PatientDetailModalProps {
   patientId: string;
@@ -196,9 +198,11 @@ export function PatientDetailModal({
   if (!isOpen) return null;
 
   const patientName =
-    patientDetails?.accountInfo?.username ||
-    userDetails?.fullName ||
+    getFullNameFromObject(userDetails) ||
+    getFullNameFromObject(patientDetails?.accountInfo) ||
+    getFullNameFromObject(patientDetails) ||
     userDetails?.userName ||
+    patientDetails?.accountInfo?.username ||
     "Unknown";
 
   const tabs: Array<{ id: TabType; label: string }> = [
@@ -309,9 +313,11 @@ function OverviewTab({
   cyclesCount: number;
 }) {
   const patientName =
-    patientDetails?.accountInfo?.username ||
-    userDetails?.fullName ||
+    getFullNameFromObject(userDetails) ||
+    getFullNameFromObject(patientDetails?.accountInfo) ||
+    getFullNameFromObject(patientDetails) ||
     userDetails?.userName ||
+    patientDetails?.accountInfo?.username ||
     "Unknown";
   const patientCode = patientDetails?.patientCode;
   const age = userDetails?.age;
@@ -641,9 +647,9 @@ function TreatmentsTab({
                 <CardContent className="pt-6">
                   <div>
                     <p className="font-semibold">IUI Treatment</p>
-                    {iui.treatmentId && (
+                    {iui.id && (
                       <p className="text-sm text-gray-500">
-                        Treatment ID: {iui.treatmentId}
+                        IUI ID: {getLast4Chars(iui.id)}
                       </p>
                     )}
                     {iui.inseminationDate && (
@@ -727,6 +733,16 @@ function getCycleTreatmentType(cycle: TreatmentCycle): string {
     return cycle.treatmentType;
   }
 
+  // Try to infer from stepType (e.g., "IUI_PreCyclePreparation", "IVF_StimulationStart")
+  if (cycle.stepType) {
+    const stepTypeStr = String(cycle.stepType).toUpperCase();
+    if (stepTypeStr.startsWith("IUI_")) {
+      return "IUI";
+    } else if (stepTypeStr.startsWith("IVF_")) {
+      return "IVF";
+    }
+  }
+
   // Try to infer from cycleName (e.g., "IVF Treatment Plan 2025 - Pre-Cycle Preparation")
   if (cycle.cycleName) {
     const cycleNameUpper = cycle.cycleName.toUpperCase();
@@ -748,6 +764,68 @@ function CyclesTab({
   cycles: TreatmentCycle[];
   isLoading: boolean;
 }) {
+  // Fetch treatments to get treatmentType for cycles that don't have it
+  const treatmentIds = [
+    ...new Set(cycles.map((c) => c.treatmentId).filter(Boolean)),
+  ];
+
+  const { data: treatmentsData } = useQuery({
+    queryKey: ["treatments-for-cycles", treatmentIds],
+    queryFn: async () => {
+      const treatments: Record<string, Treatment> = {};
+      for (const treatmentId of treatmentIds) {
+        try {
+          const response = await api.treatment.getTreatmentById(treatmentId);
+          if (response.data) {
+            treatments[treatmentId] = response.data;
+          }
+        } catch {
+          // Ignore errors
+        }
+      }
+      return treatments;
+    },
+    enabled: treatmentIds.length > 0,
+  });
+
+  // Enhanced function to get treatment type with treatment data
+  const getCycleTreatmentTypeWithData = (cycle: TreatmentCycle): string => {
+    // First, try cycle.treatmentType
+    if (cycle.treatmentType === "IUI" || cycle.treatmentType === "IVF") {
+      return cycle.treatmentType;
+    }
+
+    // Try to get from treatment data
+    if (cycle.treatmentId && treatmentsData?.[cycle.treatmentId]) {
+      const treatmentType = treatmentsData[cycle.treatmentId].treatmentType;
+      if (treatmentType === "IUI" || treatmentType === "IVF") {
+        return treatmentType;
+      }
+    }
+
+    // Try to infer from stepType (e.g., "IUI_PreCyclePreparation", "IVF_StimulationStart")
+    if (cycle.stepType) {
+      const stepTypeStr = String(cycle.stepType).toUpperCase();
+      if (stepTypeStr.startsWith("IUI_")) {
+        return "IUI";
+      } else if (stepTypeStr.startsWith("IVF_")) {
+        return "IVF";
+      }
+    }
+
+    // Try to infer from cycleName (e.g., "IVF Treatment Plan 2025 - Pre-Cycle Preparation")
+    if (cycle.cycleName) {
+      const cycleNameUpper = cycle.cycleName.toUpperCase();
+      if (cycleNameUpper.includes("IVF")) {
+        return "IVF";
+      } else if (cycleNameUpper.includes("IUI")) {
+        return "IUI";
+      }
+    }
+
+    return "N/A";
+  };
+
   if (isLoading) {
     return <div className="py-12 text-center text-gray-500">Loading...</div>;
   }
@@ -770,8 +848,13 @@ function CyclesTab({
                 <p className="font-semibold">
                   {cycle.cycleName || `Cycle ${cycle.cycleNumber}`}
                 </p>
+                {cycle.id && (
+                  <p className="text-sm text-gray-500">
+                    Cycle ID: {getLast4Chars(cycle.id)}
+                  </p>
+                )}
                 <p className="text-sm text-gray-500">
-                  Type: {getCycleTreatmentType(cycle)}
+                  Type: {getCycleTreatmentTypeWithData(cycle)}
                 </p>
                 {cycle.startDate && (
                   <p className="text-sm text-gray-500">

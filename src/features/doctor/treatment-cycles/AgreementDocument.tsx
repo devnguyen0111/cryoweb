@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 interface AgreementDocumentProps {
   treatmentId: string;
@@ -78,10 +79,11 @@ export function AgreementDocument({
 
   // Get patient information
   const patientName =
-    patientDetails?.accountInfo?.username ||
-    userDetails?.fullName ||
+    getFullNameFromObject(userDetails) ||
+    getFullNameFromObject(patientDetails?.accountInfo) ||
+    getFullNameFromObject(patientDetails) ||
     userDetails?.userName ||
-    patientDetails?.fullName ||
+    patientDetails?.accountInfo?.username ||
     "N/A";
   const patientCode = patientDetails?.patientCode || "N/A";
   const nationalId = patientDetails?.nationalId || "N/A";
@@ -116,7 +118,12 @@ export function AgreementDocument({
     "N/A";
 
   // Get doctor information
-  const doctorName = doctorProfile?.fullName || user?.fullName || "N/A";
+  const doctorName =
+    getFullNameFromObject(doctorProfile) ||
+    getFullNameFromObject(user) ||
+    doctorProfile?.userName ||
+    user?.userName ||
+    "N/A";
   const doctorCode = doctorProfile?.badgeId || "N/A";
   const doctorSpecialty = doctorProfile?.specialty || "N/A";
   const doctorLicense = doctorProfile?.badgeId || "N/A"; // Using badgeId as license number
@@ -157,6 +164,39 @@ export function AgreementDocument({
     : null;
 
   const currentDate = new Date().toLocaleDateString("en-US");
+
+  // Parse phases from treatment notes
+  interface StructuredPhase {
+    id?: string;
+    phaseName?: string;
+    phaseType?: string;
+    startDate?: string;
+    endDate?: string;
+    description?: string;
+    goals?: string;
+    status?: string;
+    cycleNumber?: number;
+  }
+
+  interface StructuredNoteData {
+    phases?: StructuredPhase[];
+    [key: string]: unknown;
+  }
+
+  const parsePhases = (): StructuredPhase[] => {
+    if (!treatment?.notes) return [];
+    try {
+      const parsed = JSON.parse(treatment.notes);
+      if (parsed && Array.isArray(parsed.phases)) {
+        return parsed.phases;
+      }
+    } catch {
+      // If parsing fails, return empty array
+    }
+    return [];
+  };
+
+  const phases = parsePhases();
 
   // Check if data is still loading
   const isLoading = !treatment || !patientDetails || !agreement;
@@ -307,10 +347,76 @@ export function AgreementDocument({
           </div>
         </section>
 
+        {/* Treatment Phases */}
+        {phases.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold border-b border-gray-300 pb-1">
+              IV. TREATMENT PHASES
+            </h2>
+            <div className="space-y-3">
+              {phases.map((phase, index) => {
+                const phaseStartDate = phase.startDate
+                  ? new Date(phase.startDate).toLocaleDateString("en-US")
+                  : "N/A";
+                const phaseEndDate = phase.endDate
+                  ? new Date(phase.endDate).toLocaleDateString("en-US")
+                  : "N/A";
+                return (
+                  <div
+                    key={phase.id || index}
+                    className="border border-gray-200 rounded-lg p-4 space-y-2"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-semibold text-base">
+                          Phase {index + 1}: {phase.phaseName || "Unnamed Phase"}
+                        </h3>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {phase.phaseType || "Treatment phase"}
+                          {phase.cycleNumber !== undefined
+                            ? ` • Cycle #${phase.cycleNumber}`
+                            : ""}
+                          {phase.status && ` • Status: ${phase.status}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm mt-2">
+                      <div>
+                        <span className="font-semibold">Start Date: </span>
+                        <span>{phaseStartDate}</span>
+                      </div>
+                      <div>
+                        <span className="font-semibold">End Date: </span>
+                        <span>{phaseEndDate}</span>
+                      </div>
+                    </div>
+                    {phase.description && (
+                      <div className="mt-2">
+                        <span className="font-semibold text-sm">Description: </span>
+                        <p className="text-sm text-gray-700 mt-1">
+                          {phase.description}
+                        </p>
+                      </div>
+                    )}
+                    {phase.goals && (
+                      <div className="mt-2">
+                        <span className="font-semibold text-sm">Goals: </span>
+                        <p className="text-sm text-gray-700 mt-1">
+                          {phase.goals}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Agreement Terms */}
         <section className="space-y-3">
           <h2 className="text-lg font-bold border-b border-gray-300 pb-1">
-            IV. TERMS AND CONDITIONS
+            {phases.length > 0 ? "V. TERMS AND CONDITIONS" : "IV. TERMS AND CONDITIONS"}
           </h2>
           <div className="text-sm space-y-2">
             <p>
@@ -344,7 +450,7 @@ export function AgreementDocument({
         {/* Signatures */}
         <section className="space-y-4 mt-8">
           <h2 className="text-lg font-bold border-b border-gray-300 pb-1">
-            V. ACKNOWLEDGMENT
+            {phases.length > 0 ? "VI. ACKNOWLEDGMENT" : "V. ACKNOWLEDGMENT"}
           </h2>
           <div className="grid grid-cols-2 gap-8 mt-6">
             {/* Doctor Signature */}

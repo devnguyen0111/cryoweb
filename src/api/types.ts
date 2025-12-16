@@ -1464,7 +1464,8 @@ export type SpecimenStatus =
   | "Processing"
   | "Stored"
   | "Used"
-  | "Discarded";
+  | "Discarded"
+  | "QualityChecked";
 
 export interface LabSample {
   id: string;

@@ -38,14 +38,23 @@ function DoctorSamplesComponent() {
       return spermSamples;
     }
 
-    // Filter for samples that have been assessed (have quality data and are in Stored or Processing status)
+    // Filter for samples that have been assessed
+    // - Status "QualityChecked" means already assessed (regardless of quality data)
+    // - Other statuses (Stored, Processing, Used) require quality data to be present
     return spermSamples.filter((sample) => {
+      // If status is QualityChecked, it's already assessed
+      if (sample.status === "QualityChecked") {
+        return true;
+      }
+
+      // For other statuses, check if quality data exists
       const hasQualityData =
         sample.volume !== undefined ||
         sample.concentration !== undefined ||
         sample.motility !== undefined ||
         sample.morphology !== undefined;
 
+      // Other assessed statuses require quality data
       const isAssessed =
         hasQualityData &&
         (sample.status === "Stored" ||
@@ -76,6 +85,7 @@ function DoctorSamplesComponent() {
       Stored: "bg-green-100 text-green-800 border-green-200",
       Used: "bg-purple-100 text-purple-800 border-purple-200",
       Discarded: "bg-red-100 text-red-800 border-red-200",
+      QualityChecked: "bg-emerald-100 text-emerald-800 border-emerald-200",
     };
     return statusClasses[status] || "bg-gray-100 text-gray-800 border-gray-200";
   };

@@ -69,27 +69,6 @@ function DoctorEncountersComponent() {
     );
   }, [treatments, searchTerm]);
 
-  const quickGuide = useMemo(
-    () => [
-      {
-        title: "Step 1: Start the treatment",
-        description:
-          "Capture visit reasons, medical history, and vital signs. The system automatically links to the current appointment.",
-      },
-      {
-        title: "Step 2: Diagnose & order",
-        description:
-          "After saving, continue to the diagnosis screen to add assessments and ancillary orders.",
-      },
-      {
-        title: "Step 3: Manage treatment cycles",
-        description:
-          "From diagnosis you can issue prescriptions, create IUI/IVF cycles, or hand off data to the cryobank.",
-      },
-    ],
-    []
-  );
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Completed":
@@ -467,19 +446,6 @@ function DoctorEncountersComponent() {
               )}
             </CardContent>
           </Card>
-
-          <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {quickGuide.map((item) => (
-              <Card key={item.title}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{item.title}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-gray-600">
-                  {item.description}
-                </CardContent>
-              </Card>
-            ))}
-          </section>
         </div>
 
         <Modal

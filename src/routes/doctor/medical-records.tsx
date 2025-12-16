@@ -488,7 +488,8 @@ function DoctorMedicalRecordsComponent() {
               <div>
                 <CardTitle>Medical Records</CardTitle>
                 <p className="text-sm text-gray-500 mt-1">
-                  {total} record{total !== 1 ? "s" : ""} found
+                  {total || records.length} record
+                  {(total || records.length) !== 1 ? "s" : ""} found
                 </p>
               </div>
             </CardHeader>

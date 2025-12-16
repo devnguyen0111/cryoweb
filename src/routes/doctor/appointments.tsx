@@ -330,9 +330,6 @@ function DoctorAppointmentsComponent() {
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <CardTitle>Advanced filters</CardTitle>
-                  <p className="text-sm text-gray-500">
-                    Results: {total} appointments - Page {page}/{totalPages}
-                  </p>
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={resetFilters}>
@@ -638,7 +635,8 @@ function DoctorAppointmentsComponent() {
 
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-500">
-                  Showing {data?.data?.length ?? 0} {" / "} {total} appointments
+                  Showing {data?.data?.length ?? 0} /{" "}
+                  {total || (data?.data?.length ?? 0)} appointments
                 </div>
                 <div className="flex items-center gap-2">
                   <Button

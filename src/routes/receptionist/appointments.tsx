@@ -314,9 +314,6 @@ function ReceptionistAppointmentsComponent() {
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <CardTitle>Filters</CardTitle>
-                  <p className="text-sm text-gray-500">
-                    Results: {total} appointments · Page {page}/{totalPages}
-                  </p>
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={resetFilters}>
@@ -490,7 +487,8 @@ function ReceptionistAppointmentsComponent() {
             </CardContent>
             <div className="flex items-center justify-between px-6 pb-6">
               <div className="text-sm text-gray-500">
-                Showing {appointments.length} / {total} appointments
+                Showing {appointments.length} / {total || appointments.length}{" "}
+                appointments
               </div>
               <div className="flex items-center gap-2">
                 <Button

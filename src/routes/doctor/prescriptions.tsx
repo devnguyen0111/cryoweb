@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMemo, useState, useEffect } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery, useMutation, useQueries } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { useForm, useFieldArray } from "react-hook-form";
 import { toast } from "sonner";
@@ -9,6 +9,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
 import type {
   PaginatedResponse,
@@ -17,8 +18,11 @@ import type {
   CreatePrescriptionRequest,
   Patient,
   MedicalRecord,
+  PatientDetailResponse,
 } from "@/api/types";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
+import { PrescriptionDetailModal } from "@/features/doctor/prescriptions/PrescriptionDetailModal";
 
 type PrescriptionMedication = {
   medicineId: string;
@@ -64,9 +68,28 @@ export const Route = createFileRoute("/doctor/prescriptions")({
 });
 
 function DoctorPrescriptionComponent() {
-  const navigate = useNavigate();
   const search = Route.useSearch() as PrescriptionSearchState;
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [viewPrescriptionId, setViewPrescriptionId] = useState<string | null>(
+    null
+  );
+
+  // Filter states
+  const [medicalRecordIdFilter, setMedicalRecordIdFilter] = useState(
+    search.medicalRecordId || ""
+  );
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [patientCodeSearch, setPatientCodeSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all"); // "all", "filled", "pending"
+
+  // Update medicalRecordIdFilter when search param changes
+  useEffect(() => {
+    if (search.medicalRecordId) {
+      setMedicalRecordIdFilter(search.medicalRecordId);
+    }
+  }, [search.medicalRecordId]);
 
   const form = useForm<PrescriptionFormValues>({
     defaultValues: {
@@ -143,16 +166,37 @@ function DoctorPrescriptionComponent() {
     },
   });
 
+  // Build filter params
+  const filterParams = useMemo(() => {
+    const params: any = {
+      Page: 1,
+      Size: 25,
+    };
+
+    if (medicalRecordIdFilter) {
+      params.MedicalRecordId = medicalRecordIdFilter;
+    }
+
+    if (dateFrom) {
+      params.FromDate = new Date(dateFrom).toISOString();
+    }
+
+    if (dateTo) {
+      // Set to end of day
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      params.ToDate = toDate.toISOString();
+    }
+
+    return params;
+  }, [medicalRecordIdFilter, dateFrom, dateTo]);
+
   const prescriptionsQuery = useQuery<PaginatedResponse<Prescription>>({
-    queryKey: ["prescriptions", "doctor-prescriptions", search.medicalRecordId],
+    queryKey: ["prescriptions", "doctor-prescriptions", filterParams],
     retry: false,
     queryFn: async (): Promise<PaginatedResponse<Prescription>> => {
       try {
-        const response = await api.prescription.getPrescriptions({
-          MedicalRecordId: search.medicalRecordId,
-          Page: 1,
-          Size: 25,
-        });
+        const response = await api.prescription.getPrescriptions(filterParams);
         return response;
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
@@ -168,19 +212,19 @@ function DoctorPrescriptionComponent() {
 
   const prescriptions = prescriptionsQuery.data;
   const prescriptionsLoading = prescriptionsQuery.isFetching;
-  const prescriptionRows = prescriptions?.data ?? [];
+  const allPrescriptionRows = prescriptions?.data ?? [];
 
-  // Extract unique medical record IDs from prescriptions
+  // Extract unique medical record IDs from prescriptions (use allPrescriptionRows to avoid circular dependency)
   const medicalRecordIds = useMemo(() => {
-    if (!prescriptionRows) return [];
+    if (!allPrescriptionRows) return [];
     return Array.from(
       new Set(
-        prescriptionRows
+        allPrescriptionRows
           .map((prescription) => prescription.medicalRecordId)
           .filter((id): id is string => Boolean(id))
       )
     );
-  }, [prescriptionRows]);
+  }, [allPrescriptionRows]);
 
   // Fetch medical records to get patientId
   const medicalRecordsQuery = useQuery<
@@ -227,36 +271,98 @@ function DoctorPrescriptionComponent() {
   }, [medicalRecordsQuery.data]);
 
   // Fetch patient details
-  const { data: patientsMap } = useQuery<Record<string, Patient>>({
-    queryKey: ["patients", "by-ids", patientIds, "prescriptions"],
-    enabled: patientIds.length > 0,
-    retry: false,
-    queryFn: async () => {
-      const results: Record<string, Patient> = {};
-      await Promise.all(
-        patientIds.map(async (id) => {
-          try {
-            const response = await api.patient.getPatientDetails(id);
-            if (response.data) {
-              results[id] = response.data as Patient;
-            }
-          } catch (error) {
-            // Try fallback to getPatientById
-            try {
-              const fallback = await api.patient.getPatientById(id);
-              if (fallback.data) {
-                results[id] = fallback.data;
+  const patientQueries = useQueries({
+    queries: patientIds.map((patientId) => ({
+      queryKey: ["doctor", "patient", patientId, "prescriptions"],
+      queryFn: async (): Promise<Patient | PatientDetailResponse | null> => {
+        try {
+          const response = await api.patient.getPatientById(patientId);
+          return response.data ?? null;
+        } catch (error) {
+          if (isAxiosError(error)) {
+            if (error.response?.status === 403) {
+              try {
+                const fallback = await api.patient.getPatientDetails(patientId);
+                return fallback.data ?? null;
+              } catch {
+                return null;
               }
-            } catch {
-              // Ignore errors for individual patients
-              console.warn(`Failed to fetch patient ${id}:`, error);
+            }
+            if (error.response?.status === 404) {
+              return null;
             }
           }
-        })
-      );
-      return results;
-    },
+          return null;
+        }
+      },
+      enabled: patientIds.length > 0,
+      retry: false,
+      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    })),
   });
+
+  // Create a map of patientId -> Patient for quick lookup
+  const patientsMap = useMemo(() => {
+    const map = new Map<string, Patient | PatientDetailResponse>();
+    patientQueries.forEach((query, index) => {
+      if (query.data && patientIds[index]) {
+        map.set(patientIds[index], query.data);
+      }
+    });
+    return map;
+  }, [patientQueries, patientIds]);
+
+  // Apply status filter and patient code search client-side
+  const prescriptionRows = useMemo(() => {
+    let filtered = allPrescriptionRows;
+
+    // Apply status filter
+    if (statusFilter === "filled") {
+      filtered = filtered.filter((p) => p.isFilled);
+    } else if (statusFilter === "pending") {
+      filtered = filtered.filter((p) => !p.isFilled);
+    }
+
+    // Apply patient code search filter
+    if (patientCodeSearch) {
+      const searchLower = patientCodeSearch.toLowerCase().trim();
+      filtered = filtered.filter((prescription) => {
+        // Get medical record for this prescription
+        const medicalRecord = prescription.medicalRecordId
+          ? medicalRecordsQuery.data?.[prescription.medicalRecordId]
+          : null;
+
+        // Get patientId from medical record
+        const patientId = medicalRecord
+          ? ((medicalRecord as any)?.patientId ??
+            (medicalRecord as any)?.PatientId ??
+            null)
+          : null;
+
+        // Get patient from patients map
+        const patient = patientId ? patientsMap.get(patientId) : null;
+        const patientCode = patient?.patientCode || "";
+
+        return patientCode.toLowerCase().includes(searchLower);
+      });
+    }
+
+    return filtered;
+  }, [
+    allPrescriptionRows,
+    statusFilter,
+    patientCodeSearch,
+    medicalRecordsQuery.data,
+    patientsMap,
+  ]);
+
+  const resetFilters = () => {
+    setMedicalRecordIdFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setPatientCodeSearch("");
+    setStatusFilter("all");
+  };
 
   const onSubmit = (values: PrescriptionFormValues) => {
     if (!values.medicalRecordId) {
@@ -296,7 +402,7 @@ function DoctorPrescriptionComponent() {
       onSuccess: () => {
         toast.success("Prescription created successfully.");
         form.reset({
-          medicalRecordId: values.medicalRecordId,
+          medicalRecordId: search.medicalRecordId || "",
           diagnosis: "",
           medications: [
             {
@@ -312,6 +418,7 @@ function DoctorPrescriptionComponent() {
           instructions: "",
         });
         setIsPreviewing(false);
+        setIsCreateModalOpen(false);
         prescriptionsQuery.refetch();
       },
     });
@@ -329,8 +436,89 @@ function DoctorPrescriptionComponent() {
             </p>
           </section>
 
+          {/* Advanced Filters */}
           <Card>
-            <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <CardHeader className="space-y-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <CardTitle>Advanced filters</CardTitle>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={resetFilters}>
+                    Clear filters
+                  </Button>
+                  <Button onClick={() => setIsCreateModalOpen(true)}>
+                    Create Prescription
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Status
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value)}
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="filled">Filled</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Medical Record ID
+                  </label>
+                  <Input
+                    placeholder="Filter by medical record ID"
+                    value={medicalRecordIdFilter}
+                    onChange={(event) =>
+                      setMedicalRecordIdFilter(event.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    From date
+                  </label>
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(event) => setDateFrom(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    To date
+                  </label>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom}
+                    onChange={(event) => setDateTo(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Search patient code
+                  </label>
+                  <Input
+                    placeholder="e.g. PAT001"
+                    value={patientCodeSearch}
+                    onChange={(event) =>
+                      setPatientCodeSearch(event.target.value)
+                    }
+                  />
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <div>
                 <CardTitle>Recent prescriptions</CardTitle>
                 <p className="text-sm text-gray-500">
@@ -338,14 +526,6 @@ function DoctorPrescriptionComponent() {
                   fulfillment.
                 </p>
               </div>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  toast.info("Advanced filtering will be added soon.")
-                }
-              >
-                Advanced filters
-              </Button>
             </CardHeader>
             <CardContent>
               {prescriptionsLoading ? (
@@ -365,6 +545,7 @@ function DoctorPrescriptionComponent() {
                           Prescription Date
                         </th>
                         <th className="px-4 py-3 font-medium">Status</th>
+                        <th className="px-4 py-3 font-medium">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -383,17 +564,31 @@ function DoctorPrescriptionComponent() {
 
                         // Get patient from patients map
                         const patient = patientId
-                          ? patientsMap?.[patientId]
+                          ? patientsMap.get(patientId)
                           : null;
 
-                        const patientName =
-                          patient?.fullName ||
-                          (patient as any)?.accountInfo?.username ||
-                          patient?.patientCode ||
-                          (patientId ? getLast4Chars(patientId) : "-");
-                        const patientCode = patient?.patientCode
-                          ? ` (${patient.patientCode})`
-                          : "";
+                        // Get patient name with priority: accountInfo > patient object
+                        const patientName = (() => {
+                          if (!patient) return "";
+                          const patientWithAccount = patient as any;
+                          // Try to get name from accountInfo first (if PatientDetailResponse)
+                          if (patientWithAccount.accountInfo) {
+                            const accountFullName = getFullNameFromObject(
+                              patientWithAccount.accountInfo
+                            );
+                            if (accountFullName) return accountFullName;
+                          }
+                          // Fallback to patient object directly
+                          return getFullNameFromObject(patient);
+                        })();
+                        const patientCode = patient?.patientCode || null;
+                        const patientIndex = patientId
+                          ? patientIds.findIndex((id) => id === patientId)
+                          : -1;
+                        const isPatientLoading =
+                          patientIndex >= 0
+                            ? patientQueries[patientIndex]?.isLoading
+                            : false;
 
                         const formattedDate = item.prescriptionDate
                           ? new Date(item.prescriptionDate).toLocaleString(
@@ -409,29 +604,64 @@ function DoctorPrescriptionComponent() {
                           : "-";
 
                         return (
-                          <tr
-                            key={item.id}
-                            className="hover:bg-gray-50 cursor-pointer"
-                            onClick={() => {
-                              // Navigate to prescription detail or medical record
-                              navigate({
-                                to: "/doctor/medical-records",
-                                search: {},
-                              });
-                            }}
-                          >
+                          <tr key={item.id} className="hover:bg-gray-50">
                             <td className="px-4 py-3 font-medium text-gray-900">
                               {getLast4Chars(item.id)}
                             </td>
-                            <td className="px-4 py-3 text-gray-700">
-                              {patientName}
-                              {patientCode}
+                            <td className="px-4 py-3 font-medium text-gray-900">
+                              {(patientName || patientCode) && patient ? (
+                                <>
+                                  {patientName.trim() ? (
+                                    <>
+                                      <div className="font-semibold">
+                                        {patientName}
+                                      </div>
+                                      {patientCode && (
+                                        <p className="text-xs text-gray-500">
+                                          {patientCode}
+                                        </p>
+                                      )}
+                                    </>
+                                  ) : (
+                                    patientCode && (
+                                      <div className="font-semibold">
+                                        {patientCode}
+                                      </div>
+                                    )
+                                  )}
+                                </>
+                              ) : isPatientLoading ? (
+                                <>
+                                  <div className="font-semibold">
+                                    Loading...
+                                  </div>
+                                  <p className="text-xs text-gray-500">
+                                    {patientId && (
+                                      <>ID: {getLast4Chars(patientId)}</>
+                                    )}
+                                  </p>
+                                </>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-gray-600">
                               {formattedDate}
                             </td>
                             <td className="px-4 py-3 text-gray-600">
                               {item.isFilled ? "Filled" : "Pending"}
+                            </td>
+                            <td className="px-4 py-3">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewPrescriptionId(item.id);
+                                }}
+                              >
+                                View detail
+                              </Button>
                             </td>
                           </tr>
                         );
@@ -447,12 +677,35 @@ function DoctorPrescriptionComponent() {
             </CardContent>
           </Card>
 
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Create new prescription</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
+          {/* Create Prescription Modal */}
+          <Modal
+            isOpen={isCreateModalOpen}
+            onClose={() => {
+              setIsCreateModalOpen(false);
+              form.reset({
+                medicalRecordId: search.medicalRecordId || "",
+                diagnosis: "",
+                medications: [
+                  {
+                    medicineId: "",
+                    name: "",
+                    dosage: "",
+                    frequency: "",
+                    durationDays: 0,
+                    quantity: 1,
+                    notes: "",
+                  },
+                ],
+                instructions: "",
+              });
+              setIsPreviewing(false);
+            }}
+            title="Create new prescription"
+            description="Draft, sign, and deliver e-prescriptions to patients."
+            size="xl"
+          >
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
                     Medical Record ID
@@ -472,241 +725,289 @@ function DoctorPrescriptionComponent() {
                     {...form.register("diagnosis")}
                   />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Medications &amp; dosing</CardTitle>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-lg">
+                    Medications &amp; dosing
+                  </CardTitle>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      append({
+                        medicineId: "",
+                        name: "",
+                        dosage: "",
+                        frequency: "",
+                        durationDays: 0,
+                        quantity: 1,
+                        notes: "",
+                      })
+                    }
+                  >
+                    Add medication
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {fields.map((field, index) => (
+                    <div
+                      key={field.id}
+                      className="grid gap-4 rounded-lg border border-gray-100 p-4 md:grid-cols-2"
+                    >
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Medicine (catalog)
+                        </label>
+                        <select
+                          className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          {...form.register(
+                            `medications.${index}.medicineId` as const,
+                            {
+                              required: true,
+                              onChange: (e) => {
+                                const medicine = medicineOptions.find(
+                                  (m) => m.id === e.target.value
+                                );
+                                if (medicine) {
+                                  form.setValue(
+                                    `medications.${index}.name` as const,
+                                    medicine.name
+                                  );
+                                  if (medicine.dosage) {
+                                    form.setValue(
+                                      `medications.${index}.dosage` as const,
+                                      medicine.dosage
+                                    );
+                                  }
+                                }
+                              },
+                            }
+                          )}
+                        >
+                          <option value="">
+                            {medicinesLoading
+                              ? "Loading..."
+                              : "Select medicine"}
+                          </option>
+                          {medicineOptions.map((medicine: Medicine) => (
+                            <option key={medicine.id} value={medicine.id}>
+                              {medicine.name}
+                              {medicine.genericName
+                                ? ` (${medicine.genericName})`
+                                : ""}
+                              {medicine.form ? ` - ${medicine.form}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Medication name
+                        </label>
+                        <Input
+                          placeholder="Ex: Utrogestan 200mg"
+                          {...form.register(
+                            `medications.${index}.name` as const,
+                            {
+                              required: true,
+                            }
+                          )}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Dose per administration
+                        </label>
+                        <Input
+                          placeholder="2 capsules"
+                          {...form.register(
+                            `medications.${index}.dosage` as const
+                          )}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Frequency
+                        </label>
+                        <Input
+                          placeholder="Twice daily"
+                          {...form.register(
+                            `medications.${index}.frequency` as const
+                          )}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Duration (days)
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="14"
+                          min="1"
+                          {...form.register(
+                            `medications.${index}.durationDays` as const,
+                            {
+                              valueAsNumber: true,
+                            }
+                          )}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Quantity
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="1"
+                          min="1"
+                          {...form.register(
+                            `medications.${index}.quantity` as const,
+                            {
+                              valueAsNumber: true,
+                            }
+                          )}
+                        />
+                      </div>
+                      <div className="md:col-span-2 space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Notes
+                        </label>
+                        <textarea
+                          className="min-h-[80px] w-full rounded-md border border-gray-200 p-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          placeholder="Administration guidance, interactions, timing..."
+                          {...form.register(
+                            `medications.${index}.notes` as const
+                          )}
+                        />
+                      </div>
+                      {fields.length > 1 && (
+                        <div className="md:col-span-2 text-right">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => remove(index)}
+                          >
+                            Remove this medication
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    Medication instructions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <textarea
+                    className="min-h-[120px] w-full rounded-md border border-gray-200 p-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="Remind patient about timing, lifestyle considerations, and follow-ups..."
+                    {...form.register("instructions")}
+                  />
+                </CardContent>
+              </Card>
+
+              {isPreviewing && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      Prescription preview
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm text-gray-700">
+                    <p>
+                      Medical Record:{" "}
+                      {form.watch("medicalRecordId") || "Not provided"}
+                    </p>
+                    <p>
+                      Diagnosis: {form.watch("diagnosis") || "Not provided"}
+                    </p>
+                    <div>
+                      <p className="font-semibold">Medications:</p>
+                      <ul className="mt-1 list-disc space-y-1 pl-5">
+                        {form.watch("medications").map((med, index) => (
+                          <li key={`preview-${index}`}>
+                            {medicineMap.get(med.medicineId)?.name ||
+                              med.name ||
+                              "(No medicine selected)"}{" "}
+                            {med.dosage ? `- ${med.dosage}` : ""}{" "}
+                            {med.frequency ? `- ${med.frequency}` : ""}{" "}
+                            {med.durationDays
+                              ? `- ${med.durationDays} days`
+                              : ""}{" "}
+                            {med.quantity ? `(Qty: ${med.quantity})` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <p>
+                      Instructions:{" "}
+                      {form.watch("instructions") || "Not provided"}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex flex-wrap justify-end gap-2 pt-4 border-t">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() =>
-                    append({
-                      medicineId: "",
-                      name: "",
-                      dosage: "",
-                      frequency: "",
-                      durationDays: 0,
-                      quantity: 1,
-                      notes: "",
-                    })
-                  }
+                  onClick={() => setIsPreviewing((prev) => !prev)}
                 >
-                  Add medication
+                  {isPreviewing ? "Hide preview" : "Show preview"}
                 </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {fields.map((field, index) => (
-                  <div
-                    key={field.id}
-                    className="grid gap-4 rounded-lg border border-gray-100 p-4 md:grid-cols-2"
-                  >
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">
-                        Medicine (catalog)
-                      </label>
-                      <select
-                        className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        {...form.register(
-                          `medications.${index}.medicineId` as const,
-                          {
-                            required: true,
-                            onChange: (e) => {
-                              const medicine = medicineOptions.find(
-                                (m) => m.id === e.target.value
-                              );
-                              if (medicine) {
-                                form.setValue(
-                                  `medications.${index}.name` as const,
-                                  medicine.name
-                                );
-                                if (medicine.dosage) {
-                                  form.setValue(
-                                    `medications.${index}.dosage` as const,
-                                    medicine.dosage
-                                  );
-                                }
-                              }
-                            },
-                          }
-                        )}
-                      >
-                        <option value="">
-                          {medicinesLoading ? "Loading..." : "Select medicine"}
-                        </option>
-                        {medicineOptions.map((medicine: Medicine) => (
-                          <option key={medicine.id} value={medicine.id}>
-                            {medicine.name}
-                            {medicine.genericName
-                              ? ` (${medicine.genericName})`
-                              : ""}
-                            {medicine.form ? ` - ${medicine.form}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">
-                        Medication name
-                      </label>
-                      <Input
-                        placeholder="Ex: Utrogestan 200mg"
-                        {...form.register(
-                          `medications.${index}.name` as const,
-                          {
-                            required: true,
-                          }
-                        )}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">
-                        Dose per administration
-                      </label>
-                      <Input
-                        placeholder="2 capsules"
-                        {...form.register(
-                          `medications.${index}.dosage` as const
-                        )}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">
-                        Frequency
-                      </label>
-                      <Input
-                        placeholder="Twice daily"
-                        {...form.register(
-                          `medications.${index}.frequency` as const
-                        )}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">
-                        Duration (days)
-                      </label>
-                      <Input
-                        type="number"
-                        placeholder="14"
-                        min="1"
-                        {...form.register(
-                          `medications.${index}.durationDays` as const,
-                          {
-                            valueAsNumber: true,
-                          }
-                        )}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">
-                        Quantity
-                      </label>
-                      <Input
-                        type="number"
-                        placeholder="1"
-                        min="1"
-                        {...form.register(
-                          `medications.${index}.quantity` as const,
-                          {
-                            valueAsNumber: true,
-                          }
-                        )}
-                      />
-                    </div>
-                    <div className="md:col-span-2 space-y-2">
-                      <label className="text-sm font-medium text-gray-700">
-                        Notes
-                      </label>
-                      <textarea
-                        className="min-h-[80px] w-full rounded-md border border-gray-200 p-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="Administration guidance, interactions, timing..."
-                        {...form.register(
-                          `medications.${index}.notes` as const
-                        )}
-                      />
-                    </div>
-                    {fields.length > 1 && (
-                      <div className="md:col-span-2 text-right">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => remove(index)}
-                        >
-                          Remove this medication
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    form.reset({
+                      medicalRecordId: search.medicalRecordId || "",
+                      diagnosis: "",
+                      medications: [
+                        {
+                          medicineId: "",
+                          name: "",
+                          dosage: "",
+                          frequency: "",
+                          durationDays: 0,
+                          quantity: 1,
+                          notes: "",
+                        },
+                      ],
+                      instructions: "",
+                    });
+                    setIsPreviewing(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createPrescriptionMutation.isPending}
+                >
+                  {createPrescriptionMutation.isPending
+                    ? "Saving..."
+                    : "Save prescription"}
+                </Button>
+              </div>
+            </form>
+          </Modal>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Medication instructions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <textarea
-                  className="min-h-[120px] w-full rounded-md border border-gray-200 p-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="Remind patient about timing, lifestyle considerations, and follow-ups..."
-                  {...form.register("instructions")}
-                />
-              </CardContent>
-            </Card>
-
-            {isPreviewing && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Prescription preview</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm text-gray-700">
-                  <p>
-                    Medical Record:{" "}
-                    {form.watch("medicalRecordId") || "Not provided"}
-                  </p>
-                  <p>Diagnosis: {form.watch("diagnosis") || "Not provided"}</p>
-                  <div>
-                    <p className="font-semibold">Medications:</p>
-                    <ul className="mt-1 list-disc space-y-1 pl-5">
-                      {form.watch("medications").map((med, index) => (
-                        <li key={`preview-${index}`}>
-                          {medicineMap.get(med.medicineId)?.name ||
-                            med.name ||
-                            "(No medicine selected)"}{" "}
-                          {med.dosage ? `- ${med.dosage}` : ""}{" "}
-                          {med.frequency ? `- ${med.frequency}` : ""}{" "}
-                          {med.durationDays ? `- ${med.durationDays} days` : ""}{" "}
-                          {med.quantity ? `(Qty: ${med.quantity})` : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <p>
-                    Instructions: {form.watch("instructions") || "Not provided"}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsPreviewing((prev) => !prev)}
-              >
-                {isPreviewing ? "Hide preview" : "Show preview"}
-              </Button>
-              <Button
-                type="submit"
-                disabled={createPrescriptionMutation.isPending}
-              >
-                {createPrescriptionMutation.isPending
-                  ? "Saving..."
-                  : "Save prescription"}
-              </Button>
-            </div>
-          </form>
+          {/* View Prescription Detail Modal */}
+          <PrescriptionDetailModal
+            prescriptionId={viewPrescriptionId}
+            isOpen={Boolean(viewPrescriptionId)}
+            onClose={() => setViewPrescriptionId(null)}
+          />
         </div>
       </DashboardLayout>
     </ProtectedRoute>

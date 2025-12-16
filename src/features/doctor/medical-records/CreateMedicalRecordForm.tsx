@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,30 +16,10 @@ import type {
   Patient,
   Treatment,
   TreatmentCycle,
-  Service,
-  Medicine,
   CreateMedicalRecordRequest,
-  CreatePrescriptionRequest,
-  DynamicResponse,
-  PaginatedResponse,
 } from "@/api/types";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
-
-type MedicationForm = {
-  medicineId: string;
-  dosage: string;
-  frequency: string;
-  durationDays: number;
-  quantity: number;
-  instructions: string;
-  notes: string;
-};
-
-type ServiceForm = {
-  serviceId: string;
-  notes: string;
-};
 
 type MedicalRecordFormValues = {
   patientId: string;
@@ -56,8 +36,6 @@ type MedicalRecordFormValues = {
   labResults: string;
   imagingResults: string;
   notes: string;
-  medications: MedicationForm[];
-  services: ServiceForm[];
 };
 
 interface CreateMedicalRecordFormProps {
@@ -97,27 +75,7 @@ export function CreateMedicalRecordForm({
       labResults: "",
       imagingResults: "",
       notes: "",
-      medications: [],
-      services: [],
     },
-  });
-
-  const {
-    fields: medicationFields,
-    append: appendMedication,
-    remove: removeMedication,
-  } = useFieldArray({
-    control: form.control,
-    name: "medications",
-  });
-
-  const {
-    fields: serviceFields,
-    append: appendService,
-    remove: removeService,
-  } = useFieldArray({
-    control: form.control,
-    name: "services",
   });
 
   const selectedPatientId = form.watch("patientId");
@@ -286,91 +244,6 @@ export function CreateMedicalRecordForm({
 
   const cycles = cyclesData?.data ?? [];
 
-  // Get medicines for medications
-  const { data: medicinesData, isLoading: medicinesLoading } = useQuery<
-    PaginatedResponse<Medicine>
-  >({
-    queryKey: ["medicines", "for-prescriptions"],
-    queryFn: async () => {
-      try {
-        const response = await api.medicine.getMedicines({
-          pageNumber: 1,
-          pageSize: 1000,
-        });
-        return response;
-      } catch (error) {
-        console.error("Error fetching medicines:", error);
-        return {
-          code: 200,
-          message: "Success",
-          data: [],
-          metaData: {
-            pageNumber: 1,
-            pageSize: 1000,
-            totalCount: 0,
-            totalPages: 0,
-            hasNext: false,
-            hasPrevious: false,
-          },
-        };
-      }
-    },
-  });
-
-  const medicines = useMemo(() => {
-    if (!medicinesData?.data) return [];
-    // Ensure data is an array
-    const medicinesArray = Array.isArray(medicinesData.data)
-      ? medicinesData.data
-      : [];
-    // Filter active medicines only
-    return medicinesArray.filter(
-      (medicine: Medicine) => medicine.isActive !== false
-    );
-  }, [medicinesData]);
-
-  // Get services for services section
-  const { data: servicesData } = useQuery<DynamicResponse<Service>>({
-    queryKey: ["services", "for-prescriptions"],
-    queryFn: async () => {
-      try {
-        return await api.service.getServices({ pageSize: 1000 });
-      } catch {
-        return {
-          code: 200,
-          message: "Success",
-          data: [],
-          metaData: {
-            pageNumber: 1,
-            pageSize: 1000,
-            totalCount: 0,
-            totalPages: 0,
-            hasPrevious: false,
-            hasNext: false,
-          },
-        };
-      }
-    },
-  });
-
-  const services = servicesData?.data ?? [];
-
-  type ServiceOption = {
-    id: string;
-    name: string;
-    code: string;
-    price: number;
-  };
-
-  const serviceOptions = useMemo<ServiceOption[]>(() => {
-    return services.map((service: Service) => ({
-      id: service.id,
-      name: service.serviceName || service.name || "",
-      code: service.serviceCode || "",
-      price: service.price || 0,
-    }));
-  }, [services]);
-
   // Reset form when modal closes or set default values when opens
   useEffect(() => {
     if (!isOpen) {
@@ -397,8 +270,6 @@ export function CreateMedicalRecordForm({
         labResults: "",
         imagingResults: "",
         notes: "",
-        medications: [],
-        services: [],
       });
       if (defaultPatientId) {
         setPatientSearch("");
@@ -464,34 +335,6 @@ export function CreateMedicalRecordForm({
     },
   });
 
-  const createPrescriptionMutation = useMutation({
-    mutationFn: async (payload: CreatePrescriptionRequest) => {
-      return await api.prescription.createPrescription(payload);
-    },
-    onSuccess: () => {
-      toast.success("Prescription created successfully");
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message || "Failed to create prescription";
-      toast.error(message);
-    },
-  });
-
-  const createServiceRequestMutation = useMutation({
-    mutationFn: async (payload: any) => {
-      return await api.serviceRequest.createServiceRequest(payload);
-    },
-    onSuccess: () => {
-      toast.success("Service request created successfully");
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message || "Failed to create service request";
-      toast.error(message);
-    },
-  });
-
   const onSubmit = (values: MedicalRecordFormValues) => {
     if (!values.appointmentId) {
       toast.error("Please select an appointment");
@@ -532,169 +375,10 @@ export function CreateMedicalRecordForm({
           });
         }
 
-        // If there are medications, create prescription
-        if (values.medications.length > 0) {
-          const prescriptionDetails = values.medications
-            .filter((med) => med.medicineId)
-            .map((med) => ({
-              medicineId: med.medicineId,
-              quantity: med.quantity || 1,
-              dosage: med.dosage || undefined,
-              frequency: med.frequency || undefined,
-              durationDays: med.durationDays || undefined,
-              instructions: med.instructions || undefined,
-              notes: med.notes || undefined,
-            }));
-
-          if (prescriptionDetails.length > 0) {
-            const prescriptionPayload: CreatePrescriptionRequest = {
-              medicalRecordId: medicalRecord.data?.id || "",
-              prescriptionDate: new Date().toISOString(),
-              diagnosis: values.diagnosis || undefined,
-              instructions: undefined,
-              notes: undefined,
-              prescriptionDetails: prescriptionDetails,
-            };
-
-            createPrescriptionMutation.mutate(prescriptionPayload, {
-              onSuccess: () => {
-                // If there are services, create service request
-                if (values.services.length > 0) {
-                  const serviceDetails = values.services.map((service) => {
-                    const serviceInfo = serviceOptions.find(
-                      (s: ServiceOption) => s.id === service.serviceId
-                    );
-
-                    return {
-                      serviceId: service.serviceId,
-                      quantity: 1,
-                      unitPrice: serviceInfo?.price ?? 0,
-                      notes: service.notes || undefined,
-                    };
-                  });
-
-                  const serviceRequestPayload = {
-                    appointmentId: values.appointmentId,
-                    patientId: values.patientId,
-                    requestDate: new Date().toISOString(),
-                    notes:
-                      values.diagnosis ||
-                      `Service request for medical record ${medicalRecord.data?.id || "new"}`,
-                    serviceDetails: serviceDetails,
-                  };
-
-                  createServiceRequestMutation.mutate(serviceRequestPayload, {
-                    onSuccess: () => {
-                      form.reset();
-                      onCreated?.();
-                      onClose();
-                    },
-                  });
-                } else {
-                  form.reset();
-                  onCreated?.();
-                  onClose();
-                }
-              },
-            });
-          } else {
-            // No valid medications, proceed with services if any
-            if (values.services.length > 0) {
-              const serviceDetails = values.services.map((service) => {
-                const serviceInfo = serviceOptions.find(
-                  (s: ServiceOption) => s.id === service.serviceId
-                );
-
-                return {
-                  serviceId: service.serviceId,
-                  quantity: 1,
-                  unitPrice: serviceInfo?.price ?? 0,
-                  notes: service.notes || undefined,
-                };
-              });
-
-              const serviceRequestPayload = {
-                appointmentId: values.appointmentId,
-                patientId: values.patientId,
-                requestDate: new Date().toISOString(),
-                notes:
-                  values.diagnosis ||
-                  `Service request for medical record ${medicalRecord.data?.id || "new"}`,
-                serviceDetails: serviceDetails,
-              };
-
-              createServiceRequestMutation.mutate(serviceRequestPayload, {
-                onSuccess: () => {
-                  form.reset();
-                  onCreated?.();
-                  onClose();
-                },
-              });
-            } else {
-              form.reset();
-              onCreated?.();
-              onClose();
-            }
-          }
-        } else {
-          // No medications, proceed with services if any
-          if (values.services.length > 0) {
-            const serviceDetails = values.services.map((service) => {
-              const serviceInfo = serviceOptions.find(
-                (s: ServiceOption) => s.id === service.serviceId
-              );
-
-              return {
-                serviceId: service.serviceId,
-                quantity: 1,
-                unitPrice: serviceInfo?.price ?? 0,
-                notes: service.notes || undefined,
-              };
-            });
-
-            const serviceRequestPayload = {
-              appointmentId: values.appointmentId,
-              patientId: values.patientId,
-              requestDate: new Date().toISOString(),
-              notes:
-                values.diagnosis ||
-                `Service request for medical record ${medicalRecord.data?.id || "new"}`,
-              serviceDetails: serviceDetails,
-            };
-
-            createServiceRequestMutation.mutate(serviceRequestPayload, {
-              onSuccess: () => {
-                form.reset();
-                onCreated?.();
-                onClose();
-              },
-            });
-          } else {
-            form.reset();
-            onCreated?.();
-            onClose();
-          }
-        }
+        form.reset();
+        onCreated?.();
+        onClose();
       },
-    });
-  };
-
-  const handleAddMedication = () => {
-    appendMedication({
-      medicineId: "",
-      dosage: "",
-      frequency: "",
-      durationDays: 0,
-      quantity: 1,
-      instructions: "",
-      notes: "",
-    });
-  };
-
-  const handleAddService = () => {
-    appendService({
-      serviceId: "",
-      notes: "",
     });
   };
 
@@ -1117,221 +801,6 @@ export function CreateMedicalRecordForm({
                 {...form.register("notes")}
               />
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Medications */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Medications</CardTitle>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleAddMedication}
-            >
-              Add Medication
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {medicationFields.map((field, index) => (
-              <div
-                key={field.id}
-                className="rounded-lg border border-gray-200 p-4"
-              >
-                <div className="mb-4 flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-gray-700">
-                    Medication {index + 1}
-                  </h4>
-                  {medicationFields.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeMedication(index)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Medicine <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      {...form.register(`medications.${index}.medicineId`, {
-                        required: true,
-                      })}
-                      disabled={medicinesLoading}
-                    >
-                      <option value="">
-                        {medicinesLoading
-                          ? "Loading medicines..."
-                          : "Select medicine"}
-                      </option>
-                      {medicines.length > 0
-                        ? medicines.map((medicine: Medicine) => (
-                            <option key={medicine.id} value={medicine.id}>
-                              {medicine.name || "Unnamed Medicine"}
-                              {medicine.genericName &&
-                                ` (${medicine.genericName})`}
-                              {medicine.form && ` - ${medicine.form}`}
-                            </option>
-                          ))
-                        : !medicinesLoading && (
-                            <option value="" disabled>
-                              No medicines available
-                            </option>
-                          )}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Quantity
-                    </label>
-                    <Input
-                      type="number"
-                      min="1"
-                      placeholder="e.g., 1"
-                      {...form.register(`medications.${index}.quantity`, {
-                        valueAsNumber: true,
-                        min: 1,
-                      })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Dosage
-                    </label>
-                    <Input
-                      placeholder="e.g., 500mg"
-                      {...form.register(`medications.${index}.dosage`)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Frequency
-                    </label>
-                    <Input
-                      placeholder="e.g., 2 times daily"
-                      {...form.register(`medications.${index}.frequency`)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Duration (days)
-                    </label>
-                    <Input
-                      type="number"
-                      min="1"
-                      placeholder="e.g., 7"
-                      {...form.register(`medications.${index}.durationDays`, {
-                        valueAsNumber: true,
-                        min: 1,
-                      })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Instructions
-                    </label>
-                    <Input
-                      placeholder="e.g., Take with food"
-                      {...form.register(`medications.${index}.instructions`)}
-                    />
-                  </div>
-                  <div className="md:col-span-2 space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Notes
-                    </label>
-                    <Input
-                      placeholder="Additional notes..."
-                      {...form.register(`medications.${index}.notes`)}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-            {medicationFields.length === 0 && (
-              <p className="text-sm text-gray-500">
-                No medications added. Click "Add Medication" to add one.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Services */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Services</CardTitle>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleAddService}
-            >
-              Add Service
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {serviceFields.map((field, index) => (
-              <div
-                key={field.id}
-                className="rounded-lg border border-gray-200 p-4"
-              >
-                <div className="mb-4 flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-gray-700">
-                    Service {index + 1}
-                  </h4>
-                  {serviceFields.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeService(index)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Service
-                    </label>
-                    <select
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      {...form.register(`services.${index}.serviceId`)}
-                    >
-                      <option value="">Select service</option>
-                      {serviceOptions.map((service: ServiceOption) => (
-                        <option key={service.id} value={service.id}>
-                          {service.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="md:col-span-2 space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Notes
-                    </label>
-                    <Input
-                      placeholder="Additional instructions..."
-                      {...form.register(`services.${index}.notes`)}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-            {serviceFields.length === 0 && (
-              <p className="text-sm text-gray-500">
-                No services added. Click "Add Service" to add one.
-              </p>
-            )}
           </CardContent>
         </Card>
 

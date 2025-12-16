@@ -28,3 +28,4 @@ export { TransactionApi } from "./transaction.api";
 export { NotificationApi } from "./notification.api";
 export { PrescriptionApi } from "./prescription.api";
 export { MedicineApi } from "./medicine.api";
+export { MediaApi } from "./media.api";

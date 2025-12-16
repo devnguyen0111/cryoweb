@@ -26,6 +26,7 @@ import {
   NotificationApi,
   PrescriptionApi,
   MedicineApi,
+  MediaApi,
 } from "./modules";
 
 const API_BASE_URL =
@@ -132,6 +133,7 @@ export class ApiClient {
   notification: NotificationApi;
   prescription: PrescriptionApi;
   medicine: MedicineApi;
+  media: MediaApi;
 
   constructor() {
     this.auth = new AuthApi(client);
@@ -159,6 +161,7 @@ export class ApiClient {
     this.notification = new NotificationApi(client);
     this.prescription = new PrescriptionApi(client);
     this.medicine = new MedicineApi(client);
+    this.media = new MediaApi(client);
   }
 }
 

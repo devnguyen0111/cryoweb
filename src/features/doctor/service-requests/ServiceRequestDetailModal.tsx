@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { api } from "@/api/client";
@@ -14,7 +14,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
 import { cn } from "@/utils/cn";
-
+import { UpdateServiceRequestDetailImageForm } from "./UpdateServiceRequestDetailImageForm";
+import { Image as ImageIcon } from "lucide-react";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 interface ServiceRequestDetailModalProps {
   requestId: string;
   isOpen: boolean;
@@ -49,6 +51,8 @@ export function ServiceRequestDetailModal({
   isOpen,
   onClose,
 }: ServiceRequestDetailModalProps) {
+  const [selectedDetailForImage, setSelectedDetailForImage] =
+    useState<ServiceRequestDetail | null>(null);
   const { data: request, isLoading: requestLoading } =
     useQuery<ServiceRequest | null>({
       enabled: isOpen && Boolean(requestId),
@@ -269,7 +273,9 @@ export function ServiceRequestDetailModal({
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm font-medium text-gray-500">Name</p>
-                    <p className="mt-1 text-sm">{patient.fullName}</p>
+                    <p className="mt-1 text-sm">
+                      {getFullNameFromObject(patient)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">
@@ -353,6 +359,12 @@ export function ServiceRequestDetailModal({
                           <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
                             Total
                           </th>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                            Image
+                          </th>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                            Actions
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -363,6 +375,9 @@ export function ServiceRequestDetailModal({
                           const total =
                             detail.totalPrice ??
                             unitPrice * (detail.quantity ?? 0);
+                          const hasImage = !!(
+                            detail.imageUrl || detail.fileUrl
+                          );
                           return (
                             <tr key={detail.id} className="border-b">
                               <td className="px-4 py-2 text-sm">
@@ -379,6 +394,44 @@ export function ServiceRequestDetailModal({
                               </td>
                               <td className="px-4 py-2 text-sm">
                                 {formatCurrency(total)}
+                              </td>
+                              <td className="px-4 py-2 text-sm">
+                                {hasImage ? (
+                                  <div className="flex items-center gap-2">
+                                    <img
+                                      src={
+                                        detail.imageUrl || detail.fileUrl || ""
+                                      }
+                                      alt={
+                                        detail.serviceName || "Service image"
+                                      }
+                                      className="h-10 w-10 object-cover rounded border border-gray-200"
+                                      onError={(e) => {
+                                        (
+                                          e.target as HTMLImageElement
+                                        ).style.display = "none";
+                                      }}
+                                    />
+                                    <ImageIcon className="h-4 w-4 text-green-500" />
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">
+                                    No image
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-sm">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    setSelectedDetailForImage(detail)
+                                  }
+                                >
+                                  <ImageIcon className="h-4 w-4 mr-1" />
+                                  {hasImage ? "Update" : "Add"} Image
+                                </Button>
                               </td>
                             </tr>
                           );
@@ -411,6 +464,17 @@ export function ServiceRequestDetailModal({
             </Button>
           </div>
         </div>
+      )}
+
+      {selectedDetailForImage && (
+        <UpdateServiceRequestDetailImageForm
+          detail={selectedDetailForImage}
+          isOpen={!!selectedDetailForImage}
+          onClose={() => setSelectedDetailForImage(null)}
+          onSuccess={() => {
+            setSelectedDetailForImage(null);
+          }}
+        />
       )}
     </Modal>
   );

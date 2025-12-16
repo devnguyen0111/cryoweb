@@ -3,9 +3,9 @@
  * Rebuilt from scratch based on Figma design for updating treatment cycle records
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { toast } from "sonner";
 import {
   X,
@@ -15,6 +15,8 @@ import {
   Play,
   CheckCircle,
   XCircle,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +30,9 @@ import type {
   TreatmentCycle,
   AppointmentExtendedDetailResponse,
   MedicalRecord,
+  CreatePrescriptionRequest,
+  Medicine,
+  PaginatedResponse,
 } from "@/api/types";
 import { HorizontalTreatmentTimeline } from "./HorizontalTreatmentTimeline";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
@@ -36,8 +41,152 @@ import { getFullNameFromObject } from "@/utils/name-helpers";
 import { useAuth } from "@/contexts/AuthContext";
 import { CreateMedicalRecordForm } from "@/features/doctor/medical-records/CreateMedicalRecordForm";
 import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
+import { CreateServiceRequestModal } from "@/features/doctor/service-requests/CreateServiceRequestModal";
 import { Modal } from "@/components/ui/modal";
 import { getLast4Chars } from "@/utils/id-helpers";
+
+// Component to display prescription with full details
+function PrescriptionCard({
+  prescriptionId,
+  prescription,
+}: {
+  prescriptionId: string;
+  prescription: any;
+}) {
+  // Fetch full prescription details
+  const { data: prescriptionDetail, isLoading: isLoadingDetail } = useQuery({
+    queryKey: ["prescription-detail", prescriptionId],
+    queryFn: async () => {
+      try {
+        const response =
+          await api.prescription.getPrescriptionById(prescriptionId);
+        return response.data;
+      } catch (error) {
+        console.warn(
+          `Failed to fetch prescription detail ${prescriptionId}:`,
+          error
+        );
+        return null;
+      }
+    },
+    enabled: !!prescriptionId,
+  });
+
+  const prescriptionDetails =
+    prescriptionDetail?.prescriptionDetails || prescription.medications || [];
+
+  return (
+    <Card className="p-3">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-gray-900">
+            Prescription #{getLast4Chars(prescription.id)}
+          </p>
+          <Badge variant="outline" className="text-xs">
+            {prescription.status ||
+              (prescriptionDetail?.isFilled ? "Filled" : "Active")}
+          </Badge>
+        </div>
+        {(prescriptionDetail?.diagnosis || prescription.diagnosis) && (
+          <p className="text-xs text-gray-600">
+            <span className="font-medium">Diagnosis:</span>{" "}
+            {prescriptionDetail?.diagnosis || prescription.diagnosis}
+          </p>
+        )}
+        {(prescriptionDetail?.instructions || prescription.instructions) && (
+          <p className="text-xs text-gray-600">
+            <span className="font-medium">Instructions:</span>{" "}
+            {prescriptionDetail?.instructions || prescription.instructions}
+          </p>
+        )}
+        {isLoadingDetail ? (
+          <div className="py-2 text-xs text-gray-500">
+            Loading medications...
+          </div>
+        ) : prescriptionDetails.length > 0 ? (
+          <div className="mt-2 space-y-2">
+            <p className="text-xs font-medium text-gray-700">Medications:</p>
+            {prescriptionDetails.map((detail: any, idx: number) => (
+              <div
+                key={detail.id || idx}
+                className="text-xs text-gray-600 pl-2 border-l-2 border-gray-200 space-y-1"
+              >
+                <p className="font-medium">
+                  {detail.medicineName || detail.medicine?.name || "Unknown"}
+                  {detail.form && ` (${detail.form})`}
+                </p>
+                <div className="grid grid-cols-2 gap-1 text-gray-600">
+                  {detail.dosage && (
+                    <p>
+                      <span className="font-medium">Dosage:</span>{" "}
+                      {detail.dosage}
+                    </p>
+                  )}
+                  {detail.frequency && (
+                    <p>
+                      <span className="font-medium">Frequency:</span>{" "}
+                      {detail.frequency}
+                    </p>
+                  )}
+                  {detail.durationDays && (
+                    <p>
+                      <span className="font-medium">Duration:</span>{" "}
+                      {detail.durationDays} days
+                    </p>
+                  )}
+                  {detail.quantity && (
+                    <p>
+                      <span className="font-medium">Quantity:</span>{" "}
+                      {detail.quantity}
+                    </p>
+                  )}
+                </div>
+                {detail.instructions && (
+                  <p className="text-gray-700">
+                    <span className="font-medium">Instructions:</span>{" "}
+                    {detail.instructions}
+                  </p>
+                )}
+                {detail.notes && (
+                  <p className="text-gray-500">
+                    <span className="font-medium">Notes:</span> {detail.notes}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 mt-2">No medications found</p>
+        )}
+        {(prescriptionDetail?.prescriptionDate || prescription.createdAt) && (
+          <p className="text-xs text-gray-500 mt-2">
+            Prescription Date:{" "}
+            {new Date(
+              prescriptionDetail?.prescriptionDate || prescription.createdAt
+            ).toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })}
+          </p>
+        )}
+        {prescriptionDetail?.filledDate && (
+          <p className="text-xs text-gray-500">
+            Filled Date:{" "}
+            {new Date(prescriptionDetail.filledDate).toLocaleDateString(
+              "en-GB",
+              {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              }
+            )}
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 interface CycleUpdateModalProps {
   cycle: TreatmentCycle;
@@ -50,11 +199,27 @@ type UpdateRecordFormData = {
   notes: string;
 };
 
+type PrescriptionFormData = {
+  medicalRecordId: string;
+  diagnosis: string;
+  instructions: string;
+  medications: Array<{
+    medicineId: string;
+    dosage: string;
+    frequency: string;
+    durationDays: number;
+    quantity: number;
+    notes: string;
+  }>;
+};
+
 type TabType =
   | "assessment"
   | "medical-history"
   | "partner-info"
-  | "treatment-plan";
+  | "treatment-plan"
+  | "prescription"
+  | "service";
 
 export function CycleUpdateModal({
   cycle,
@@ -65,12 +230,20 @@ export function CycleUpdateModal({
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("assessment");
+  const [prescriptionViewMode, setPrescriptionViewMode] = useState<
+    "create" | "view"
+  >("create");
+  const [serviceViewMode, setServiceViewMode] = useState<"create" | "view">(
+    "create"
+  );
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<
     string | null
   >(null);
   const [showCreateAppointmentModal, setShowCreateAppointmentModal] =
     useState(false);
   const [showCreateMedicalRecordModal, setShowCreateMedicalRecordModal] =
+    useState(false);
+  const [showCreateServiceRequestModal, setShowCreateServiceRequestModal] =
     useState(false);
   const { data: doctorProfile } = useDoctorProfile();
 
@@ -151,6 +324,34 @@ export function CycleUpdateModal({
       outcome: parseCycleData.outcome,
       notes: parseCycleData.notes,
     },
+  });
+
+  // Prescription Form
+  const prescriptionForm = useForm<PrescriptionFormData>({
+    defaultValues: {
+      medicalRecordId: "",
+      diagnosis: "",
+      instructions: "",
+      medications: [
+        {
+          medicineId: "",
+          dosage: "",
+          frequency: "",
+          durationDays: 0,
+          quantity: 1,
+          notes: "",
+        },
+      ],
+    },
+  });
+
+  const {
+    fields: medicationFields,
+    append: appendMedication,
+    remove: removeMedication,
+  } = useFieldArray({
+    control: prescriptionForm.control,
+    name: "medications",
   });
 
   // Get patient details
@@ -247,6 +448,147 @@ export function CycleUpdateModal({
     }
     return filtered;
   }, [medicalRecordsData, cycleAppointments, selectedAppointmentId]);
+
+  // Find medical record for selected appointment
+  const selectedMedicalRecord = useMemo(() => {
+    if (!selectedAppointmentId || !cycleMedicalRecords.length) return null;
+    return cycleMedicalRecords.find(
+      (record: MedicalRecord) => record.appointmentId === selectedAppointmentId
+    );
+  }, [selectedAppointmentId, cycleMedicalRecords]);
+
+  // Fetch prescriptions for patient in cycle
+  const { data: prescriptionsData, isLoading: prescriptionsLoading } = useQuery(
+    {
+      queryKey: [
+        "prescriptions",
+        "patient",
+        currentCycle.patientId,
+        "cycle",
+        currentCycle.id,
+        selectedAppointmentId,
+      ],
+      queryFn: async () => {
+        if (!currentCycle.patientId)
+          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        try {
+          // Get medical record IDs from cycle
+          const medicalRecordIds = cycleMedicalRecords.map((r) => r.id);
+          if (medicalRecordIds.length === 0) {
+            return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+          }
+
+          // Fetch prescriptions for all medical records in cycle
+          const allPrescriptions: any[] = [];
+          await Promise.all(
+            medicalRecordIds.map(async (medicalRecordId) => {
+              try {
+                const response = await api.prescription.getPrescriptions({
+                  MedicalRecordId: medicalRecordId,
+                  Page: 1,
+                  Size: 100,
+                });
+                if (response.data) {
+                  allPrescriptions.push(...response.data);
+                }
+              } catch (error) {
+                console.warn(
+                  `Failed to fetch prescriptions for medical record ${medicalRecordId}:`,
+                  error
+                );
+              }
+            })
+          );
+
+          // Filter by selected appointment if provided
+          let filtered = allPrescriptions;
+          if (selectedAppointmentId && selectedMedicalRecord) {
+            filtered = allPrescriptions.filter(
+              (p) => p.medicalRecordId === selectedMedicalRecord.id
+            );
+          }
+
+          return {
+            data: filtered,
+            metaData: { totalCount: filtered.length, totalPages: 1 },
+          };
+        } catch {
+          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        }
+      },
+      enabled: !!currentCycle.patientId && !!currentCycle.id && isOpen,
+    }
+  );
+
+  const prescriptions = prescriptionsData?.data || [];
+
+  // Fetch service requests for patient in cycle
+  const { data: serviceRequestsData, isLoading: serviceRequestsLoading } =
+    useQuery({
+      queryKey: [
+        "service-requests",
+        "patient",
+        currentCycle.patientId,
+        "cycle",
+        currentCycle.id,
+        selectedAppointmentId,
+      ],
+      queryFn: async () => {
+        if (!currentCycle.patientId)
+          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        try {
+          const response = await api.serviceRequest.getServiceRequests({
+            patientId: currentCycle.patientId,
+            pageNumber: 1,
+            pageSize: 100,
+          });
+          const allRequests = response.data || [];
+
+          // Filter by cycle appointments
+          const cycleAppointmentIds = cycleAppointments.map((apt) => apt.id);
+          let filtered = allRequests.filter((request) => {
+            return (
+              request.appointmentId &&
+              cycleAppointmentIds.includes(request.appointmentId)
+            );
+          });
+
+          // Filter by selected appointment if provided
+          if (selectedAppointmentId) {
+            filtered = filtered.filter(
+              (request) => request.appointmentId === selectedAppointmentId
+            );
+          }
+
+          return {
+            data: filtered,
+            metaData: { totalCount: filtered.length, totalPages: 1 },
+          };
+        } catch {
+          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        }
+      },
+      enabled: !!currentCycle.patientId && !!currentCycle.id && isOpen,
+    });
+
+  const serviceRequests = serviceRequestsData?.data || [];
+
+  // Auto-select medical record ID when appointment is selected
+  useEffect(() => {
+    if (selectedMedicalRecord?.id) {
+      prescriptionForm.setValue("medicalRecordId", selectedMedicalRecord.id);
+      // Also auto-fill diagnosis if available
+      if (
+        selectedMedicalRecord.diagnosis &&
+        !prescriptionForm.getValues("diagnosis")
+      ) {
+        prescriptionForm.setValue("diagnosis", selectedMedicalRecord.diagnosis);
+      }
+    } else if (!selectedAppointmentId) {
+      // Clear medical record ID when no appointment is selected
+      prescriptionForm.setValue("medicalRecordId", "");
+    }
+  }, [selectedMedicalRecord, selectedAppointmentId, prescriptionForm]);
 
   // Get most recent assessment record
   const assessmentRecord = useMemo(() => {
@@ -357,6 +699,102 @@ export function CycleUpdateModal({
     onError: (error: any) => {
       toast.error(
         error?.response?.data?.message || "Failed to update treatment record"
+      );
+    },
+  });
+
+  // Fetch medicines for prescription
+  const { data: medicinesData } = useQuery<PaginatedResponse<Medicine>>({
+    queryKey: ["medicines", "for-prescription"],
+    queryFn: async () => {
+      try {
+        return await api.medicine.getMedicines({
+          pageNumber: 1,
+          pageSize: 100,
+        });
+      } catch {
+        return {
+          code: 200,
+          message: "Success",
+          data: [],
+          metaData: {
+            pageNumber: 1,
+            pageSize: 100,
+            totalCount: 0,
+            totalPages: 0,
+            hasPrevious: false,
+            hasNext: false,
+          },
+        };
+      }
+    },
+    enabled: isOpen && activeTab === "prescription",
+  });
+
+  const medicineOptions = useMemo(() => {
+    return (medicinesData?.data ?? []).filter(
+      (medicine: Medicine) => medicine.isActive !== false
+    );
+  }, [medicinesData?.data]);
+
+  // Prescription Mutation
+  const createPrescriptionMutation = useMutation({
+    mutationFn: async (data: PrescriptionFormData) => {
+      if (!data.medicalRecordId) {
+        throw new Error("Medical Record ID is required");
+      }
+
+      const prescriptionDetails = data.medications
+        .filter((item) => item.medicineId)
+        .map((item) => ({
+          medicineId: item.medicineId,
+          quantity: item.quantity || 1,
+          dosage: item.dosage || undefined,
+          frequency: item.frequency || undefined,
+          durationDays: item.durationDays || undefined,
+          instructions: item.notes || undefined,
+          notes: item.notes || undefined,
+        }));
+
+      if (!prescriptionDetails.length) {
+        throw new Error("Select at least one medicine");
+      }
+
+      const payload: CreatePrescriptionRequest = {
+        medicalRecordId: data.medicalRecordId,
+        prescriptionDate: new Date().toISOString(),
+        diagnosis: data.diagnosis || undefined,
+        instructions: data.instructions || undefined,
+        notes: data.instructions || data.diagnosis || undefined,
+        prescriptionDetails,
+      };
+
+      return api.prescription.createPrescription(payload);
+    },
+    onSuccess: () => {
+      toast.success("Prescription created successfully");
+      prescriptionForm.reset({
+        medicalRecordId: prescriptionForm.getValues("medicalRecordId"),
+        diagnosis: "",
+        instructions: "",
+        medications: [
+          {
+            medicineId: "",
+            dosage: "",
+            frequency: "",
+            durationDays: 0,
+            quantity: 1,
+            notes: "",
+          },
+        ],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["prescriptions"],
+      });
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message || "Failed to create prescription"
       );
     },
   });
@@ -679,6 +1117,8 @@ export function CycleUpdateModal({
                     id: "treatment-plan" as TabType,
                     label: "Treatment Plan",
                   },
+                  { id: "prescription" as TabType, label: "Prescription" },
+                  { id: "service" as TabType, label: "Service" },
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -710,244 +1150,661 @@ export function CycleUpdateModal({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto flex-1 min-h-0">
-          {activeTab === "assessment" && (
-            <div className="space-y-6">
-              {/* Assessment Data Cards */}
-              {assessmentData && Object.keys(assessmentData).length > 0 && (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {assessmentData.amh && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <p className="text-xs font-medium text-gray-500 mb-1">
-                          AMH Level
-                        </p>
-                        <p className="text-lg font-semibold text-gray-900 mb-2">
-                          {assessmentData.amh.value}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {assessmentData.amh.description}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {assessmentData.afc && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <p className="text-xs font-medium text-gray-500 mb-1">
-                          Antral Follicle Count
-                        </p>
-                        <p className="text-lg font-semibold text-gray-900 mb-2">
-                          {assessmentData.afc.value}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {assessmentData.afc.description}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {assessmentData.fsh && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <p className="text-xs font-medium text-gray-500 mb-1">
-                          FSH Level
-                        </p>
-                        <p className="text-lg font-semibold text-gray-900 mb-2">
-                          {assessmentData.fsh.value}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {assessmentData.fsh.description}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {assessmentData.lh && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <p className="text-xs font-medium text-gray-500 mb-1">
-                          LH Level
-                        </p>
-                        <p className="text-lg font-semibold text-gray-900 mb-2">
-                          {assessmentData.lh.value}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {assessmentData.lh.description}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {assessmentData.semen && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <p className="text-xs font-medium text-gray-500 mb-1">
-                          Semen Analysis
-                        </p>
-                        <p className="text-lg font-semibold text-gray-900 mb-2">
-                          {assessmentData.semen.value}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {assessmentData.semen.description}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {assessmentData.uterine && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <p className="text-xs font-medium text-gray-500 mb-1">
-                          Uterine Assessment
-                        </p>
-                        <p className="text-lg font-semibold text-gray-900 mb-2">
-                          {assessmentData.uterine.value}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {assessmentData.uterine.description}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              )}
-
-              {/* Update Treatment Record Form */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold">
-                    Update Treatment Record
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {/* Start Cycle Section - Show if cycle hasn't started */}
-                  {canStartCycle && !isCompleted && !isCancelled && (
-                    <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 mb-1">
-                            Ready to Start
+          <>
+            {activeTab === "assessment" && (
+              <div className="space-y-6">
+                {/* Assessment Data Cards */}
+                {assessmentData && Object.keys(assessmentData).length > 0 && (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {assessmentData.amh && (
+                      <Card>
+                        <CardContent className="p-4">
+                          <p className="text-xs font-medium text-gray-500 mb-1">
+                            AMH Level
+                          </p>
+                          <p className="text-lg font-semibold text-gray-900 mb-2">
+                            {assessmentData.amh.value}
                           </p>
                           <p className="text-xs text-gray-600">
-                            Start this treatment cycle to begin tracking
-                            progress
+                            {assessmentData.amh.description}
                           </p>
-                        </div>
-                        <Button
-                          onClick={() => startCycleMutation.mutate()}
-                          disabled={startCycleMutation.isPending}
-                          className="gap-2"
-                          size="sm"
-                        >
-                          <Play className="h-4 w-4" />
-                          {startCycleMutation.isPending
-                            ? "Starting..."
-                            : "Start Cycle"}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  {/* Complete Cycle Section - Show if cycle has started */}
-                  {canCompleteCycle && (
-                    <div className="rounded-lg border border-green-200 bg-green-50/50 p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 mb-1">
-                            Complete Treatment Cycle
+                        </CardContent>
+                      </Card>
+                    )}
+                    {assessmentData.afc && (
+                      <Card>
+                        <CardContent className="p-4">
+                          <p className="text-xs font-medium text-gray-500 mb-1">
+                            Antral Follicle Count
+                          </p>
+                          <p className="text-lg font-semibold text-gray-900 mb-2">
+                            {assessmentData.afc.value}
                           </p>
                           <p className="text-xs text-gray-600">
-                            Mark this treatment cycle as complete
+                            {assessmentData.afc.description}
                           </p>
-                        </div>
-                        <Button
-                          onClick={() => setShowCompleteConfirm(true)}
-                          className="gap-2"
-                          size="sm"
-                          variant="default"
-                        >
-                          <CheckCircle className="h-4 w-4" />
-                          Complete Cycle
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Cancel Cycle Section - Show if cycle can be cancelled */}
-                  {canCancelCycle && (
-                    <div className="rounded-lg border border-red-200 bg-red-50/50 p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 mb-1">
-                            Cancel Treatment Cycle
+                        </CardContent>
+                      </Card>
+                    )}
+                    {assessmentData.fsh && (
+                      <Card>
+                        <CardContent className="p-4">
+                          <p className="text-xs font-medium text-gray-500 mb-1">
+                            FSH Level
+                          </p>
+                          <p className="text-lg font-semibold text-gray-900 mb-2">
+                            {assessmentData.fsh.value}
                           </p>
                           <p className="text-xs text-gray-600">
-                            Cancel this treatment cycle and stop the process
+                            {assessmentData.fsh.description}
                           </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {assessmentData.lh && (
+                      <Card>
+                        <CardContent className="p-4">
+                          <p className="text-xs font-medium text-gray-500 mb-1">
+                            LH Level
+                          </p>
+                          <p className="text-lg font-semibold text-gray-900 mb-2">
+                            {assessmentData.lh.value}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {assessmentData.lh.description}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {assessmentData.semen && (
+                      <Card>
+                        <CardContent className="p-4">
+                          <p className="text-xs font-medium text-gray-500 mb-1">
+                            Semen Analysis
+                          </p>
+                          <p className="text-lg font-semibold text-gray-900 mb-2">
+                            {assessmentData.semen.value}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {assessmentData.semen.description}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {assessmentData.uterine && (
+                      <Card>
+                        <CardContent className="p-4">
+                          <p className="text-xs font-medium text-gray-500 mb-1">
+                            Uterine Assessment
+                          </p>
+                          <p className="text-lg font-semibold text-gray-900 mb-2">
+                            {assessmentData.uterine.value}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {assessmentData.uterine.description}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                )}
+
+                {/* Cycle Actions */}
+                <Card>
+                  <CardContent className="space-y-3 pt-4">
+                    {/* Start Cycle Section - Show if cycle hasn't started */}
+                    {canStartCycle && !isCompleted && !isCancelled && (
+                      <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 mb-1">
+                              Ready to Start
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              Start this treatment cycle to begin tracking
+                              progress
+                            </p>
+                          </div>
+                          <Button
+                            onClick={() => startCycleMutation.mutate()}
+                            disabled={startCycleMutation.isPending}
+                            className="gap-2"
+                            size="sm"
+                          >
+                            <Play className="h-4 w-4" />
+                            {startCycleMutation.isPending
+                              ? "Starting..."
+                              : "Start Cycle"}
+                          </Button>
                         </div>
-                        <Button
-                          onClick={() => setShowCancelConfirm(true)}
-                          className="gap-2"
-                          size="sm"
-                          variant="destructive"
-                        >
-                          <XCircle className="h-4 w-4" />
-                          Cancel Cycle
-                        </Button>
                       </div>
-                    </div>
-                  )}
-                  <form onSubmit={onSubmit} className="space-y-3">
-                    {/* Outcome */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="outcome" className="text-sm font-medium">
-                        Outcome{" "}
-                        <span className="text-gray-500 font-normal">
-                          (Optional)
-                        </span>
-                      </Label>
-                      <Input
-                        id="outcome"
-                        {...form.register("outcome")}
-                        placeholder="e.g., Successful, Positive Result, etc."
-                        disabled={isSubmitting}
-                        className="text-sm h-9"
-                      />
-                    </div>
+                    )}
+                    {/* Complete Cycle Section - Show if cycle has started */}
+                    {canCompleteCycle && (
+                      <div className="rounded-lg border border-green-200 bg-green-50/50 p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 mb-1">
+                              Complete Treatment Cycle
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              Mark this treatment cycle as complete
+                            </p>
+                          </div>
+                          <Button
+                            onClick={() => setShowCompleteConfirm(true)}
+                            className="gap-2"
+                            size="sm"
+                            variant="default"
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                            Complete Cycle
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
-                    {/* Notes */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="notes" className="text-sm font-medium">
-                        Notes{" "}
-                        <span className="text-gray-500 font-normal">
-                          (Optional)
-                        </span>
-                      </Label>
-                      <Textarea
-                        id="notes"
-                        {...form.register("notes")}
-                        rows={4}
-                        placeholder="Add any additional notes, observations, or important information..."
-                        disabled={isSubmitting}
-                        className="resize-none text-sm"
-                      />
-                    </div>
+                    {/* Cancel Cycle Section - Show if cycle can be cancelled */}
+                    {canCancelCycle && (
+                      <div className="rounded-lg border border-red-200 bg-red-50/50 p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 mb-1">
+                              Cancel Treatment Cycle
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              Cancel this treatment cycle and stop the process
+                            </p>
+                          </div>
+                          <Button
+                            onClick={() => setShowCancelConfirm(true)}
+                            className="gap-2"
+                            size="sm"
+                            variant="destructive"
+                          >
+                            <XCircle className="h-4 w-4" />
+                            Cancel Cycle
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
-                    {/* Actions */}
-                    <div className="flex justify-end gap-3 pt-2">
+            {/* Prescription Tab */}
+            {activeTab === "prescription" && (
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  {/* Toggle between Create and View */}
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                    <div className="flex gap-2">
                       <Button
                         type="button"
-                        variant="outline"
-                        onClick={onClose}
-                        disabled={isSubmitting}
+                        variant={
+                          prescriptionViewMode === "create"
+                            ? "default"
+                            : "ghost"
+                        }
+                        size="sm"
+                        onClick={() => setPrescriptionViewMode("create")}
+                        className="text-xs"
                       >
-                        Cancel
+                        Create
                       </Button>
-                      <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? "Updating..." : "Update Record"}
+                      <Button
+                        type="button"
+                        variant={
+                          prescriptionViewMode === "view" ? "default" : "ghost"
+                        }
+                        size="sm"
+                        onClick={() => setPrescriptionViewMode("view")}
+                        className="text-xs"
+                      >
+                        View ({prescriptions.length})
                       </Button>
                     </div>
-                  </form>
-                </CardContent>
-              </Card>
+                    {selectedAppointmentId && (
+                      <p className="text-xs text-gray-500">
+                        Filtered by selected appointment
+                      </p>
+                    )}
+                  </div>
 
-              {/* Bottom Section - Appointment History & Medical Notes */}
-              <div className="grid gap-6 lg:grid-cols-2">
+                  {/* Create Mode */}
+                  {prescriptionViewMode === "create" && (
+                    <form
+                      onSubmit={prescriptionForm.handleSubmit((data) =>
+                        createPrescriptionMutation.mutate(data)
+                      )}
+                      className="space-y-3"
+                    >
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="medicalRecordId"
+                          className="text-sm font-medium"
+                        >
+                          Medical Record ID *
+                        </Label>
+                        {selectedMedicalRecord ? (
+                          <div className="space-y-1">
+                            <Input
+                              id="medicalRecordId"
+                              {...prescriptionForm.register("medicalRecordId", {
+                                required: "Medical Record ID is required",
+                              })}
+                              value={
+                                prescriptionForm.watch("medicalRecordId") ||
+                                selectedMedicalRecord.id
+                              }
+                              onChange={(e) => {
+                                prescriptionForm.setValue(
+                                  "medicalRecordId",
+                                  e.target.value
+                                );
+                              }}
+                              placeholder="Enter medical record ID"
+                              className="text-sm h-9"
+                            />
+                            <p className="text-xs text-gray-500">
+                              Auto-selected from Appointment History:{" "}
+                              {getLast4Chars(selectedMedicalRecord.id)}
+                            </p>
+                          </div>
+                        ) : selectedAppointmentId ? (
+                          <div className="space-y-1">
+                            <Input
+                              id="medicalRecordId"
+                              {...prescriptionForm.register("medicalRecordId", {
+                                required: "Medical Record ID is required",
+                              })}
+                              placeholder="Enter medical record ID"
+                              className="text-sm h-9"
+                            />
+                            <p className="text-xs text-amber-600">
+                              No medical record found for selected appointment.
+                              Please create one first or enter manually.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <Input
+                              id="medicalRecordId"
+                              {...prescriptionForm.register("medicalRecordId", {
+                                required: "Medical Record ID is required",
+                              })}
+                              placeholder="Enter medical record ID"
+                              className="text-sm h-9"
+                            />
+                            <p className="text-xs text-gray-500">
+                              Select an appointment from Appointment History to
+                              auto-fill
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="prescription-diagnosis"
+                          className="text-sm font-medium"
+                        >
+                          Diagnosis
+                        </Label>
+                        <Textarea
+                          id="prescription-diagnosis"
+                          {...prescriptionForm.register("diagnosis")}
+                          rows={2}
+                          placeholder="Enter diagnosis..."
+                          className="resize-none text-sm"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">
+                            Medications *
+                          </Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              appendMedication({
+                                medicineId: "",
+                                dosage: "",
+                                frequency: "",
+                                durationDays: 0,
+                                quantity: 1,
+                                notes: "",
+                              })
+                            }
+                            className="gap-1"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Add Medicine
+                          </Button>
+                        </div>
+                        {medicationFields.map((field, index) => (
+                          <Card key={field.id} className="p-3">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs font-medium">
+                                  Medicine {index + 1}
+                                </Label>
+                                {medicationFields.length > 1 && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeMedication(index)}
+                                    className="h-6 w-6 p-0 text-red-600"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                              <select
+                                {...prescriptionForm.register(
+                                  `medications.${index}.medicineId` as const,
+                                  { required: "Please select a medicine" }
+                                )}
+                                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                              >
+                                <option value="">Select medicine</option>
+                                {medicineOptions.map((medicine: Medicine) => (
+                                  <option key={medicine.id} value={medicine.id}>
+                                    {medicine.name}{" "}
+                                    {medicine.form ? `(${medicine.form})` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="grid grid-cols-2 gap-2">
+                                <Input
+                                  {...prescriptionForm.register(
+                                    `medications.${index}.dosage` as const
+                                  )}
+                                  placeholder="Dosage"
+                                  className="text-sm h-8"
+                                />
+                                <Input
+                                  {...prescriptionForm.register(
+                                    `medications.${index}.frequency` as const
+                                  )}
+                                  placeholder="Frequency"
+                                  className="text-sm h-8"
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <Input
+                                  type="number"
+                                  {...prescriptionForm.register(
+                                    `medications.${index}.durationDays` as const,
+                                    { valueAsNumber: true }
+                                  )}
+                                  placeholder="Duration (days)"
+                                  className="text-sm h-8"
+                                />
+                                <Input
+                                  type="number"
+                                  {...prescriptionForm.register(
+                                    `medications.${index}.quantity` as const,
+                                    { valueAsNumber: true }
+                                  )}
+                                  placeholder="Quantity"
+                                  className="text-sm h-8"
+                                />
+                              </div>
+                              <Textarea
+                                {...prescriptionForm.register(
+                                  `medications.${index}.notes` as const
+                                )}
+                                placeholder="Instructions/Notes"
+                                rows={2}
+                                className="resize-none text-sm"
+                              />
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="instructions"
+                          className="text-sm font-medium"
+                        >
+                          Instructions
+                        </Label>
+                        <Textarea
+                          id="instructions"
+                          {...prescriptionForm.register("instructions")}
+                          rows={2}
+                          placeholder="Enter prescription instructions..."
+                          className="resize-none text-sm"
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-3 pt-2">
+                        <Button
+                          type="submit"
+                          disabled={createPrescriptionMutation.isPending}
+                        >
+                          {createPrescriptionMutation.isPending
+                            ? "Creating..."
+                            : "Create Prescription"}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* View Mode */}
+                  {prescriptionViewMode === "view" && (
+                    <div className="space-y-3">
+                      {prescriptionsLoading ? (
+                        <div className="py-4 text-center text-sm text-gray-500">
+                          Loading prescriptions...
+                        </div>
+                      ) : prescriptions.length > 0 ? (
+                        <div className="space-y-2">
+                          {prescriptions.map((prescription: any) => (
+                            <PrescriptionCard
+                              key={prescription.id}
+                              prescriptionId={prescription.id}
+                              prescription={prescription}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-4 text-center text-sm text-gray-500">
+                          {selectedAppointmentId
+                            ? "No prescriptions found for the selected appointment"
+                            : "No prescriptions found for this treatment cycle"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Service Tab */}
+            {activeTab === "service" && (
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  {/* Toggle between Create and View */}
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant={
+                          serviceViewMode === "create" ? "default" : "ghost"
+                        }
+                        size="sm"
+                        onClick={() => setServiceViewMode("create")}
+                        className="text-xs"
+                      >
+                        Create
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={
+                          serviceViewMode === "view" ? "default" : "ghost"
+                        }
+                        size="sm"
+                        onClick={() => setServiceViewMode("view")}
+                        className="text-xs"
+                      >
+                        View ({serviceRequests.length})
+                      </Button>
+                    </div>
+                    {selectedAppointmentId && (
+                      <p className="text-xs text-gray-500">
+                        Filtered by selected appointment
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Create Mode */}
+                  {serviceViewMode === "create" && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-600">
+                        Create service requests for the patient
+                      </p>
+                      <Button
+                        onClick={() => setShowCreateServiceRequestModal(true)}
+                        className="w-full"
+                      >
+                        Create Service Request
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* View Mode */}
+                  {serviceViewMode === "view" && (
+                    <div className="space-y-3">
+                      {serviceRequestsLoading ? (
+                        <div className="py-4 text-center text-sm text-gray-500">
+                          Loading service requests...
+                        </div>
+                      ) : serviceRequests.length > 0 ? (
+                        <div className="space-y-2">
+                          {serviceRequests.map((request: any) => (
+                            <Card key={request.id} className="p-3">
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-medium text-gray-900">
+                                    Service Request #{getLast4Chars(request.id)}
+                                  </p>
+                                  <Badge variant="outline" className="text-xs">
+                                    {request.status || "Pending"}
+                                  </Badge>
+                                </div>
+                                {request.requestedDate && (
+                                  <p className="text-xs text-gray-600">
+                                    <span className="font-medium">
+                                      Requested Date:
+                                    </span>{" "}
+                                    {new Date(
+                                      request.requestedDate
+                                    ).toLocaleDateString("en-GB", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    })}
+                                  </p>
+                                )}
+                                {request.notes && (
+                                  <p className="text-xs text-gray-600">
+                                    <span className="font-medium">Notes:</span>{" "}
+                                    {request.notes}
+                                  </p>
+                                )}
+                                {request.serviceDetails &&
+                                  request.serviceDetails.length > 0 && (
+                                    <div className="mt-2 space-y-1">
+                                      <p className="text-xs font-medium text-gray-700">
+                                        Services:
+                                      </p>
+                                      {request.serviceDetails.map(
+                                        (detail: any, idx: number) => (
+                                          <div
+                                            key={idx}
+                                            className="text-xs text-gray-600 pl-2 border-l-2 border-gray-200"
+                                          >
+                                            <p className="font-medium">
+                                              {detail.serviceName ||
+                                                detail.service?.name ||
+                                                "Unknown"}
+                                            </p>
+                                            {detail.quantity && (
+                                              <p>Quantity: {detail.quantity}</p>
+                                            )}
+                                            {detail.unitPrice && (
+                                              <p>
+                                                Price:{" "}
+                                                {new Intl.NumberFormat(
+                                                  "vi-VN",
+                                                  {
+                                                    style: "currency",
+                                                    currency: "VND",
+                                                  }
+                                                ).format(detail.unitPrice)}
+                                              </p>
+                                            )}
+                                            {detail.notes && (
+                                              <p className="text-gray-500">
+                                                Notes: {detail.notes}
+                                              </p>
+                                            )}
+                                          </div>
+                                        )
+                                      )}
+                                    </div>
+                                  )}
+                                {request.totalAmount && (
+                                  <p className="text-xs font-medium text-gray-900 mt-2">
+                                    Total:{" "}
+                                    {new Intl.NumberFormat("vi-VN", {
+                                      style: "currency",
+                                      currency: "VND",
+                                    }).format(request.totalAmount)}
+                                  </p>
+                                )}
+                                {request.createdAt && (
+                                  <p className="text-xs text-gray-500 mt-2">
+                                    Created:{" "}
+                                    {new Date(
+                                      request.createdAt
+                                    ).toLocaleDateString("en-GB", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    })}
+                                  </p>
+                                )}
+                              </div>
+                            </Card>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-4 text-center text-sm text-gray-500">
+                          {selectedAppointmentId
+                            ? "No service requests found for the selected appointment"
+                            : "No service requests found for this treatment cycle"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Bottom Section - Appointment History & Medical Notes */}
+            {(activeTab === "assessment" ||
+              activeTab === "prescription" ||
+              activeTab === "service") && (
+              <div className="grid gap-6 lg:grid-cols-2 mt-6">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between pb-3">
                     <CardTitle className="text-sm font-semibold">
@@ -1191,124 +2048,124 @@ export function CycleUpdateModal({
                   </CardContent>
                 </Card>
               </div>
-            </div>
-          )}
+            )}
 
-          {activeTab === "medical-history" && (
-            <div className="space-y-4">
-              {assessmentRecord ? (
-                <div className="space-y-4">
-                  {assessmentRecord.history && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-sm font-semibold">
-                          Medical History
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                          {assessmentRecord.history}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {assessmentRecord.chiefComplaint && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-sm font-semibold">
-                          Chief Complaint
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                          {assessmentRecord.chiefComplaint}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {assessmentRecord.physicalExamination && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-sm font-semibold">
-                          Physical Examination
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                          {assessmentRecord.physicalExamination}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {assessmentRecord.diagnosis && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-sm font-semibold">
-                          Diagnosis
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                          {assessmentRecord.diagnosis}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              ) : (
-                <Card>
-                  <CardContent className="py-8 text-center text-gray-500">
-                    No medical history available
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-
-          {activeTab === "partner-info" && (
-            <div className="space-y-4">
-              <Card>
-                <CardContent className="py-8 text-center text-gray-500">
-                  Partner information will be displayed here
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {activeTab === "treatment-plan" && (
-            <div className="space-y-4">
-              {assessmentRecord?.treatmentPlan ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Treatment Plan</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                        {assessmentRecord.treatmentPlan}
-                      </p>
-                      {assessmentRecord.followUpInstructions && (
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                          <h4 className="text-sm font-semibold text-gray-900 mb-2">
-                            Follow-up Instructions
-                          </h4>
+            {activeTab === "medical-history" && (
+              <div className="space-y-4">
+                {assessmentRecord ? (
+                  <div className="space-y-4">
+                    {assessmentRecord.history && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm font-semibold">
+                            Medical History
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
                           <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                            {assessmentRecord.followUpInstructions}
+                            {assessmentRecord.history}
                           </p>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
+                        </CardContent>
+                      </Card>
+                    )}
+                    {assessmentRecord.chiefComplaint && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm font-semibold">
+                            Chief Complaint
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                            {assessmentRecord.chiefComplaint}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {assessmentRecord.physicalExamination && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm font-semibold">
+                            Physical Examination
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                            {assessmentRecord.physicalExamination}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {assessmentRecord.diagnosis && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm font-semibold">
+                            Diagnosis
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                            {assessmentRecord.diagnosis}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                ) : (
+                  <Card>
+                    <CardContent className="py-8 text-center text-gray-500">
+                      No medical history available
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {activeTab === "partner-info" && (
+              <div className="space-y-4">
                 <Card>
                   <CardContent className="py-8 text-center text-gray-500">
-                    No treatment plan available
+                    Partner information will be displayed here
                   </CardContent>
                 </Card>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+
+            {activeTab === "treatment-plan" && (
+              <div className="space-y-4">
+                {assessmentRecord?.treatmentPlan ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Treatment Plan</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                          {assessmentRecord.treatmentPlan}
+                        </p>
+                        {assessmentRecord.followUpInstructions && (
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                            <h4 className="text-sm font-semibold text-gray-900 mb-2">
+                              Follow-up Instructions
+                            </h4>
+                            <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                              {assessmentRecord.followUpInstructions}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="py-8 text-center text-gray-500">
+                      No treatment plan available
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+          </>
         </div>
       </div>
 
@@ -1495,6 +2352,20 @@ export function CycleUpdateModal({
             queryKey: ["medical-records"],
           });
         }}
+      />
+
+      {/* Create Service Request Modal */}
+      <CreateServiceRequestModal
+        isOpen={showCreateServiceRequestModal}
+        onClose={() => setShowCreateServiceRequestModal(false)}
+        onSuccess={() => {
+          setShowCreateServiceRequestModal(false);
+          queryClient.invalidateQueries({
+            queryKey: ["doctor", "service-requests"],
+          });
+        }}
+        defaultPatientId={currentCycle.patientId}
+        defaultAppointmentId={selectedAppointmentId || undefined}
       />
     </div>
   );

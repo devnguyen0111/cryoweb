@@ -1209,6 +1209,9 @@ export interface ServiceRequestDetail {
   discount?: number | null;
   totalPrice: number; // Included in API response
   notes?: string | null;
+  imageUrl?: string | null; // Image URL for service request detail
+  fileUrl?: string | null; // File URL (alternative to imageUrl)
+  mediaId?: string | null; // Reference to Media entity
 }
 
 export interface ServiceRequestCreateRequestModel {
@@ -1242,6 +1245,9 @@ export interface ServiceRequestDetailUpdateRequestModel {
   quantity?: number;
   price?: number;
   notes?: string;
+  imageUrl?: string | null;
+  fileUrl?: string | null;
+  mediaId?: string | null;
 }
 
 export interface GetServiceRequestsRequest {

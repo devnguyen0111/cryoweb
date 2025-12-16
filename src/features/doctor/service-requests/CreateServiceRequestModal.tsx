@@ -19,7 +19,7 @@ import { X } from "lucide-react";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 
 const serviceRequestSchema = z.object({
-  appointmentId: z.string().optional(),
+  appointmentId: z.string().min(1, "Appointment is required"),
   patientId: z.string().min(1, "Patient is required"),
   requestedDate: z.string().optional(),
   notes: z.string().optional(),
@@ -46,6 +46,8 @@ interface CreateServiceRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  defaultPatientId?: string;
+  defaultAppointmentId?: string;
 }
 
 const formatCurrency = (value?: number | null) => {
@@ -60,6 +62,8 @@ export function CreateServiceRequestModal({
   isOpen,
   onClose,
   onSuccess,
+  defaultPatientId,
+  defaultAppointmentId,
 }: CreateServiceRequestModalProps) {
   const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<string>("");
@@ -71,8 +75,8 @@ export function CreateServiceRequestModal({
   const form = useForm<ServiceRequestFormData>({
     resolver: zodResolver(serviceRequestSchema),
     defaultValues: {
-      appointmentId: "",
-      patientId: "",
+      appointmentId: defaultAppointmentId || "",
+      patientId: defaultPatientId || "",
       requestedDate: new Date().toISOString().split("T")[0],
       notes: "",
       serviceDetails: [],
@@ -233,6 +237,25 @@ export function CreateServiceRequestModal({
     (apt) => apt.id === selectedAppointmentId
   );
 
+  // Fetch appointment details if defaultAppointmentId is provided but not in appointments list
+  const { data: defaultAppointmentDetails } = useQuery({
+    queryKey: ["appointment", defaultAppointmentId],
+    queryFn: async () => {
+      if (!defaultAppointmentId) return null;
+      try {
+        const response =
+          await api.appointment.getAppointmentDetails(defaultAppointmentId);
+        return response.data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: isOpen && !!defaultAppointmentId && !selectedAppointment,
+  });
+
+  // Use selectedAppointment or defaultAppointmentDetails
+  const effectiveAppointment = selectedAppointment || defaultAppointmentDetails;
+
   // Get patient from the patients list (already fetched, faster display)
   const selectedPatient = patients.find((p) => p.id === selectedPatientId);
 
@@ -259,31 +282,102 @@ export function CreateServiceRequestModal({
     },
   });
 
-  // Reset appointment when patient changes
+  // Set default values when modal opens
   useEffect(() => {
-    if (selectedPatientId) {
-      form.setValue("appointmentId", "");
+    if (isOpen) {
+      if (defaultPatientId) {
+        form.setValue("patientId", defaultPatientId);
+      }
+      if (defaultAppointmentId) {
+        form.setValue("appointmentId", defaultAppointmentId);
+      }
     }
-  }, [selectedPatientId, form]);
+  }, [isOpen, defaultPatientId, defaultAppointmentId, form]);
 
-  // Update requestedDate when appointment changes
+  // Auto-select appointment when appointments list is loaded and defaultAppointmentId is provided
   useEffect(() => {
-    if (selectedAppointment) {
-      // Update requestedDate to match appointment date
-      if (selectedAppointment.appointmentDate) {
-        // Handle both DateOnly (YYYY-MM-DD) and ISO datetime formats
+    if (
+      isOpen &&
+      defaultAppointmentId &&
+      !appointmentsLoading &&
+      appointments.length > 0
+    ) {
+      // Check if the default appointment is in the list
+      const appointmentExists = appointments.some(
+        (apt) => apt.id === defaultAppointmentId
+      );
+      // Only set if it exists in the list and form value is not already set
+      if (
+        appointmentExists &&
+        form.getValues("appointmentId") !== defaultAppointmentId
+      ) {
+        form.setValue("appointmentId", defaultAppointmentId);
+      }
+    }
+  }, [isOpen, defaultAppointmentId, appointments, appointmentsLoading, form]);
+
+  // Auto-select appointment when defaultAppointmentDetails is loaded (appointment not in list)
+  useEffect(() => {
+    if (
+      isOpen &&
+      defaultAppointmentId &&
+      defaultAppointmentDetails &&
+      form.getValues("appointmentId") !== defaultAppointmentId
+    ) {
+      form.setValue("appointmentId", defaultAppointmentId);
+    }
+  }, [isOpen, defaultAppointmentId, defaultAppointmentDetails, form]);
+
+  // Update requestedDate when defaultAppointmentDetails is loaded
+  useEffect(() => {
+    if (
+      defaultAppointmentDetails &&
+      defaultAppointmentId &&
+      form.getValues("appointmentId") === defaultAppointmentId
+    ) {
+      if (defaultAppointmentDetails.appointmentDate) {
         let dateString: string;
-        if (selectedAppointment.appointmentDate.includes("T")) {
-          // ISO datetime format
-          dateString = selectedAppointment.appointmentDate.split("T")[0];
+        if (defaultAppointmentDetails.appointmentDate.includes("T")) {
+          dateString = defaultAppointmentDetails.appointmentDate.split("T")[0];
         } else {
-          // DateOnly format (YYYY-MM-DD)
-          dateString = selectedAppointment.appointmentDate;
+          dateString = defaultAppointmentDetails.appointmentDate;
         }
         form.setValue("requestedDate", dateString);
       }
     }
-  }, [selectedAppointment, form]);
+  }, [defaultAppointmentDetails, defaultAppointmentId, form]);
+
+  // Reset appointment when patient changes (but not if it's the default patient)
+  useEffect(() => {
+    if (selectedPatientId && selectedPatientId !== defaultPatientId) {
+      // Only reset if patient changed manually, not when default is set
+      if (
+        form.getValues("appointmentId") &&
+        form.getValues("appointmentId") !== defaultAppointmentId
+      ) {
+        form.setValue("appointmentId", "");
+      }
+    }
+  }, [selectedPatientId, defaultPatientId, defaultAppointmentId, form]);
+
+  // Update requestedDate when appointment changes
+  useEffect(() => {
+    if (effectiveAppointment) {
+      // Update requestedDate to match appointment date
+      if (effectiveAppointment.appointmentDate) {
+        // Handle both DateOnly (YYYY-MM-DD) and ISO datetime formats
+        let dateString: string;
+        if (effectiveAppointment.appointmentDate.includes("T")) {
+          // ISO datetime format
+          dateString = effectiveAppointment.appointmentDate.split("T")[0];
+        } else {
+          // DateOnly format (YYYY-MM-DD)
+          dateString = effectiveAppointment.appointmentDate;
+        }
+        form.setValue("requestedDate", dateString);
+      }
+    }
+  }, [effectiveAppointment, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: ServiceRequestCreateRequestModel) => {
@@ -379,7 +473,7 @@ export function CreateServiceRequestModal({
     }
 
     const requestData: ServiceRequestCreateRequestModel = {
-      appointmentId: data.appointmentId || null,
+      appointmentId: data.appointmentId,
       patientId: data.patientId,
       requestDate: data.requestedDate
         ? new Date(data.requestedDate).toISOString()
@@ -427,29 +521,44 @@ export function CreateServiceRequestModal({
           <Label htmlFor="patientId">
             Patient <span className="text-red-500">*</span>
           </Label>
-          <div className="space-y-2">
-            <Input
-              placeholder="Search by name, code, or email..."
-              value={patientSearch}
-              onChange={(e) => setPatientSearch(e.target.value)}
-            />
-            <select
-              id="patientId"
-              className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              {...form.register("patientId", { required: true })}
-            >
-              <option value="">Select patient</option>
-              {patients.map((p) => {
-                const patientName =
-                  getFullNameFromObject(p) || p.patientCode || p.id;
-                return (
-                  <option key={p.id} value={p.id}>
-                    {patientName} {p.patientCode ? `(${p.patientCode})` : ""}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+          {defaultPatientId && patientDetails ? (
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+              <p className="font-medium text-gray-900">
+                {getFullNameFromObject(patientDetails) ||
+                  patientDetails.patientCode ||
+                  patientDetails.id}
+              </p>
+              {patientDetails.patientCode && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Patient Code: {patientDetails.patientCode}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Input
+                placeholder="Search by name, code, or email..."
+                value={patientSearch}
+                onChange={(e) => setPatientSearch(e.target.value)}
+              />
+              <select
+                id="patientId"
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                {...form.register("patientId", { required: true })}
+              >
+                <option value="">Select patient</option>
+                {patients.map((p) => {
+                  const patientName =
+                    getFullNameFromObject(p) || p.patientCode || p.id;
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {patientName} {p.patientCode ? `(${p.patientCode})` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
           {form.formState.errors.patientId && (
             <p className="text-sm text-red-500">
               {form.formState.errors.patientId.message}
@@ -459,11 +568,15 @@ export function CreateServiceRequestModal({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="appointmentId">Appointment (Optional)</Label>
+            <Label htmlFor="appointmentId">
+              Appointment <span className="text-red-500">*</span>
+            </Label>
             <select
               id="appointmentId"
               className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-              {...form.register("appointmentId")}
+              {...form.register("appointmentId", {
+                required: "Appointment is required",
+              })}
               disabled={appointmentsLoading || !selectedPatientId}
             >
               <option value="">
@@ -471,9 +584,9 @@ export function CreateServiceRequestModal({
                   ? "Select patient first"
                   : appointmentsLoading
                     ? "Loading appointments..."
-                    : appointments.length === 0
+                    : appointments.length === 0 && !defaultAppointmentDetails
                       ? "No appointments found"
-                      : "Select appointment (optional)"}
+                      : "Select appointment"}
               </option>
               {appointments.map((apt) => {
                 const aptCode = apt.appointmentCode
@@ -486,6 +599,19 @@ export function CreateServiceRequestModal({
                   </option>
                 );
               })}
+              {/* Show default appointment if it's not in the appointments list */}
+              {defaultAppointmentDetails &&
+                !appointments.find(
+                  (apt) => apt.id === defaultAppointmentDetails.id
+                ) && (
+                  <option value={defaultAppointmentDetails.id}>
+                    {defaultAppointmentDetails.appointmentCode
+                      ? defaultAppointmentDetails.appointmentCode.slice(-8)
+                      : defaultAppointmentDetails.id.slice(-8)}{" "}
+                    - {formatDate(defaultAppointmentDetails.appointmentDate)} (
+                    {defaultAppointmentDetails.status})
+                  </option>
+                )}
             </select>
             {form.formState.errors.appointmentId && (
               <p className="text-sm text-red-500">
@@ -500,14 +626,14 @@ export function CreateServiceRequestModal({
               id="requestedDate"
               type="date"
               {...form.register("requestedDate")}
-              disabled={!!selectedAppointment}
+              disabled={!!effectiveAppointment}
               title={
-                selectedAppointment
+                effectiveAppointment
                   ? "Requested date is set to match appointment date"
                   : ""
               }
             />
-            {selectedAppointment && (
+            {effectiveAppointment && (
               <p className="text-xs text-gray-500">
                 Automatically set to appointment date
               </p>

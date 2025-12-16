@@ -3,7 +3,7 @@
  * Rebuilt from scratch based on Figma design for updating treatment cycle records
  */
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm, useFieldArray } from "react-hook-form";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import {
   XCircle,
   Plus,
   Trash2,
+  Syringe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ import type {
   CreatePrescriptionRequest,
   Medicine,
   PaginatedResponse,
+  IUIStep,
 } from "@/api/types";
 import { HorizontalTreatmentTimeline } from "./HorizontalTreatmentTimeline";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
@@ -44,6 +46,7 @@ import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/Doct
 import { CreateServiceRequestModal } from "@/features/doctor/service-requests/CreateServiceRequestModal";
 import { Modal } from "@/components/ui/modal";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 
 // Component to display prescription with full details
 function PrescriptionCard({
@@ -880,6 +883,7 @@ export function CycleUpdateModal({
   const [cancelReason, setCancelReason] = useState("");
   const [cancelNotes, setCancelNotes] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showIUIConfirm, setShowIUIConfirm] = useState(false);
 
   const completeCycleMutation = useMutation({
     mutationFn: async () => {
@@ -967,6 +971,253 @@ export function CycleUpdateModal({
         error?.response?.data?.message || "Failed to cancel treatment cycle"
       );
       setIsCancelling(false);
+    },
+  });
+
+  // Check if we're at IUI Procedure step
+  const isIUIProcedureStep = useMemo(() => {
+    const treatmentType =
+      currentCycle.treatmentType === "IUI" ||
+      currentCycle.treatmentType === "IVF"
+        ? currentCycle.treatmentType
+        : treatmentData?.treatmentType === "IUI" ||
+            treatmentData?.treatmentType === "IVF"
+          ? treatmentData.treatmentType
+          : undefined;
+
+    if (treatmentType !== "IUI") return false;
+
+    // Check if currentStep is step4_iui_procedure
+    const currentStep = currentCycle.currentStep as IUIStep | undefined;
+    const isStep4IUIProcedure = currentStep === "step4_iui_procedure";
+
+    // Also check stepType in case currentStep is not set but stepType is
+    const stepTypeStr = currentCycle.stepType
+      ? String(currentCycle.stepType).toUpperCase()
+      : "";
+    const isStepTypeIUIProcedure =
+      stepTypeStr === "IUI_PROCEDURE" || stepTypeStr.includes("PROCEDURE");
+
+    // Also check cycleName as fallback (in case stepType/currentStep are not set correctly)
+    const cycleNameLower = currentCycle.cycleName?.toLowerCase() || "";
+    const isCycleNameIUIProcedure =
+      (cycleNameLower.includes("iui") &&
+        cycleNameLower.includes("procedure")) ||
+      cycleNameLower.includes("insemination") ||
+      (cycleNameLower.includes("iui") &&
+        !cycleNameLower.includes("post") &&
+        !cycleNameLower.includes("pre"));
+
+    // Allow showing button if:
+    // 1. Treatment type is IUI
+    // 2. Either currentStep is step4_iui_procedure OR stepType indicates IUI_Procedure
+    // 3. Cycle has started (InProgress) OR has a startDate (some cycles might have startDate but status not updated)
+    // 4. Not completed or cancelled
+    const hasStartedOrHasStartDate =
+      hasStarted || (currentCycle.startDate && !isCompleted && !isCancelled);
+
+    const result =
+      (isStep4IUIProcedure ||
+        isStepTypeIUIProcedure ||
+        isCycleNameIUIProcedure) &&
+      hasStartedOrHasStartDate &&
+      !isCompleted &&
+      !isCancelled;
+
+    // Debug logging
+    if (process.env.NODE_ENV === "development") {
+      console.log("[IUI Procedure Check]:", {
+        treatmentType,
+        currentStep,
+        stepType: currentCycle.stepType,
+        stepTypeStr,
+        cycleName: currentCycle.cycleName,
+        isStep4IUIProcedure,
+        isStepTypeIUIProcedure,
+        isCycleNameIUIProcedure,
+        hasStarted,
+        hasStartedOrHasStartDate,
+        startDate: currentCycle.startDate,
+        isCompleted,
+        isCancelled,
+        result,
+        cycleId: currentCycle.id,
+      });
+    }
+
+    return result;
+  }, [
+    currentCycle.treatmentType,
+    currentCycle.currentStep,
+    currentCycle.stepType,
+    currentCycle.cycleName,
+    currentCycle.startDate,
+    treatmentData?.treatmentType,
+    hasStarted,
+    isCompleted,
+    isCancelled,
+    currentCycle.id,
+  ]);
+
+  // Memoize handler to prevent unnecessary re-renders
+  const handleConfirmIUIClick = useCallback(() => {
+    setShowIUIConfirm(true);
+  }, []);
+
+  // Fetch all cycles for this treatment to find next cycle
+  const { data: allCyclesData } = useQuery({
+    queryKey: ["treatment-cycles", "treatment", currentCycle.treatmentId],
+    queryFn: async () => {
+      if (!currentCycle.treatmentId) return [];
+      try {
+        const response = await api.treatmentCycle.getTreatmentCycles({
+          TreatmentId: currentCycle.treatmentId,
+          Page: 1,
+          Size: 100,
+        });
+        return response.data || [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!currentCycle.treatmentId && isOpen,
+  });
+
+  // Confirm IUI Procedure mutation - Use complete API
+  const confirmIUIProcedureMutation = useMutation({
+    mutationFn: async () => {
+      try {
+        const inseminationDate = new Date().toISOString();
+
+        // Auto-fill outcome and notes for IUI Procedure completion
+        const outcome = "IUI Procedure completed successfully";
+        const notes = `Intrauterine insemination (IUI) procedure performed on ${new Date(
+          inseminationDate
+        ).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })}. Procedure completed and ready for post-IUI monitoring.`;
+
+        // Complete current cycle (step4_iui_procedure) with auto-filled outcome and notes
+        const completeRequest = {
+          endDate: inseminationDate,
+          outcome: outcome,
+          notes: notes,
+        };
+
+        console.log("[Confirm IUI] Completing cycle:", {
+          cycleId: currentCycle.id,
+          completeRequest,
+        });
+
+        // Complete current cycle
+        await api.treatmentCycle.completeTreatmentCycle(
+          currentCycle.id,
+          completeRequest
+        );
+
+        console.log("[Confirm IUI] Cycle completed successfully");
+
+        // Find and start next cycle (step5_post_iui) if exists
+        const allCycles = allCyclesData || [];
+        const sortedCycles = [...allCycles].sort((a, b) => {
+          const orderA = a.orderIndex ?? a.cycleNumber ?? 0;
+          const orderB = b.orderIndex ?? b.cycleNumber ?? 0;
+          return orderA - orderB;
+        });
+
+        const currentCycleIndex = sortedCycles.findIndex(
+          (c) => c.id === currentCycle.id
+        );
+
+        // Find and start the next cycle
+        if (
+          currentCycleIndex >= 0 &&
+          currentCycleIndex < sortedCycles.length - 1
+        ) {
+          const nextCycle = sortedCycles[currentCycleIndex + 1];
+          const nextCycleStatus = normalizeTreatmentCycleStatus(
+            nextCycle.status
+          );
+
+          // Start next cycle if it's Planned or Scheduled
+          if (
+            nextCycleStatus === "Planned" ||
+            nextCycleStatus === "Scheduled"
+          ) {
+            try {
+              const now = new Date().toISOString();
+              await api.treatmentCycle.updateTreatmentCycle(nextCycle.id, {
+                status: "InProgress",
+                startDate: now,
+                currentStep: "step5_post_iui" as IUIStep,
+                stepDates: {
+                  step5_post_iui: now,
+                },
+              });
+              console.log(
+                "[Confirm IUI] Next cycle started:",
+                nextCycle.cycleName
+              );
+            } catch (error: any) {
+              console.warn("Failed to start next cycle:", error);
+              // Don't throw - cycle completion was successful
+            }
+          }
+        }
+
+        // Update IUI treatment inseminationDate if treatmentId exists
+        if (currentCycle.treatmentId) {
+          try {
+            const iuiResponse = await api.treatmentIUI.getIUIByTreatmentId(
+              currentCycle.treatmentId
+            );
+            if (iuiResponse.data?.id) {
+              await api.treatmentIUI.updateIUI(iuiResponse.data.id, {
+                treatmentId: currentCycle.treatmentId,
+                inseminationDate: inseminationDate,
+                status: "Insemination",
+              });
+              console.log("[Confirm IUI] IUI treatment updated");
+            }
+          } catch (error: any) {
+            console.warn("Could not update IUI treatment:", error);
+          }
+        }
+
+        return { success: true };
+      } catch (error: any) {
+        console.error("[Confirm IUI] Error:", error);
+        throw error;
+      }
+    },
+    onSuccess: async () => {
+      toast.success("IUI procedure confirmed successfully");
+      setShowIUIConfirm(false);
+
+      // Invalidate and refetch queries to update UI immediately
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["doctor", "treatment-cycles"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["doctor", "treatment-cycle", currentCycle.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["treatment-iui", currentCycle.treatmentId],
+        }),
+      ]);
+
+      // Refetch cycle data immediately to ensure UI updates
+      await queryClient.refetchQueries({
+        queryKey: ["doctor", "treatment-cycle", currentCycle.id],
+      });
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message || "Failed to confirm IUI procedure"
+      );
     },
   });
 
@@ -1325,6 +1576,49 @@ export function CycleUpdateModal({
                             <XCircle className="h-4 w-4" />
                             Cancel Cycle
                           </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Confirm IUI Procedure Section - Show if at IUI Procedure step and cycle has started */}
+                    {isIUIProcedureStep && hasStarted && (
+                      <div className="relative overflow-hidden rounded-xl border border-purple-200 bg-white shadow-md">
+                        {/* Decorative gradient background */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-50/50 via-white to-blue-50/30" />
+
+                        <div className="relative p-4">
+                          <div className="flex items-start gap-3">
+                            {/* Icon */}
+                            <div className="flex-shrink-0 rounded-lg bg-purple-100 p-2.5">
+                              <Syringe className="h-5 w-5 text-purple-600" />
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-sm font-semibold text-gray-900 mb-1.5">
+                                Confirm IUI Procedure
+                              </h3>
+                              <p className="text-xs leading-relaxed text-gray-600 mb-3">
+                                Confirm that the intrauterine insemination (IUI)
+                                procedure has been performed. This will
+                                automatically move the treatment cycle to the
+                                post-IUI monitoring step.
+                              </p>
+
+                              {/* Button */}
+                              <Button
+                                onClick={handleConfirmIUIClick}
+                                className="gap-2 bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-all duration-200 hover:shadow-md"
+                                size="sm"
+                                disabled={confirmIUIProcedureMutation.isPending}
+                              >
+                                <Syringe className="h-3.5 w-3.5" />
+                                {confirmIUIProcedureMutation.isPending
+                                  ? "Processing..."
+                                  : "Confirm IUI Procedure"}
+                              </Button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -2366,6 +2660,19 @@ export function CycleUpdateModal({
         }}
         defaultPatientId={currentCycle.patientId}
         defaultAppointmentId={selectedAppointmentId || undefined}
+      />
+
+      {/* Confirm IUI Procedure Dialog */}
+      <ConfirmationDialog
+        isOpen={showIUIConfirm}
+        onClose={() => setShowIUIConfirm(false)}
+        onConfirm={() => confirmIUIProcedureMutation.mutate()}
+        title="Confirm IUI Procedure"
+        message="Are you sure you want to confirm that the intrauterine insemination (IUI) procedure has been performed? This action will move the treatment cycle to the post-IUI monitoring step."
+        confirmText="Confirm"
+        cancelText="Cancel"
+        variant="default"
+        isLoading={confirmIUIProcedureMutation.isPending}
       />
     </div>
   );

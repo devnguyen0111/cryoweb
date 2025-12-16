@@ -7,6 +7,7 @@ import type {
   ServiceRequestDetail,
   Appointment,
   Patient,
+  PatientDetailResponse,
   Service,
 } from "@/api/types";
 import { Modal } from "@/components/ui/modal";
@@ -17,6 +18,7 @@ import { cn } from "@/utils/cn";
 import { UpdateServiceRequestDetailImageForm } from "./UpdateServiceRequestDetailImageForm";
 import { Image as ImageIcon } from "lucide-react";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { getLast4Chars } from "@/utils/id-helpers";
 interface ServiceRequestDetailModalProps {
   requestId: string;
   isOpen: boolean;
@@ -145,14 +147,49 @@ export function ServiceRequestDetailModal({
     },
   });
 
-  // Get patientId from request or appointment
+  // Get patientId from request or appointment (try multiple sources)
   const patientId = useMemo(() => {
-    return request?.patientId ?? appointment?.patientId ?? null;
-  }, [request?.patientId, appointment?.patientId]);
+    if (!request && !appointment) return null;
 
-  const { data: patient } = useQuery<Patient | null>({
-    enabled: isOpen && Boolean(patientId),
-    queryKey: ["patient", patientId],
+    // Try from request first
+    if (request?.patientId) return request.patientId;
+
+    // Try from appointment - multiple field name variations
+    if (appointment) {
+      const raw = appointment as unknown as Record<string, any>;
+      return (
+        appointment.patientId ??
+        raw.patientID ??
+        raw.PatientId ??
+        raw.PatientID ??
+        raw.patient?.id ??
+        raw.patient?.patientId ??
+        raw.patient?.accountId ??
+        raw.patientAccountId ??
+        raw.patientAccountID ??
+        null
+      );
+    }
+
+    return null;
+  }, [request?.patientId, appointment]);
+
+  // Try to get patient from appointment first (nested), then fetch if needed
+  const patientFromAppointment = useMemo(() => {
+    if (appointment) {
+      const raw = appointment as unknown as Record<string, any>;
+      if (raw.patient) {
+        return raw.patient as Patient | PatientDetailResponse;
+      }
+    }
+    return null;
+  }, [appointment]);
+
+  const { data: patient, isLoading: patientLoading } = useQuery<
+    Patient | PatientDetailResponse | null
+  >({
+    enabled: isOpen && Boolean(patientId) && !patientFromAppointment,
+    queryKey: ["patient", patientId, "service-request-detail"],
     retry: false,
     queryFn: async () => {
       if (!patientId) return null;
@@ -160,13 +197,23 @@ export function ServiceRequestDetailModal({
         const response = await api.patient.getPatientById(patientId);
         return response.data ?? null;
       } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
+        // Try patient details as fallback
+        if (isAxiosError(error)) {
+          try {
+            const fallback = await api.patient.getPatientDetails(patientId);
+            return fallback.data ?? null;
+          } catch {
+            // If both fail, return null
+            return null;
+          }
         }
-        throw error;
+        return null;
       }
     },
   });
+
+  // Use patient from appointment if available, otherwise use fetched patient
+  const finalPatient = patientFromAppointment || patient;
 
   const isLoading =
     requestLoading || (detailsLoading && !request?.serviceDetails);
@@ -222,7 +269,9 @@ export function ServiceRequestDetailModal({
                   <p className="text-sm font-medium text-gray-500">
                     Request Code
                   </p>
-                  <p className="mt-1 text-sm">{request.requestCode}</p>
+                  <p className="mt-1 text-sm">
+                    {request.requestCode || `#${getLast4Chars(request.id)}`}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Status</p>
@@ -269,28 +318,58 @@ export function ServiceRequestDetailModal({
               <CardTitle>Patient Information</CardTitle>
             </CardHeader>
             <CardContent>
-              {patient ? (
+              {patientLoading && !patientFromAppointment ? (
+                <p className="text-sm text-gray-500">
+                  Loading patient information...
+                </p>
+              ) : finalPatient ? (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm font-medium text-gray-500">Name</p>
                     <p className="mt-1 text-sm">
-                      {getFullNameFromObject(patient)}
+                      {getFullNameFromObject(finalPatient as Patient) ||
+                        (finalPatient as any)?.accountInfo?.username ||
+                        (finalPatient as any)?.userName ||
+                        "—"}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">
-                      Patient Code
-                    </p>
-                    <p className="mt-1 text-sm">{patient.patientCode}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Phone</p>
-                    <p className="mt-1 text-sm">{patient.phoneNumber}</p>
-                  </div>
-                  {patient.email && (
+                  {((finalPatient as Patient).patientCode ||
+                    (finalPatient as any)?.patientCode) && (
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">
+                        Patient Code
+                      </p>
+                      <p className="mt-1 text-sm">
+                        {(finalPatient as Patient).patientCode ||
+                          (finalPatient as any)?.patientCode ||
+                          "—"}
+                      </p>
+                    </div>
+                  )}
+                  {((finalPatient as Patient).phoneNumber ||
+                    (finalPatient as any)?.accountInfo?.phone ||
+                    (finalPatient as any)?.phoneNumber) && (
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Phone</p>
+                      <p className="mt-1 text-sm">
+                        {(finalPatient as Patient).phoneNumber ||
+                          (finalPatient as any)?.accountInfo?.phone ||
+                          (finalPatient as any)?.phoneNumber ||
+                          "—"}
+                      </p>
+                    </div>
+                  )}
+                  {((finalPatient as Patient).email ||
+                    (finalPatient as any)?.accountInfo?.email ||
+                    (finalPatient as any)?.email) && (
                     <div>
                       <p className="text-sm font-medium text-gray-500">Email</p>
-                      <p className="mt-1 text-sm">{patient.email}</p>
+                      <p className="mt-1 text-sm">
+                        {(finalPatient as Patient).email ||
+                          (finalPatient as any)?.accountInfo?.email ||
+                          (finalPatient as any)?.email ||
+                          "—"}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -312,24 +391,36 @@ export function ServiceRequestDetailModal({
                       Appointment Code
                     </p>
                     <p className="mt-1 text-sm">
-                      {appointment.appointmentCode}
+                      {appointment.appointmentCode ||
+                        (appointment as any)?.appointmentCode ||
+                        `#${getLast4Chars(appointment.id)}`}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">Date</p>
                     <p className="mt-1 text-sm">
-                      {formatDate(appointment.appointmentDate)}
+                      {formatDate(
+                        appointment.appointmentDate ||
+                          (appointment as any)?.appointmentDate
+                      )}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">Type</p>
                     <p className="mt-1 text-sm">
-                      {appointment.appointmentType}
+                      {appointment.appointmentType ||
+                        (appointment as any)?.type ||
+                        (appointment as any)?.typeName ||
+                        "—"}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">Status</p>
-                    <p className="mt-1 text-sm">{appointment.status}</p>
+                    <p className="mt-1 text-sm">
+                      {appointment.status ||
+                        (appointment as any)?.statusName ||
+                        "—"}
+                    </p>
                   </div>
                 </div>
               </CardContent>

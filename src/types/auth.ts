@@ -284,6 +284,12 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       permission: "canAccessCryobank",
     },
     {
+      label: "Samples",
+      href: "/doctor/samples",
+      icon: "FlaskConical",
+      permission: "canViewSamples",
+    },
+    {
       label: "Reports",
       href: "/doctor/reports",
       icon: "BarChart3",

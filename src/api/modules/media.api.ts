@@ -17,23 +17,39 @@ export class MediaApi {
 
   /**
    * Upload media file
-   * POST /api/media
+   * POST /api/media/upload
    */
   async uploadMedia(data: UploadMediaRequest): Promise<BaseResponse<Media>> {
     const formData = new FormData();
-    formData.append("file", data.file);
+    formData.append("File", data.file);
+    formData.append("FileName", data.file.name);
     if (data.entityType) {
-      formData.append("entityType", data.entityType);
+      formData.append("RelatedEntityType", data.entityType);
     }
     if (data.entityId) {
-      formData.append("entityId", data.entityId);
+      formData.append("RelatedEntityId", data.entityId);
     }
     if (data.description) {
-      formData.append("description", data.description);
+      formData.append("Description", data.description);
+    }
+    if (data.title) {
+      formData.append("Title", data.title);
+    }
+    if (data.category) {
+      formData.append("Category", data.category);
+    }
+    if (data.tags) {
+      formData.append("Tags", data.tags);
+    }
+    if (data.isPublic !== undefined) {
+      formData.append("IsPublic", data.isPublic.toString());
+    }
+    if (data.notes) {
+      formData.append("Notes", data.notes);
     }
 
     const response = await this.client.post<BaseResponse<Media>>(
-      "/media",
+      "/media/upload",
       formData,
       {
         headers: {
@@ -84,8 +100,49 @@ export class MediaApi {
    * GET /api/media
    */
   async getMedias(params?: GetMediasRequest): Promise<DynamicResponse<Media>> {
+    // Map legacy parameters to new API parameters for backward compatibility
+    const queryParams: Record<string, any> = {};
+
+    if (params) {
+      // New API parameters (priority)
+      if (params.SearchTerm !== undefined)
+        queryParams.SearchTerm = params.SearchTerm;
+      if (params.RelatedEntityType !== undefined)
+        queryParams.RelatedEntityType = params.RelatedEntityType;
+      if (params.RelatedEntityId !== undefined)
+        queryParams.RelatedEntityId = params.RelatedEntityId;
+      if (params.PatientId !== undefined)
+        queryParams.PatientId = params.PatientId;
+      if (params.UpLoadByUserId !== undefined)
+        queryParams.UpLoadByUserId = params.UpLoadByUserId;
+      if (params.Page !== undefined) queryParams.Page = params.Page;
+      if (params.Size !== undefined) queryParams.Size = params.Size;
+      if (params.Sort !== undefined) queryParams.Sort = params.Sort;
+      if (params.Order !== undefined) queryParams.Order = params.Order;
+
+      // Legacy parameters (fallback if new ones not provided)
+      if (params.pageNumber !== undefined && params.Page === undefined) {
+        queryParams.Page = params.pageNumber;
+      }
+      if (params.pageSize !== undefined && params.Size === undefined) {
+        queryParams.Size = params.pageSize;
+      }
+      if (
+        params.entityType !== undefined &&
+        params.RelatedEntityType === undefined
+      ) {
+        queryParams.RelatedEntityType = params.entityType;
+      }
+      if (
+        params.entityId !== undefined &&
+        params.RelatedEntityId === undefined
+      ) {
+        queryParams.RelatedEntityId = params.entityId;
+      }
+    }
+
     const response = await this.client.get<DynamicResponse<Media>>("/media", {
-      params,
+      params: queryParams,
     });
     return response.data;
   }

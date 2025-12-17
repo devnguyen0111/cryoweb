@@ -69,7 +69,7 @@ export function Modal({
           </Button>
         </div>
         <div
-          className={`overflow-y-auto px-6 py-6 ${
+          className={`overflow-auto px-6 py-6 ${
             size === "2xl" || size === "full"
               ? "max-h-[85vh]"
               : "max-h-[80vh]"

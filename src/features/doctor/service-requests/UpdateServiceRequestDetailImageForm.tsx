@@ -37,16 +37,19 @@ export function UpdateServiceRequestDetailImageForm({
     mutationFn: async (file: File) => {
       return await api.media.uploadMedia({
         file,
-        entityType: "ServiceRequestDetail",
+        entityType: "ServiceRequestDetails",
         entityId: detail.id,
         description: `Image for service request detail ${detail.serviceName || detail.id}`,
       });
     },
     onSuccess: (response) => {
-      if (response.data?.fileUrl) {
-        setImageUrl(response.data.fileUrl);
-        setImagePreview(response.data.fileUrl);
+      const imagePath = response.data?.filePath || response.data?.fileUrl;
+      if (imagePath) {
+        setImageUrl(imagePath);
+        setImagePreview(imagePath);
         toast.success("Image uploaded successfully");
+      } else {
+        toast.error("Upload successful but no image URL returned");
       }
     },
     onError: (error: any) => {
@@ -61,17 +64,28 @@ export function UpdateServiceRequestDetailImageForm({
       imageUrl?: string | null;
       fileUrl?: string | null;
       mediaId?: string | null;
+      shouldClose?: boolean;
     }) => {
+      // Preserve all existing fields to prevent data loss
       return await api.serviceRequestDetails.updateServiceRequestDetails(
         detail.id,
         {
+          // Preserve existing values
+          serviceRequestId: detail.serviceRequestId,
+          serviceId: detail.serviceId,
+          quantity: detail.quantity,
+          unitPrice: detail.unitPrice,
+          totalPrice: detail.totalPrice,
+          discount: detail.discount ?? null,
+          notes: detail.notes ?? null,
+          // Update image fields
           imageUrl: data.imageUrl,
           fileUrl: data.fileUrl,
           mediaId: data.mediaId,
         }
       );
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast.success("Service request detail updated successfully");
       queryClient.invalidateQueries({
         queryKey: ["service-request-details", detail.serviceRequestId],
@@ -80,7 +94,10 @@ export function UpdateServiceRequestDetailImageForm({
         queryKey: ["service-request", "detail", detail.serviceRequestId],
       });
       onSuccess?.();
-      handleClose();
+      // Only close modal if explicitly requested (from handleSave)
+      if (variables.shouldClose) {
+        handleClose();
+      }
     },
     onError: (error: any) => {
       const message =
@@ -123,7 +140,26 @@ export function UpdateServiceRequestDetailImageForm({
 
   const handleUpload = async () => {
     if (selectedFile) {
-      await uploadMediaMutation.mutateAsync(selectedFile);
+      try {
+        const uploadResponse =
+          await uploadMediaMutation.mutateAsync(selectedFile);
+        const imagePath =
+          uploadResponse.data?.filePath || uploadResponse.data?.fileUrl;
+        if (imagePath) {
+          // Automatically save to database after successful upload
+          // Don't close modal after upload, just save and refresh
+          await updateDetailMutation.mutateAsync({
+            imageUrl: imagePath,
+            fileUrl: imagePath,
+            mediaId: uploadResponse.data.id,
+            shouldClose: false, // Don't close modal after upload
+          });
+        } else {
+          toast.error("Upload successful but no image URL returned");
+        }
+      } catch (error) {
+        // Error already handled in mutation
+      }
     }
   };
 
@@ -133,12 +169,17 @@ export function UpdateServiceRequestDetailImageForm({
       try {
         const uploadResponse =
           await uploadMediaMutation.mutateAsync(selectedFile);
-        if (uploadResponse.data?.fileUrl) {
+        const imagePath =
+          uploadResponse.data?.filePath || uploadResponse.data?.fileUrl;
+        if (imagePath) {
           await updateDetailMutation.mutateAsync({
-            imageUrl: uploadResponse.data.fileUrl,
-            fileUrl: uploadResponse.data.fileUrl,
+            imageUrl: imagePath,
+            fileUrl: imagePath,
             mediaId: uploadResponse.data.id,
+            shouldClose: true, // Close modal after save
           });
+        } else {
+          toast.error("Upload successful but no image URL returned");
         }
       } catch (error) {
         // Error already handled in mutation
@@ -148,6 +189,7 @@ export function UpdateServiceRequestDetailImageForm({
       await updateDetailMutation.mutateAsync({
         imageUrl: imageUrl,
         fileUrl: imageUrl,
+        shouldClose: true, // Close modal after save
       });
     } else {
       // Remove image
@@ -155,6 +197,7 @@ export function UpdateServiceRequestDetailImageForm({
         imageUrl: null,
         fileUrl: null,
         mediaId: null,
+        shouldClose: true, // Close modal after save
       });
     }
   };

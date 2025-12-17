@@ -5,11 +5,12 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import type { LabSampleSperm } from "@/api/types";
+import type { LabSampleDetailResponse } from "@/api/types";
 import { SpermSampleDetailModal } from "@/features/doctor/samples/SpermSampleDetailModal";
-import { Eye, Filter } from "lucide-react";
+import { Eye, Filter, X } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
 
@@ -20,19 +21,48 @@ export const Route = createFileRoute("/doctor/samples")({
 function DoctorSamplesComponent() {
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [showAssessedOnly, setShowAssessedOnly] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [canFrozenFilter, setCanFrozenFilter] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [patientIdFilter, setPatientIdFilter] = useState<string>("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  const filters = useMemo(
+    () => ({
+      SampleType: "Sperm" as const,
+      Status: statusFilter || undefined,
+      CanFrozen: canFrozenFilter === "true" ? true : canFrozenFilter === "false" ? false : undefined,
+      SearchTerm: searchTerm || undefined,
+      PatientId: patientIdFilter || undefined,
+      Page: 1,
+      Size: 100,
+      Sort: "collectionDate",
+      Order: "desc" as const,
+    }),
+    [statusFilter, canFrozenFilter, searchTerm, patientIdFilter]
+  );
 
   const { data, isLoading } = useQuery({
-    queryKey: ["samples", { pageNumber: 1, pageSize: 100 }],
-    queryFn: () => api.sample.getSamples({ pageNumber: 1, pageSize: 100 }),
+    queryKey: ["samples", "all-detail", filters],
+    queryFn: () => api.sample.getAllDetailSamples(filters),
   });
 
-  // Filter for assessed sperm samples
+  const hasActiveFilters = statusFilter || canFrozenFilter || searchTerm || patientIdFilter;
+
+  const resetFilters = () => {
+    setStatusFilter("");
+    setCanFrozenFilter("");
+    setSearchTerm("");
+    setPatientIdFilter("");
+  };
+
+  // Filter for assessed sperm samples (client-side filter for "Assessed Only" toggle)
   const assessedSpermSamples = useMemo(() => {
     if (!data?.data) return [];
 
     const spermSamples = data.data.filter(
       (sample) => sample.sampleType === "Sperm"
-    ) as LabSampleSperm[];
+    ) as LabSampleDetailResponse[];
 
     if (!showAssessedOnly) {
       return spermSamples;
@@ -40,41 +70,52 @@ function DoctorSamplesComponent() {
 
     // Filter for samples that have been assessed
     // - Status "QualityChecked" means already assessed (regardless of quality data)
-    // - Other statuses (Stored, Processing, Used) require quality data to be present
+    // - Other statuses (Stored, Processing, Used, Frozen) require quality data to be present
     return spermSamples.filter((sample) => {
       // If status is QualityChecked, it's already assessed
       if (sample.status === "QualityChecked") {
         return true;
       }
 
-      // For other statuses, check if quality data exists
+      // For other statuses, check if quality data exists in nested sperm object
+      const sperm = sample.sperm;
       const hasQualityData =
-        sample.volume !== undefined ||
-        sample.concentration !== undefined ||
-        sample.motility !== undefined ||
-        sample.morphology !== undefined;
+        (sperm?.volume !== undefined && sperm.volume !== null) ||
+        (sperm?.concentration !== undefined && sperm.concentration !== null) ||
+        (sperm?.motility !== undefined && sperm.motility !== null) ||
+        (sperm?.morphology !== undefined && sperm.morphology !== null);
 
       // Other assessed statuses require quality data
       const isAssessed =
         hasQualityData &&
         (sample.status === "Stored" ||
           sample.status === "Processing" ||
-          sample.status === "Used");
+          sample.status === "Used" ||
+          sample.status === "Frozen");
 
       return isAssessed;
     });
   }, [data?.data, showAssessedOnly]);
 
-  const formatDate = (dateString?: string) => {
+  const formatDate = (dateString?: string | null) => {
     if (!dateString) return "—";
     try {
-      return new Date(dateString).toLocaleDateString("en-US", {
+      const date = new Date(dateString);
+      // Check if date is valid and not a default/invalid date
+      if (
+        Number.isNaN(date.getTime()) ||
+        date.getFullYear() < 1900 ||
+        dateString === "0001-01-01T00:00:00"
+      ) {
+        return "—";
+      }
+      return date.toLocaleDateString("en-US", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
       });
     } catch {
-      return dateString;
+      return "—";
     }
   };
 
@@ -101,15 +142,119 @@ function DoctorSamplesComponent() {
                 List of sperm samples received after quality assessment
               </p>
             </div>
-            <Button
-              variant={showAssessedOnly ? "default" : "outline"}
-              onClick={() => setShowAssessedOnly(!showAssessedOnly)}
-              className="flex items-center gap-2"
-            >
-              <Filter className="h-4 w-4" />
-              {showAssessedOnly ? "Assessed Only" : "All Samples"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={showAssessedOnly ? "default" : "outline"}
+                onClick={() => setShowAssessedOnly(!showAssessedOnly)}
+                className="flex items-center gap-2"
+              >
+                {showAssessedOnly ? "Assessed Only" : "All Samples"}
+              </Button>
+              <Button
+                variant={showFilters ? "default" : "outline"}
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center gap-2"
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+                {hasActiveFilters && (
+                  <Badge className="ml-1 bg-red-500 text-white">
+                    {[statusFilter, canFrozenFilter, searchTerm, patientIdFilter].filter(Boolean).length}
+                  </Badge>
+                )}
+              </Button>
+            </div>
           </div>
+
+          {/* Filters Card */}
+          {showFilters && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Filters</CardTitle>
+                  <div className="flex items-center gap-2">
+                    {hasActiveFilters && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={resetFilters}
+                        className="text-sm"
+                      >
+                        Clear all
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowFilters(false)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Status
+                    </label>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="">All statuses</option>
+                      <option value="Collected">Collected</option>
+                      <option value="Processing">Processing</option>
+                      <option value="Stored">Stored</option>
+                      <option value="Used">Used</option>
+                      <option value="Discarded">Discarded</option>
+                      <option value="QualityChecked">Quality Checked</option>
+                      <option value="Frozen">Frozen</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Can Frozen
+                    </label>
+                    <select
+                      value={canFrozenFilter}
+                      onChange={(e) => setCanFrozenFilter(e.target.value)}
+                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="">All</option>
+                      <option value="true">Can Frozen</option>
+                      <option value="false">Cannot Frozen</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Search (Sample Code)
+                    </label>
+                    <Input
+                      placeholder="e.g. SP-2025"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Patient ID
+                    </label>
+                    <Input
+                      placeholder="Enter patient ID"
+                      value={patientIdFilter}
+                      onChange={(e) => setPatientIdFilter(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -164,23 +309,27 @@ function DoctorSamplesComponent() {
                                 </Badge>
                               </td>
                               <td className="p-3 text-sm">
-                                {sample.volume !== undefined
-                                  ? `${sample.volume} mL`
+                                {sample.sperm?.volume !== undefined &&
+                                sample.sperm.volume !== null
+                                  ? `${sample.sperm.volume} mL`
                                   : "—"}
                               </td>
                               <td className="p-3 text-sm">
-                                {sample.concentration !== undefined
-                                  ? `${sample.concentration} million/mL`
+                                {sample.sperm?.concentration !== undefined &&
+                                sample.sperm.concentration !== null
+                                  ? `${sample.sperm.concentration} million/mL`
                                   : "—"}
                               </td>
                               <td className="p-3 text-sm">
-                                {sample.motility !== undefined
-                                  ? `${sample.motility}%`
+                                {sample.sperm?.motility !== undefined &&
+                                sample.sperm.motility !== null
+                                  ? `${sample.sperm.motility}%`
                                   : "—"}
                               </td>
                               <td className="p-3 text-sm">
-                                {sample.morphology !== undefined
-                                  ? `${sample.morphology}%`
+                                {sample.sperm?.morphology !== undefined &&
+                                sample.sperm.morphology !== null
+                                  ? `${sample.sperm.morphology}%`
                                   : "—"}
                               </td>
                               <td className="p-3">

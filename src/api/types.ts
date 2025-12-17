@@ -1573,6 +1573,87 @@ export interface SampleListQuery extends GetLabSamplesRequest {
   searchTerm?: string;
 }
 
+// Lab Sample Detail Response (with nested objects)
+export interface LabSampleSpermDetail {
+  volume?: number | null;
+  concentration?: number | null;
+  motility?: number | null;
+  progressiveMotility?: number | null;
+  morphology?: number | null;
+  ph?: number | null;
+  viscosity?: string | null;
+  liquefaction?: string | null;
+  color?: string | null;
+  totalSpermCount?: number | null;
+  notes?: string | null;
+}
+
+export interface LabSampleOocyteDetail {
+  quantity?: number | null;
+  maturity?: string | null;
+  quality?: string | null;
+  notes?: string | null;
+}
+
+export interface LabSampleEmbryoDetail {
+  quantity?: number | null;
+  stage?: string | null;
+  quality?: string | null;
+  creationDate?: string | null;
+  notes?: string | null;
+}
+
+export interface LabSamplePatientInfo {
+  id: string;
+  fullName?: string | null;
+  email?: string | null;
+  phoneNumber?: string | null;
+  dob?: string | null;
+  gender?: string | null;
+}
+
+export interface LabSampleDetailResponse {
+  id: string;
+  patientId: string;
+  sampleCode: string;
+  sampleType: SampleType;
+  status: SpecimenStatus;
+  collectionDate: string;
+  isAvailable?: boolean;
+  isStoraged?: boolean;
+  storageDate?: string | null;
+  expiryDate?: string | null;
+  quality?: string | null;
+  notes?: string | null;
+  canFrozen?: boolean;
+  sperm?: LabSampleSpermDetail | null;
+  oocyte?: LabSampleOocyteDetail | null;
+  embryo?: LabSampleEmbryoDetail | null;
+  patient?: LabSamplePatientInfo;
+}
+
+export interface GetAllDetailSamplesQuery {
+  SampleType: string; // Required
+  Status?: string;
+  CanFrozen?: boolean;
+  SearchTerm?: string;
+  PatientId?: string;
+  Page?: number;
+  Size?: number;
+  Sort?: string;
+  Order?: string;
+  // Legacy parameters (for backward compatibility)
+  pageNumber?: number;
+  pageSize?: number;
+  sampleType?: string;
+  status?: string;
+  canFrozen?: boolean;
+  searchTerm?: string;
+  patientId?: string;
+  sort?: string;
+  order?: string;
+}
+
 // ============================================================================
 // Transaction Types
 // ============================================================================
@@ -1822,12 +1903,28 @@ export interface GetPrescriptionsRequest {
 export interface Media {
   id: string;
   fileName: string;
-  fileUrl: string;
+  fileUrl?: string; // Legacy field
+  filePath?: string; // Primary field from API response
+  originalFileName?: string;
   fileSize: number;
-  mimeType: string;
-  entityType?: string;
-  entityId?: string;
+  mimeType?: string; // Legacy field
+  fileType?: string; // Primary field from API response
+  fileExtension?: string;
+  entityType?: string; // Legacy field
+  relatedEntityType?: string; // Primary field from API response
+  entityId?: string; // Legacy field
+  relatedEntityId?: string; // Primary field from API response
   description?: string;
+  title?: string;
+  category?: string;
+  tags?: string;
+  uploadDate?: string;
+  uploadedBy?: string;
+  uploadedByUserId?: string;
+  isPublic?: boolean;
+  thumbnailPath?: string | null;
+  storageLocation?: string;
+  notes?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1837,6 +1934,11 @@ export interface UploadMediaRequest {
   entityType?: string;
   entityId?: string;
   description?: string;
+  title?: string;
+  category?: string;
+  tags?: string;
+  isPublic?: boolean;
+  notes?: string;
 }
 
 export interface UpdateMediaRequest {
@@ -1846,6 +1948,17 @@ export interface UpdateMediaRequest {
 }
 
 export interface GetMediasRequest {
+  // New API parameters (matching Swagger)
+  SearchTerm?: string;
+  RelatedEntityType?: string;
+  RelatedEntityId?: string;
+  PatientId?: string;
+  UpLoadByUserId?: string;
+  Page?: number;
+  Size?: number;
+  Sort?: string;
+  Order?: string;
+  // Legacy parameters (for backward compatibility)
   pageNumber?: number;
   pageSize?: number;
   entityType?: string;

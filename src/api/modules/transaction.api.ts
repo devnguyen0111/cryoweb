@@ -113,6 +113,27 @@ export class TransactionApi {
   }
 
   /**
+   * Create cash payment transaction
+   * POST /api/transaction/cash-payment
+   * Uses query parameters: RelatedEntityType and RelatedEntityId
+   */
+  async createCashPayment(
+    data: CreateTransactionRequest
+  ): Promise<BaseResponse<Transaction>> {
+    const queryParams: Record<string, unknown> = {
+      RelatedEntityType: data.relatedEntityType,
+      RelatedEntityId: data.relatedEntityId,
+    };
+
+    const response = await this.client.post<BaseResponse<Transaction>>(
+      "/transaction/cash-payment",
+      undefined, // No body
+      { params: queryParams }
+    );
+    return response.data;
+  }
+
+  /**
    * Create transaction and get payment URL/QR code
    * Uses the standard createTransaction endpoint which returns paymentUrl
    */

@@ -11,7 +11,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { X, FileText, Download, ExternalLink } from "lucide-react";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -917,6 +917,28 @@ function MedicalRecordsTab({ patientId }: { patientId: string }) {
       },
     });
 
+  // Fetch media files (PDFs) for the selected medical record
+  const { data: mediaFiles, isLoading: mediaLoading } = useQuery({
+    queryKey: ["media", "medical-record", selectedRecordId],
+    enabled: !!selectedRecordId,
+    queryFn: async () => {
+      if (!selectedRecordId) return [];
+      try {
+        const response = await api.media.getMedias({
+          RelatedEntityType: "MedicalRecord",
+          RelatedEntityId: selectedRecordId,
+          Size: 100, // Get all files
+          Sort: "uploadDate",
+          Order: "desc",
+        });
+        return response.data || [];
+      } catch (error) {
+        console.error("Error fetching media files:", error);
+        return [];
+      }
+    },
+  });
+
   const medicalRecords = medicalRecordsData || [];
 
   const formatDate = (dateString?: string | null) => {
@@ -1068,7 +1090,7 @@ function MedicalRecordsTab({ patientId }: { patientId: string }) {
             Loading medical record details...
           </div>
         ) : selectedRecord ? (
-          <div className="space-y-6 max-h-[80vh] overflow-y-auto">
+          <div className="space-y-6">
             {/* Header Information */}
             <Card>
               <CardHeader>
@@ -1240,6 +1262,102 @@ function MedicalRecordsTab({ patientId }: { patientId: string }) {
                 </CardContent>
               </Card>
             )}
+
+            {/* Attached Files (PDFs) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Attached Files</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {mediaLoading ? (
+                  <div className="py-4 text-center text-sm text-gray-500">
+                    Loading files...
+                  </div>
+                ) : mediaFiles && mediaFiles.length > 0 ? (
+                  <div className="space-y-2">
+                    {mediaFiles.map((file: any) => {
+                      const isPdf = file.fileType === "application/pdf" || 
+                                   file.fileExtension === ".pdf" ||
+                                   file.fileName.toLowerCase().endsWith(".pdf");
+                      const fileUrl = file.filePath || file.fileUrl || "";
+                      
+                      return (
+                        <div
+                          key={file.id}
+                          className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 p-3 hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="flex-shrink-0">
+                              <FileText className="h-5 w-5 text-red-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {file.originalFileName || file.fileName}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-gray-500">
+                                  {file.fileSize
+                                    ? `${(file.fileSize / 1024).toFixed(1)} KB`
+                                    : ""}
+                                </span>
+                                {file.uploadDate && (
+                                  <>
+                                    <span className="text-xs text-gray-400">•</span>
+                                    <span className="text-xs text-gray-500">
+                                      {new Date(file.uploadDate).toLocaleDateString("en-GB", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "numeric",
+                                      })}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {isPdf && fileUrl && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(fileUrl, "_blank")}
+                                className="flex items-center gap-1"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                                View
+                              </Button>
+                            )}
+                            {fileUrl && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const link = document.createElement("a");
+                                  link.href = fileUrl;
+                                  link.download = file.originalFileName || file.fileName;
+                                  link.target = "_blank";
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                }}
+                                className="flex items-center gap-1"
+                              >
+                                <Download className="h-4 w-4" />
+                                Download
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-4 text-center text-sm text-gray-500">
+                    No files attached
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         ) : (
           <div className="py-12 text-center text-gray-500">

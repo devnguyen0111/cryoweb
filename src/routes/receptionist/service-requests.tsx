@@ -11,6 +11,20 @@ import { api } from "@/api/client";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
+import { getFullNameFromObject } from "@/utils/name-helpers";
+import type { Appointment, Patient } from "@/api/types";
+import { ServiceRequestDetailModal } from "@/features/doctor/service-requests/ServiceRequestDetailModal";
+
+const formatDate = (value?: string | null) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -29,12 +43,21 @@ function ReceptionistServiceRequestsRoute() {
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [page, setPage] = useState(1);
+  const [detailModalRequestId, setDetailModalRequestId] = useState<
+    string | null
+  >(null);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
       queryClient.invalidateQueries({
         queryKey: ["receptionist", "service-requests"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "appointments"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["receptionist", "patients"],
       }),
     ]);
     setIsRefreshing(false);
@@ -89,9 +112,148 @@ function ReceptionistServiceRequestsRoute() {
       } as any),
   });
 
-  const total = data?.metaData?.totalCount ?? 0;
-  const totalPages = data?.metaData?.totalPages ?? 1;
   const requests = data?.data ?? [];
+  const apiTotal = data?.metaData?.totalCount ?? 0;
+  // Use requests.length as fallback if API returns 0 total but we have data
+  const total = apiTotal > 0 ? apiTotal : requests.length;
+  const totalPages = data?.metaData?.totalPages ?? 1;
+
+  // Extract unique appointment IDs from service requests
+  const appointmentIds = useMemo(() => {
+    if (!requests.length) return [];
+    return Array.from(
+      new Set(
+        requests
+          .map((req) => req.appointmentId)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+  }, [requests]);
+
+  // Fetch appointments first (appointments may have nested patient data)
+  const appointmentsQuery = useQuery({
+    queryKey: ["receptionist", "appointments", "by-ids", appointmentIds],
+    enabled: appointmentIds.length > 0,
+    queryFn: async () => {
+      const results: Record<string, Appointment & { patient?: Patient }> = {};
+      await Promise.all(
+        appointmentIds.map(async (id) => {
+          try {
+            const response = await api.appointment.getAppointmentById(id);
+            if (response.data) {
+              // AppointmentDetailResponse extends Appointment and may have nested patient
+              const aptDetail = response.data as Appointment & {
+                patient?: Patient;
+              };
+
+              // Ensure patientId is set if we have nested patient
+              if (aptDetail.patient && !aptDetail.patientId) {
+                aptDetail.patientId = aptDetail.patient.id;
+              }
+
+              results[id] = aptDetail;
+            }
+          } catch (error) {
+            console.warn(`Failed to fetch appointment ${id}:`, error);
+          }
+        })
+      );
+      return results;
+    },
+  });
+
+  // Extract patient IDs from service requests and appointments
+  const patientIds = useMemo(() => {
+    const ids: string[] = [];
+
+    // Get patientIds directly from service requests if available
+    if (requests.length) {
+      requests.forEach((req) => {
+        if (req.patientId) {
+          ids.push(req.patientId);
+        }
+      });
+    }
+
+    // Get patientIds from appointments
+    const appointments = appointmentsQuery.data ?? {};
+    Object.values(appointments).forEach((apt) => {
+      // Try multiple ways to get patientId from appointment
+      const aptPatientId =
+        apt.patientId ?? apt.patient?.id ?? (apt as any)?.patientId;
+
+      if (aptPatientId) {
+        ids.push(aptPatientId);
+      }
+
+      // Also store nested patient in patients map if available
+      if (apt.patient && apt.patient.id) {
+        if (!ids.includes(apt.patient.id)) {
+          ids.push(apt.patient.id);
+        }
+      }
+    });
+
+    return Array.from(new Set(ids));
+  }, [requests, appointmentsQuery.data]);
+
+  // Fetch patients after we have patientIds from both sources
+  // Also include nested patients from appointments
+  const { data: patientsData, isLoading: patientsLoading } = useQuery({
+    queryKey: [
+      "receptionist",
+      "patients",
+      "by-ids",
+      patientIds,
+      appointmentsQuery.data,
+    ],
+    enabled:
+      patientIds.length > 0 ||
+      Object.keys(appointmentsQuery.data ?? {}).length > 0,
+    queryFn: async () => {
+      const results: Record<string, any> = {};
+
+      // First, extract nested patients from appointments if available
+      const appointments = appointmentsQuery.data ?? {};
+      Object.values(appointments).forEach((apt) => {
+        if (apt.patient && apt.patient.id) {
+          results[apt.patient.id] = apt.patient;
+        }
+      });
+
+      // Then fetch remaining patients that weren't in appointments
+      const missingPatientIds = patientIds.filter((id) => !results[id]);
+
+      if (missingPatientIds.length > 0) {
+        await Promise.all(
+          missingPatientIds.map(async (id) => {
+            try {
+              // Try getPatientDetails first (has accountInfo)
+              try {
+                const response = await api.patient.getPatientDetails(id);
+                if (response.data) {
+                  results[id] = response.data;
+                }
+              } catch (error) {
+                // Fallback to getPatientById
+                const response = await api.patient.getPatientById(id);
+                if (response.data) {
+                  results[id] = response.data;
+                }
+              }
+            } catch (error) {
+              console.warn(`Failed to fetch patient ${id}:`, error);
+            }
+          })
+        );
+      }
+
+      return results;
+    },
+  });
+
+  const patients = patientsData ?? {};
+  const appointments = appointmentsQuery.data ?? {};
 
   const filteredRequests = useMemo(() => {
     if (!requests.length) {
@@ -101,10 +263,11 @@ function ReceptionistServiceRequestsRoute() {
       if (!dateFrom && !dateTo) {
         return true;
       }
-      if (!request.requestedDate) {
+      const dateValue = request.requestDate ?? request.requestedDate;
+      if (!dateValue) {
         return false;
       }
-      const requestDate = new Date(request.requestedDate);
+      const requestDate = new Date(dateValue);
       if (Number.isNaN(requestDate.getTime())) {
         return true;
       }
@@ -267,7 +430,6 @@ function ReceptionistServiceRequestsRoute() {
                       <thead>
                         <tr className="bg-gray-50 text-left text-gray-600">
                           <th className="px-4 py-3 font-medium">Request</th>
-                          <th className="px-4 py-3 font-medium">Service</th>
                           <th className="px-4 py-3 font-medium">
                             Requested date
                           </th>
@@ -277,25 +439,98 @@ function ReceptionistServiceRequestsRoute() {
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {filteredRequests.map((request) => {
-                          const serviceName = request.requestCode || "—";
+                          const appointment = request.appointmentId
+                            ? appointments[request.appointmentId]
+                            : null;
+
+                          // Try multiple ways to get patientId
+                          // Priority: request.patientId > appointment.patientId > appointment.patient.id
+                          const patientId =
+                            request.patientId ??
+                            appointment?.patientId ??
+                            appointment?.patient?.id ??
+                            null;
+
+                          // Try to get patient from multiple sources
+                          // Priority: patients map > appointment.patient (nested)
+                          const patient =
+                            (patientId ? patients[patientId] : null) ??
+                            appointment?.patient ??
+                            null;
+
+                          const isPatientLoading =
+                            (patientId || request.appointmentId) &&
+                            (patientsLoading || appointmentsQuery.isLoading) &&
+                            !patient;
+
+                          // Get patient name with priority: accountInfo > patient object (like Doctor dashboard)
+                          const patientName = (() => {
+                            if (!patient) return "";
+                            const patientWithAccount = patient as any;
+                            // Try to get name from accountInfo first (if PatientDetailResponse)
+                            if (patientWithAccount.accountInfo) {
+                              const accountFullName = getFullNameFromObject(
+                                patientWithAccount.accountInfo
+                              );
+                              if (accountFullName) return accountFullName;
+                            }
+                            // Fallback to patient object directly
+                            return getFullNameFromObject(patient);
+                          })();
+                          const patientCode = patient?.patientCode || null;
+
                           return (
                             <tr key={request.id} className="hover:bg-gray-50">
                               <td className="px-4 py-3">
                                 <div className="font-medium text-gray-900">
                                   #{getLast4Chars(request.id)}
                                 </div>
-                                <div className="text-xs text-gray-500">
-                                  Patient ID:{" "}
-                                  {request.patientId
-                                    ? getLast4Chars(request.patientId)
-                                    : "Unassigned"}
-                                </div>
+                                {isPatientLoading ? (
+                                  <>
+                                    <div className="text-xs font-semibold text-gray-900">
+                                      Loading...
+                                    </div>
+                                    {patientId && (
+                                      <p className="text-xs text-gray-500">
+                                        ID: {getLast4Chars(patientId)}
+                                      </p>
+                                    )}
+                                  </>
+                                ) : (patientName || patientCode) && patient ? (
+                                  <>
+                                    {patientName.trim() ? (
+                                      <>
+                                        <div className="text-xs font-semibold text-gray-900">
+                                          {patientName}
+                                        </div>
+                                        {patientCode && (
+                                          <p className="text-xs text-gray-500">
+                                            {patientCode}
+                                          </p>
+                                        )}
+                                      </>
+                                    ) : (
+                                      patientCode && (
+                                        <div className="text-xs font-semibold text-gray-900">
+                                          {patientCode}
+                                        </div>
+                                      )
+                                    )}
+                                  </>
+                                ) : patientId ? (
+                                  <div className="text-xs text-gray-500">
+                                    Patient ID: {getLast4Chars(patientId)}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-gray-500">
+                                    Unassigned
+                                  </div>
+                                )}
                               </td>
                               <td className="px-4 py-3 text-gray-600">
-                                {serviceName}
-                              </td>
-                              <td className="px-4 py-3 text-gray-600">
-                                {request.requestedDate || "—"}
+                                {formatDate(
+                                  request.requestDate ?? request.requestedDate
+                                )}
                               </td>
                               <td className="px-4 py-3">
                                 <span
@@ -312,10 +547,7 @@ function ReceptionistServiceRequestsRoute() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() =>
-                                    navigate({
-                                      to: "/receptionist/service-requests/$serviceRequestId",
-                                      params: { serviceRequestId: request.id },
-                                    })
+                                    setDetailModalRequestId(request.id)
                                   }
                                 >
                                   View details
@@ -336,7 +568,7 @@ function ReceptionistServiceRequestsRoute() {
 
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-500">
-                  Showing {filteredRequests.length} / {total} requests (current
+                  Showing {filteredRequests.length} of {total} requests (current
                   page)
                 </div>
                 <div className="flex items-center gap-2">
@@ -366,6 +598,17 @@ function ReceptionistServiceRequestsRoute() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Service Request Detail Modal */}
+        {detailModalRequestId && (
+          <ServiceRequestDetailModal
+            requestId={detailModalRequestId}
+            isOpen={!!detailModalRequestId}
+            onClose={() => setDetailModalRequestId(null)}
+            allowImageUpload={false}
+            allowCreateTransaction={true}
+          />
+        )}
       </DashboardLayout>
     </ProtectedRoute>
   );

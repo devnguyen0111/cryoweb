@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { api } from "@/api/client";
+import { toast } from "sonner";
 import type {
   ServiceRequest,
   ServiceRequestDetail,
@@ -19,10 +20,13 @@ import { UpdateServiceRequestDetailImageForm } from "./UpdateServiceRequestDetai
 import { Image as ImageIcon } from "lucide-react";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { useAuth } from "@/contexts/AuthContext";
 interface ServiceRequestDetailModalProps {
   requestId: string;
   isOpen: boolean;
   onClose: () => void;
+  allowImageUpload?: boolean; // Optional prop to control image upload
+  allowCreateTransaction?: boolean; // Optional prop to control transaction creation
 }
 
 const formatDate = (value?: string | null) => {
@@ -52,9 +56,22 @@ export function ServiceRequestDetailModal({
   requestId,
   isOpen,
   onClose,
+  allowImageUpload = true, // Default to true for backward compatibility
+  allowCreateTransaction = false, // Default to false, enable for receptionist
 }: ServiceRequestDetailModalProps) {
+  const { userRole } = useAuth();
+  const queryClient = useQueryClient();
+  // Disable image upload for Receptionist role
+  const canUploadImage = allowImageUpload && userRole !== "Receptionist";
+
   const [selectedDetailForImage, setSelectedDetailForImage] =
     useState<ServiceRequestDetail | null>(null);
+  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [createdTransactionId, setCreatedTransactionId] = useState<
+    string | null
+  >(null);
   const { data: request, isLoading: requestLoading } =
     useQuery<ServiceRequest | null>({
       enabled: isOpen && Boolean(requestId),
@@ -101,6 +118,66 @@ export function ServiceRequestDetailModal({
 
   // Use serviceDetails from request if available, otherwise use fetched details
   const serviceDetails = request?.serviceDetails ?? requestDetails ?? [];
+
+  // Fetch media for all service details to get filePath
+  const detailIds = serviceDetails
+    .map((detail) => detail.id)
+    .filter((id): id is string => Boolean(id));
+
+  const { data: mediaMap } = useQuery<Record<string, string>>({
+    enabled: isOpen && detailIds.length > 0,
+    queryKey: ["media", "service-request-details", detailIds, serviceDetails],
+    queryFn: async () => {
+      const results: Record<string, string> = {};
+      // Fetch media for each detail
+      await Promise.all(
+        serviceDetails.map(async (detail) => {
+          try {
+            let mediaPath = "";
+            // If detail has mediaId, fetch by ID first
+            if (detail.mediaId) {
+              try {
+                const mediaResponse = await api.media.getMediaById(
+                  detail.mediaId
+                );
+                if (mediaResponse.data) {
+                  mediaPath =
+                    mediaResponse.data.filePath ||
+                    mediaResponse.data.fileUrl ||
+                    "";
+                }
+              } catch (error) {
+                // If fetch by ID fails, fallback to fetch by entity
+              }
+            }
+
+            // If no mediaId or fetch by ID failed, fetch by RelatedEntityId
+            if (!mediaPath) {
+              const response = await api.media.getMedias({
+                RelatedEntityType: "ServiceRequestDetails",
+                RelatedEntityId: detail.id,
+                Size: 1, // Get the latest one
+                Sort: "uploadDate",
+                Order: "desc",
+              });
+              // Get the first (latest) media's filePath
+              if (response.data && response.data.length > 0) {
+                const media = response.data[0];
+                mediaPath = media.filePath || media.fileUrl || "";
+              }
+            }
+
+            if (mediaPath) {
+              results[detail.id] = mediaPath;
+            }
+          } catch (error) {
+            // Ignore errors for individual media fetches
+          }
+        })
+      );
+      return results;
+    },
+  });
 
   const serviceIds = serviceDetails
     .map((detail) => detail.serviceId)
@@ -218,15 +295,98 @@ export function ServiceRequestDetailModal({
   const isLoading =
     requestLoading || (detailsLoading && !request?.serviceDetails);
 
-  const totalAmount =
-    request?.totalAmount ??
-    serviceDetails.reduce(
-      (sum, detail) =>
-        sum +
-        (detail.totalPrice ??
-          (detail.unitPrice ?? detail.price ?? 0) * (detail.quantity ?? 0)),
-      0
-    );
+  // Calculate total amount from service details if available, otherwise use request totalAmount
+  const totalAmount = useMemo(() => {
+    if (serviceDetails && serviceDetails.length > 0) {
+      return serviceDetails.reduce((sum, detail) => {
+        const detailTotal =
+          detail.totalPrice ??
+          (detail.unitPrice ?? detail.price ?? 0) * (detail.quantity ?? 0);
+        return sum + (detailTotal || 0);
+      }, 0);
+    }
+    return request?.totalAmount ?? 0;
+  }, [serviceDetails, request?.totalAmount]);
+
+  // Create payment transaction mutation (VNPay)
+  const createPaymentQRMutation = useMutation({
+    mutationFn: () => {
+      return api.transaction.createPaymentQR({
+        relatedEntityType: "ServiceRequest",
+        relatedEntityId: requestId,
+      });
+    },
+    onSuccess: (response) => {
+      if (response.data) {
+        setPaymentUrl(
+          response.data.paymentUrl || response.data.vnPayUrl || null
+        );
+        setCreatedTransactionId(response.data.id);
+        setShowPaymentMethodModal(false);
+        setShowPaymentModal(true);
+        toast.success("Payment transaction created successfully");
+        queryClient.invalidateQueries({
+          queryKey: ["receptionist", "transactions"],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["receptionist", "service-requests"],
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to create payment transaction. Please try again."
+      );
+    },
+  });
+
+  // Create cash transaction mutation
+  const createCashTransactionMutation = useMutation({
+    mutationFn: () => {
+      return api.transaction.createCashPayment({
+        relatedEntityType: "ServiceRequest",
+        relatedEntityId: requestId,
+      });
+    },
+    onSuccess: (response) => {
+      if (response.data) {
+        setCreatedTransactionId(response.data.id);
+        setShowPaymentMethodModal(false);
+        toast.success("Cash transaction created successfully");
+        queryClient.invalidateQueries({
+          queryKey: ["receptionist", "transactions"],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["receptionist", "service-requests"],
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to create cash transaction. Please try again."
+      );
+    },
+  });
+
+  const handleCreatePayment = () => {
+    if (totalAmount <= 0) {
+      toast.error("Total amount must be greater than 0");
+      return;
+    }
+    setShowPaymentMethodModal(true);
+  };
+
+  const handleSelectPaymentMethod = (method: "cash" | "vnpay") => {
+    if (method === "cash") {
+      createCashTransactionMutation.mutate();
+    } else {
+      createPaymentQRMutation.mutate();
+    }
+  };
 
   return (
     <Modal
@@ -434,8 +594,8 @@ export function ServiceRequestDetailModal({
             <CardContent>
               {serviceDetails && serviceDetails.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
+                  <div className="w-full">
+                    <table className="w-full min-w-full">
                       <thead>
                         <tr className="border-b">
                           <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
@@ -453,9 +613,11 @@ export function ServiceRequestDetailModal({
                           <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
                             Image
                           </th>
-                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
-                            Actions
-                          </th>
+                          {canUploadImage && (
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                              Actions
+                            </th>
+                          )}
                         </tr>
                       </thead>
                       <tbody>
@@ -466,9 +628,13 @@ export function ServiceRequestDetailModal({
                           const total =
                             detail.totalPrice ??
                             unitPrice * (detail.quantity ?? 0);
-                          const hasImage = !!(
-                            detail.imageUrl || detail.fileUrl
-                          );
+                          // Get image URL from media API or fallback to detail fields
+                          const imageUrl =
+                            mediaMap?.[detail.id] ||
+                            detail.imageUrl ||
+                            detail.fileUrl ||
+                            "";
+                          const hasImage = !!imageUrl;
                           return (
                             <tr key={detail.id} className="border-b">
                               <td className="px-4 py-2 text-sm">
@@ -490,9 +656,7 @@ export function ServiceRequestDetailModal({
                                 {hasImage ? (
                                   <div className="flex items-center gap-2">
                                     <img
-                                      src={
-                                        detail.imageUrl || detail.fileUrl || ""
-                                      }
+                                      src={imageUrl}
                                       alt={
                                         detail.serviceName || "Service image"
                                       }
@@ -511,19 +675,21 @@ export function ServiceRequestDetailModal({
                                   </span>
                                 )}
                               </td>
-                              <td className="px-4 py-2 text-sm">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    setSelectedDetailForImage(detail)
-                                  }
-                                >
-                                  <ImageIcon className="h-4 w-4 mr-1" />
-                                  {hasImage ? "Update" : "Add"} Image
-                                </Button>
-                              </td>
+                              {canUploadImage && (
+                                <td className="px-4 py-2 text-sm">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setSelectedDetailForImage(detail)
+                                    }
+                                  >
+                                    <ImageIcon className="h-4 w-4 mr-1" />
+                                    {hasImage ? "Update" : "Add"} Image
+                                  </Button>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
@@ -549,15 +715,32 @@ export function ServiceRequestDetailModal({
             </CardContent>
           </Card>
 
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
-              Close
-            </Button>
+          <div className="flex justify-between items-center gap-2">
+            {allowCreateTransaction && totalAmount > 0 && (
+              <Button
+                onClick={handleCreatePayment}
+                disabled={
+                  createPaymentQRMutation.isPending ||
+                  createCashTransactionMutation.isPending
+                }
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {createPaymentQRMutation.isPending ||
+                createCashTransactionMutation.isPending
+                  ? "Creating Transaction..."
+                  : "Create Payment Transaction"}
+              </Button>
+            )}
+            <div className="flex gap-2 ml-auto">
+              <Button variant="outline" onClick={onClose}>
+                Close
+              </Button>
+            </div>
           </div>
         </div>
       )}
 
-      {selectedDetailForImage && (
+      {selectedDetailForImage && canUploadImage && (
         <UpdateServiceRequestDetailImageForm
           detail={selectedDetailForImage}
           isOpen={!!selectedDetailForImage}
@@ -567,6 +750,145 @@ export function ServiceRequestDetailModal({
           }}
         />
       )}
+
+      {/* Payment Method Selection Modal */}
+      <Modal
+        isOpen={showPaymentMethodModal}
+        onClose={() => {
+          setShowPaymentMethodModal(false);
+        }}
+        title="Select Payment Method"
+        description="Choose how you want to process this payment"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="text-sm text-gray-600 mb-4">
+            <p className="font-medium mb-1">Total Amount:</p>
+            <p className="text-lg font-bold">{formatCurrency(totalAmount)}</p>
+          </div>
+          <div className="grid gap-3">
+            <Button
+              onClick={() => handleSelectPaymentMethod("cash")}
+              disabled={createCashTransactionMutation.isPending}
+              variant="outline"
+              className="w-full h-auto py-4 flex flex-col items-center gap-2"
+            >
+              <div className="text-lg">💵</div>
+              <div className="text-center">
+                <div className="font-semibold">Pay with Cash</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Direct cash payment
+                </div>
+              </div>
+              {createCashTransactionMutation.isPending && (
+                <div className="text-xs text-gray-500">Processing...</div>
+              )}
+            </Button>
+            <Button
+              onClick={() => handleSelectPaymentMethod("vnpay")}
+              disabled={createPaymentQRMutation.isPending}
+              variant="outline"
+              className="w-full h-auto py-4 flex flex-col items-center gap-2"
+            >
+              <div className="text-lg">💳</div>
+              <div className="text-center">
+                <div className="font-semibold">Use VNPay</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Online payment via VNPay
+                </div>
+              </div>
+              {createPaymentQRMutation.isPending && (
+                <div className="text-xs text-gray-500">Processing...</div>
+              )}
+            </Button>
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button
+              variant="ghost"
+              onClick={() => setShowPaymentMethodModal(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Payment URL Modal (VNPay) */}
+      <Modal
+        isOpen={showPaymentModal}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setPaymentUrl(null);
+          setCreatedTransactionId(null);
+        }}
+        title="Payment Transaction Created"
+        description="Click the link below to complete payment for this service request"
+        size="md"
+      >
+        <div className="space-y-4">
+          {paymentUrl ? (
+            <div className="space-y-4">
+              <div className="text-center space-y-2">
+                <p className="text-sm text-gray-600">
+                  Click the button below to open the payment page.
+                </p>
+                <div className="text-xs text-gray-500 space-y-1">
+                  <p>
+                    <span className="font-medium">Total Amount:</span>{" "}
+                    {formatCurrency(totalAmount)}
+                  </p>
+                  {createdTransactionId && (
+                    <p>
+                      <span className="font-medium">Transaction ID:</span>{" "}
+                      {getLast4Chars(createdTransactionId)}
+                    </p>
+                  )}
+                  <p>
+                    <span className="font-medium">Service Request ID:</span>{" "}
+                    {getLast4Chars(requestId)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    window.open(paymentUrl, "_blank");
+                  }}
+                >
+                  Open Payment Page
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setShowPaymentModal(false);
+                    setPaymentUrl(null);
+                    setCreatedTransactionId(null);
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-sm text-gray-500">
+              <p>No payment URL available.</p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setPaymentUrl(null);
+                  setCreatedTransactionId(null);
+                }}
+              >
+                Close
+              </Button>
+            </div>
+          )}
+        </div>
+      </Modal>
     </Modal>
   );
 }

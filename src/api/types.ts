@@ -1465,7 +1465,12 @@ export type SpecimenStatus =
   | "Stored"
   | "Used"
   | "Discarded"
-  | "QualityChecked";
+  | "QualityChecked"
+  | "Fertilized"
+  | "CulturedEmbryo"
+  | "Frozen"
+  | "Disposed"
+  | "Thawed";
 
 export interface LabSample {
   id: string;
@@ -1478,94 +1483,198 @@ export interface LabSample {
   notes?: string;
   createdAt?: string;
   updatedAt?: string;
+  isAvailable?: boolean;
+  isStoraged?: boolean;
+  storageDate?: string | null;
+  expiryDate?: string | null;
+  quality?: string | null;
+  canFrozen?: boolean;
 }
 
 export interface LabSampleSperm extends LabSample {
   volume?: number;
   concentration?: number;
   motility?: number;
+  progressiveMotility?: number;
   morphology?: number;
+  ph?: number;
+  viscosity?: string;
+  liquefaction?: string;
+  color?: string;
+  totalSpermCount?: number;
 }
 
 export interface LabSampleOocyte extends LabSample {
-  quantity: number;
+  quantity?: number;
   maturity?: string;
+  maturityStage?: string;
+  isMature?: boolean;
+  cumulusCells?: string;
+  cytoplasmAppearance?: string;
+  isVitrified?: boolean;
+  vitrificationDate?: string;
+  retrievalDate?: string;
   quality?: string;
 }
 
 export interface LabSampleEmbryo extends LabSample {
-  quantity: number;
+  quantity?: number;
   stage?: string;
   quality?: string;
-  creationDate: string; // ISO date
+  creationDate?: string; // ISO date
+  dayOfDevelopment?: number;
+  grade?: string;
+  cellCount?: number;
+  morphology?: string;
+  isBiopsied?: boolean;
+  isPGTTested?: boolean;
+  pgtResult?: string;
+  fertilizationMethod?: string;
+  labSampleOocyteId?: string;
+  labSampleSpermId?: string;
 }
 
 export interface CreateLabSampleSpermRequest {
-  patientId: string;
+  PatientId: string;
+  Volume?: number;
+  Concentration?: number;
+  Motility?: number;
+  ProgressiveMotility?: number;
+  Morphology?: number;
+  PH?: number;
+  Viscosity?: string;
+  Liquefaction?: string;
+  Color?: string;
+  TotalSpermCount?: number;
+  Notes?: string;
+  Quality?: string;
+  IsAvailable?: boolean;
+  IsQualityCheck?: boolean;
+  // Legacy support
+  patientId?: string;
   treatmentCycleId?: string;
-  collectionDate: string;
-  volume?: number;
-  concentration?: number;
-  motility?: number;
-  morphology?: number;
-  status: SpecimenStatus;
+  collectionDate?: string;
+  status?: SpecimenStatus;
   notes?: string;
 }
 
 export interface CreateLabSampleOocyteRequest {
-  patientId: string;
+  PatientId: string;
+  MaturityStage?: string;
+  IsMature?: boolean;
+  CumulusCells?: string;
+  CytoplasmAppearance?: string;
+  IsVitrified?: boolean;
+  Notes?: string;
+  Quality?: string;
+  IsAvailable?: boolean;
+  IsQualityCheck?: boolean;
+  // Legacy support
+  patientId?: string;
   treatmentCycleId?: string;
-  collectionDate: string;
-  quantity: number;
+  collectionDate?: string;
+  quantity?: number;
   maturity?: string;
-  quality?: string;
-  status: SpecimenStatus;
+  status?: SpecimenStatus;
   notes?: string;
 }
 
 export interface CreateLabSampleEmbryoRequest {
-  patientId: string;
+  PatientId: string;
+  LabSampleOocyteId: string;
+  LabSampleSpermId: string;
+  DayOfDevelopment?: number;
+  Grade?: string;
+  CellCount?: number;
+  Morphology?: string;
+  IsBiopsied?: boolean;
+  IsPGTTested?: boolean;
+  PGTResult?: string;
+  FertilizationMethod?: string;
+  Notes?: string;
+  Quality?: string;
+  IsAvailable?: boolean;
+  IsQualityCheck?: boolean;
+  // Legacy support
+  patientId?: string;
   treatmentCycleId?: string;
-  creationDate: string;
-  quantity: number;
+  creationDate?: string;
+  quantity?: number;
   stage?: string;
-  quality?: string;
-  status: SpecimenStatus;
+  status?: SpecimenStatus;
   notes?: string;
 }
 
 export interface UpdateLabSampleSpermRequest {
+  status?: SpecimenStatus;
+  notes?: string;
+  quality?: string;
+  isAvailable?: boolean;
   volume?: number;
   concentration?: number;
   motility?: number;
+  progressiveMotility?: number;
   morphology?: number;
-  status?: SpecimenStatus;
-  notes?: string;
+  ph?: number;
+  viscosity?: string;
+  liquefaction?: string;
+  color?: string;
+  totalSpermCount?: number;
 }
 
 export interface UpdateLabSampleOocyteRequest {
-  quantity?: number;
-  maturity?: string;
-  quality?: string;
   status?: SpecimenStatus;
   notes?: string;
+  quality?: string;
+  isAvailable?: boolean;
+  maturityStage?: string;
+  isMature?: boolean;
+  retrievalDate?: string;
+  cumulusCells?: string;
+  cytoplasmAppearance?: string;
+  isVitrified?: boolean;
+  vitrificationDate?: string;
+  // Legacy support
+  quantity?: number;
+  maturity?: string;
 }
 
 export interface UpdateLabSampleEmbryoRequest {
-  quantity?: number;
-  stage?: string;
-  quality?: string;
   status?: SpecimenStatus;
   notes?: string;
+  quality?: string;
+  isAvailable?: boolean;
+  dayOfDevelopment?: number;
+  grade?: string;
+  cellCount?: number;
+  morphology?: string;
+  isBiopsied?: boolean;
+  isPGTTested?: boolean;
+  pgtResult?: string;
+  fertilizationMethod?: string;
+  // Legacy support
+  quantity?: number;
+  stage?: string;
 }
 
 export interface GetLabSamplesRequest {
+  SampleType?: SampleType;
+  Status?: SpecimenStatus;
+  CanFrozen?: boolean;
+  SearchTerm?: string;
+  PatientId?: string;
+  Page?: number;
+  Size?: number;
+  Sort?: string;
+  Order?: "asc" | "desc";
+  // Legacy support
   pageNumber?: number;
   pageSize?: number;
   sampleType?: SampleType;
   patientId?: string;
   treatmentCycleId?: string;
   status?: SpecimenStatus;
+  searchTerm?: string;
 }
 
 // Legacy compatibility
@@ -1586,11 +1695,19 @@ export interface LabSampleSpermDetail {
   color?: string | null;
   totalSpermCount?: number | null;
   notes?: string | null;
+  quality?: string | null;
 }
 
 export interface LabSampleOocyteDetail {
   quantity?: number | null;
   maturity?: string | null;
+  maturityStage?: string | null;
+  isMature?: boolean | null;
+  cumulusCells?: string | null;
+  cytoplasmAppearance?: string | null;
+  isVitrified?: boolean | null;
+  vitrificationDate?: string | null;
+  retrievalDate?: string | null;
   quality?: string | null;
   notes?: string | null;
 }
@@ -1600,16 +1717,29 @@ export interface LabSampleEmbryoDetail {
   stage?: string | null;
   quality?: string | null;
   creationDate?: string | null;
+  dayOfDevelopment?: number | null;
+  grade?: string | null;
+  cellCount?: number | null;
+  morphology?: string | null;
+  isBiopsied?: boolean | null;
+  isPGTTested?: boolean | null;
+  pgtResult?: string | null;
+  fertilizationMethod?: string | null;
+  labSampleOocyteId?: string | null;
+  labSampleSpermId?: string | null;
   notes?: string | null;
 }
 
 export interface LabSamplePatientInfo {
   id: string;
-  fullName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  fullName?: string | null; // Legacy support
   email?: string | null;
   phoneNumber?: string | null;
   dob?: string | null;
   gender?: string | null;
+  patientCode?: string | null;
 }
 
 export interface LabSampleDetailResponse {
@@ -1626,6 +1756,7 @@ export interface LabSampleDetailResponse {
   quality?: string | null;
   notes?: string | null;
   canFrozen?: boolean;
+  treatmentCycleId?: string;
   sperm?: LabSampleSpermDetail | null;
   oocyte?: LabSampleOocyteDetail | null;
   embryo?: LabSampleEmbryoDetail | null;
@@ -1696,11 +1827,12 @@ export interface Transaction {
 /**
  * Create transaction request
  * POST /api/transaction
- * Uses query parameters: RelatedEntityType and RelatedEntityId
+ * Uses query parameters: RelatedEntityType, RelatedEntityId, and PaymentGateway
  */
 export interface CreateTransactionRequest {
   relatedEntityType: "ServiceRequest" | "Appointment" | "CryoStorageContract";
   relatedEntityId: string;
+  paymentGateway?: "VnPay" | "PayOS";
 }
 
 export interface GetTransactionsRequest {

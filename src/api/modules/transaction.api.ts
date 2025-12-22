@@ -94,7 +94,7 @@ export class TransactionApi {
   /**
    * Create a new transaction
    * POST /api/transaction
-   * Uses query parameters: RelatedEntityType and RelatedEntityId
+   * Uses query parameters: RelatedEntityType, RelatedEntityId, and PaymentGateway
    */
   async createTransaction(
     data: CreateTransactionRequest
@@ -103,6 +103,11 @@ export class TransactionApi {
       RelatedEntityType: data.relatedEntityType,
       RelatedEntityId: data.relatedEntityId,
     };
+
+    // Add PaymentGateway if provided
+    if (data.paymentGateway) {
+      queryParams.PaymentGateway = data.paymentGateway;
+    }
 
     const response = await this.client.post<BaseResponse<Transaction>>(
       "/transaction",
@@ -136,6 +141,7 @@ export class TransactionApi {
   /**
    * Create transaction and get payment URL/QR code
    * Uses the standard createTransaction endpoint which returns paymentUrl
+   * For PayOS, the response may include qrCodeData or qrCodeUrl
    */
   async createPaymentQR(
     data: CreateTransactionRequest
@@ -144,15 +150,25 @@ export class TransactionApi {
   > {
     // Create transaction using the new API format
     const transactionResponse = await this.createTransaction(data);
-    if (transactionResponse.data?.paymentUrl) {
+    
+    // Check if response includes QR code data (PayOS) or payment URL
+    const transactionData = transactionResponse.data;
+    if (transactionData) {
+      // PayOS may return qrCodeData or qrCodeUrl in the response
+      // VnPay typically returns paymentUrl
+      const qrCodeData = (transactionData as any).qrCodeData;
+      const qrCodeUrl = (transactionData as any).qrCodeUrl || transactionData.paymentUrl;
+      
       return {
         ...transactionResponse,
         data: {
-          ...transactionResponse.data,
-          qrCodeUrl: transactionResponse.data.paymentUrl,
+          ...transactionData,
+          qrCodeUrl,
+          qrCodeData,
         },
       };
     }
+    
     // Return transaction response (paymentUrl may be generated later)
     return {
       ...transactionResponse,

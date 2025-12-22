@@ -68,7 +68,9 @@ export function ServiceRequestDetailModal({
     useState<ServiceRequestDetail | null>(null);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentGateway, setPaymentGateway] = useState<"VnPay" | "PayOS">("PayOS");
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [createdTransactionId, setCreatedTransactionId] = useState<
     string | null
   >(null);
@@ -308,19 +310,29 @@ export function ServiceRequestDetailModal({
     return request?.totalAmount ?? 0;
   }, [serviceDetails, request?.totalAmount]);
 
-  // Create payment transaction mutation (VNPay)
+  // Create payment transaction mutation (PayOS/VnPay)
   const createPaymentQRMutation = useMutation({
     mutationFn: () => {
       return api.transaction.createPaymentQR({
         relatedEntityType: "ServiceRequest",
         relatedEntityId: requestId,
+        paymentGateway: paymentGateway,
       });
     },
     onSuccess: (response) => {
       if (response.data) {
-        setPaymentUrl(
-          response.data.paymentUrl || response.data.vnPayUrl || null
-        );
+        // For PayOS, check for qrCodeData or qrCodeUrl
+        // For VnPay, use paymentUrl
+        const qrCodeData = (response.data as any).qrCodeData;
+        const qrCodeUrl = (response.data as any).qrCodeUrl || response.data.paymentUrl || response.data.vnPayUrl;
+        
+        if (qrCodeData) {
+          setQrCodeData(qrCodeData);
+        }
+        if (qrCodeUrl) {
+          setPaymentUrl(qrCodeUrl);
+        }
+        
         setCreatedTransactionId(response.data.id);
         setShowPaymentMethodModal(false);
         setShowPaymentModal(true);
@@ -380,10 +392,12 @@ export function ServiceRequestDetailModal({
     setShowPaymentMethodModal(true);
   };
 
-  const handleSelectPaymentMethod = (method: "cash" | "vnpay") => {
+  const handleSelectPaymentMethod = (method: "cash" | "payos" | "vnpay") => {
     if (method === "cash") {
       createCashTransactionMutation.mutate();
     } else {
+      // Set payment gateway before creating transaction
+      setPaymentGateway(method === "payos" ? "PayOS" : "VnPay");
       createPaymentQRMutation.mutate();
     }
   };
@@ -785,6 +799,23 @@ export function ServiceRequestDetailModal({
               )}
             </Button>
             <Button
+              onClick={() => handleSelectPaymentMethod("payos")}
+              disabled={createPaymentQRMutation.isPending}
+              variant="outline"
+              className="w-full h-auto py-4 flex flex-col items-center gap-2"
+            >
+              <div className="text-lg">📱</div>
+              <div className="text-center">
+                <div className="font-semibold">Use PayOS</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Online payment via PayOS (QR Code)
+                </div>
+              </div>
+              {createPaymentQRMutation.isPending && (
+                <div className="text-xs text-gray-500">Processing...</div>
+              )}
+            </Button>
+            <Button
               onClick={() => handleSelectPaymentMethod("vnpay")}
               disabled={createPaymentQRMutation.isPending}
               variant="outline"
@@ -813,20 +844,65 @@ export function ServiceRequestDetailModal({
         </div>
       </Modal>
 
-      {/* Payment URL Modal (VNPay) */}
+      {/* Payment QR Code/URL Modal (PayOS/VnPay) */}
       <Modal
         isOpen={showPaymentModal}
         onClose={() => {
           setShowPaymentModal(false);
           setPaymentUrl(null);
+          setQrCodeData(null);
           setCreatedTransactionId(null);
         }}
         title="Payment Transaction Created"
-        description="Click the link below to complete payment for this service request"
+        description={qrCodeData ? "Scan the QR code to complete payment" : "Click the link below to complete payment for this service request"}
         size="md"
       >
         <div className="space-y-4">
-          {paymentUrl ? (
+          {qrCodeData ? (
+            // PayOS QR Code Display
+            <div className="space-y-4">
+              <div className="flex justify-center">
+                <div
+                  className="border border-gray-200 rounded-lg p-4 bg-white"
+                  dangerouslySetInnerHTML={{ __html: qrCodeData }}
+                />
+              </div>
+              <div className="text-center space-y-2">
+                <p className="text-sm text-gray-600">
+                  Scan this QR code with your payment app to complete the transaction.
+                </p>
+                <div className="text-xs text-gray-500 space-y-1">
+                  <p>
+                    <span className="font-medium">Total Amount:</span>{" "}
+                    {formatCurrency(totalAmount)}
+                  </p>
+                  {createdTransactionId && (
+                    <p>
+                      <span className="font-medium">Transaction ID:</span>{" "}
+                      {getLast4Chars(createdTransactionId)}
+                    </p>
+                  )}
+                  <p>
+                    <span className="font-medium">Service Request ID:</span>{" "}
+                    {getLast4Chars(requestId)}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setPaymentUrl(null);
+                  setQrCodeData(null);
+                  setCreatedTransactionId(null);
+                }}
+              >
+                Close
+              </Button>
+            </div>
+          ) : paymentUrl ? (
+            // VnPay Payment URL Display
             <div className="space-y-4">
               <div className="text-center space-y-2">
                 <p className="text-sm text-gray-600">
@@ -864,6 +940,7 @@ export function ServiceRequestDetailModal({
                   onClick={() => {
                     setShowPaymentModal(false);
                     setPaymentUrl(null);
+                    setQrCodeData(null);
                     setCreatedTransactionId(null);
                   }}
                 >
@@ -873,13 +950,14 @@ export function ServiceRequestDetailModal({
             </div>
           ) : (
             <div className="text-center text-sm text-gray-500">
-              <p>No payment URL available.</p>
+              <p>No payment information available.</p>
               <Button
                 variant="outline"
                 className="mt-4"
                 onClick={() => {
                   setShowPaymentModal(false);
                   setPaymentUrl(null);
+                  setQrCodeData(null);
                   setCreatedTransactionId(null);
                 }}
               >

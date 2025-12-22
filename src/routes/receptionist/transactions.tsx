@@ -23,6 +23,7 @@ import type {
 } from "@/api/types";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 export const Route = createFileRoute("/receptionist/transactions")({
   component: ReceptionistTransactionsComponent,
@@ -69,6 +70,7 @@ function ReceptionistTransactionsComponent() {
       | "ServiceRequest"
       | "CryoStorageContract",
     relatedEntityId: "",
+    paymentGateway: "PayOS" as "VnPay" | "PayOS", // Default to PayOS
   });
 
   const filters = useMemo(
@@ -275,12 +277,25 @@ function ReceptionistTransactionsComponent() {
       api.transaction.createPaymentQR({
         relatedEntityType: createFormData.relatedEntityType,
         relatedEntityId: createFormData.relatedEntityId,
+        paymentGateway: createFormData.paymentGateway,
       }),
     onSuccess: (response) => {
       if (response.data) {
-        setPaymentUrl(
-          response.data.paymentUrl || response.data.vnPayUrl || null
-        );
+        // For PayOS, check for qrCodeData or qrCodeUrl
+        // For VnPay, use paymentUrl
+        const qrCodeData = (response.data as any).qrCodeData;
+        const qrCodeUrl =
+          (response.data as any).qrCodeUrl ||
+          response.data.paymentUrl ||
+          response.data.vnPayUrl;
+
+        if (qrCodeData) {
+          setQrCodeData(qrCodeData);
+        }
+        if (qrCodeUrl) {
+          setPaymentUrl(qrCodeUrl);
+        }
+
         setCreatedTransactionId(response.data.id);
         setShowCreateModal(false);
         setShowQRCode(true);
@@ -293,6 +308,7 @@ function ReceptionistTransactionsComponent() {
           patientId: "",
           relatedEntityType: "ServiceRequest",
           relatedEntityId: "",
+          paymentGateway: "PayOS",
         });
       }
     },
@@ -1245,7 +1261,11 @@ function ReceptionistTransactionsComponent() {
                             Name
                           </label>
                           <p className="text-sm text-gray-900">
-                            {serviceRequestPatient.fullName}
+                            {getFullNameFromObject(
+                              serviceRequestPatient as any
+                            ) ||
+                              serviceRequestPatient.patientCode ||
+                              "—"}
                           </p>
                         </div>
                         <div className="space-y-1">
@@ -1725,6 +1745,7 @@ function ReceptionistTransactionsComponent() {
               patientId: "",
               relatedEntityType: "ServiceRequest",
               relatedEntityId: "",
+              paymentGateway: "PayOS",
             });
           }}
           title="Create Payment Transaction"
@@ -1750,7 +1771,9 @@ function ReceptionistTransactionsComponent() {
                 <option value="">Select a patient</option>
                 {patientsData?.data?.map((patient) => (
                   <option key={patient.id} value={patient.id}>
-                    {patient.fullName || patient.patientCode || patient.id}
+                    {getFullNameFromObject(patient as any) ||
+                      patient.patientCode ||
+                      patient.id}
                   </option>
                 ))}
               </select>
@@ -1863,6 +1886,25 @@ function ReceptionistTransactionsComponent() {
               </div>
             )}
 
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Payment Gateway <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={createFormData.paymentGateway}
+                onChange={(e) =>
+                  setCreateFormData((prev) => ({
+                    ...prev,
+                    paymentGateway: e.target.value as "VnPay" | "PayOS",
+                  }))
+                }
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="PayOS">PayOS</option>
+                <option value="VnPay">VnPay</option>
+              </select>
+            </div>
+
             <div className="flex gap-2 pt-4">
               <Button
                 onClick={() => createTransactionMutation.mutate()}
@@ -1885,6 +1927,7 @@ function ReceptionistTransactionsComponent() {
                     patientId: "",
                     relatedEntityType: "ServiceRequest",
                     relatedEntityId: "",
+                    paymentGateway: "PayOS",
                   });
                 }}
               >
@@ -1894,20 +1937,70 @@ function ReceptionistTransactionsComponent() {
           </div>
         </Modal>
 
-        {/* Payment URL Modal for Created Transaction */}
+        {/* Payment QR Code/URL Modal for Created Transaction */}
         <Modal
           isOpen={showQRCode && Boolean(createdTransactionId)}
           onClose={() => {
             setShowQRCode(false);
             setPaymentUrl(null);
+            setQrCodeData(null);
             setCreatedTransactionId(null);
           }}
           title="Payment Transaction Created"
-          description="Click the link below to complete payment"
+          description={
+            qrCodeData
+              ? "Scan the QR code to complete payment"
+              : "Click the link below to complete payment"
+          }
           size="md"
         >
           <div className="space-y-4">
-            {paymentUrl ? (
+            {qrCodeData ? (
+              // PayOS QR Code Display
+              <div className="space-y-4">
+                <div className="flex justify-center">
+                  <div
+                    className="border border-gray-200 rounded-lg p-4 bg-white"
+                    dangerouslySetInnerHTML={{ __html: qrCodeData }}
+                  />
+                </div>
+                <div className="text-center text-sm text-gray-600">
+                  <p>
+                    Scan this QR code with your payment app to complete the
+                    transaction.
+                  </p>
+                  {createdTransactionId && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Transaction ID: {getLast4Chars(createdTransactionId)}
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() =>
+                      navigate({ to: "/receptionist/transactions" })
+                    }
+                  >
+                    View All Transactions
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setShowQRCode(false);
+                      setPaymentUrl(null);
+                      setQrCodeData(null);
+                      setCreatedTransactionId(null);
+                    }}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            ) : paymentUrl ? (
+              // VnPay Payment URL Display
               <div className="space-y-4">
                 <div className="text-center text-sm text-gray-600">
                   <p>
@@ -1945,6 +2038,7 @@ function ReceptionistTransactionsComponent() {
                       onClick={() => {
                         setShowQRCode(false);
                         setPaymentUrl(null);
+                        setQrCodeData(null);
                         setCreatedTransactionId(null);
                       }}
                     >
@@ -1955,7 +2049,7 @@ function ReceptionistTransactionsComponent() {
               </div>
             ) : (
               <div className="py-12 text-center text-gray-500">
-                Unable to get payment URL. Please try again.
+                Unable to get payment information. Please try again.
               </div>
             )}
           </div>

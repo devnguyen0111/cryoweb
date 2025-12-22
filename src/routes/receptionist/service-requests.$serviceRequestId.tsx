@@ -34,7 +34,10 @@ function ReceptionistServiceRequestDetailRoute() {
   const [decisionMode, setDecisionMode] = useState<DecisionMode>(null);
   const [decisionNotes, setDecisionNotes] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+  const [paymentGateway, setPaymentGateway] = useState<"VnPay" | "PayOS">("PayOS");
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [createdTransactionId, setCreatedTransactionId] = useState<
     string | null
   >(null);
@@ -169,15 +172,25 @@ function ReceptionistServiceRequestDetailRoute() {
       return api.transaction.createPaymentQR({
         relatedEntityType: "ServiceRequest",
         relatedEntityId: serviceRequestId,
+        paymentGateway: paymentGateway,
       });
     },
     onSuccess: (response) => {
       if (response.data) {
-        // Use paymentUrl from the transaction response
-        setPaymentUrl(
-          response.data.paymentUrl || response.data.vnPayUrl || null
-        );
+        // For PayOS, check for qrCodeData or qrCodeUrl
+        // For VnPay, use paymentUrl
+        const qrCodeData = (response.data as any).qrCodeData;
+        const qrCodeUrl = (response.data as any).qrCodeUrl || response.data.paymentUrl || response.data.vnPayUrl;
+        
+        if (qrCodeData) {
+          setQrCodeData(qrCodeData);
+        }
+        if (qrCodeUrl) {
+          setPaymentUrl(qrCodeUrl);
+        }
+        
         setCreatedTransactionId(response.data.id);
+        setShowPaymentMethodModal(false);
         setShowPaymentModal(true);
         toast.success("Payment transaction created successfully");
         queryClient.invalidateQueries({
@@ -199,7 +212,7 @@ function ReceptionistServiceRequestDetailRoute() {
       toast.error("Total amount must be greater than 0");
       return;
     }
-    createPaymentQRMutation.mutate();
+    setShowPaymentMethodModal(true);
   };
 
   return (
@@ -514,20 +527,127 @@ function ReceptionistServiceRequestDetailRoute() {
           </div>
         </div>
 
-        {/* Payment URL Modal */}
+        {/* Payment Method Selection Modal */}
+        <Modal
+          isOpen={showPaymentMethodModal}
+          onClose={() => {
+            setShowPaymentMethodModal(false);
+          }}
+          title="Select Payment Gateway"
+          description="Choose a payment gateway for this transaction"
+          size="md"
+        >
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Payment Gateway <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={paymentGateway}
+                onChange={(e) =>
+                  setPaymentGateway(e.target.value as "VnPay" | "PayOS")
+                }
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="PayOS">PayOS</option>
+                <option value="VnPay">VnPay</option>
+              </select>
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button
+                onClick={() => createPaymentQRMutation.mutate()}
+                disabled={createPaymentQRMutation.isPending}
+                className="flex-1"
+              >
+                {createPaymentQRMutation.isPending
+                  ? "Creating..."
+                  : "Create Transaction"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowPaymentMethodModal(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Payment QR Code/URL Modal */}
         <Modal
           isOpen={showPaymentModal}
           onClose={() => {
             setShowPaymentModal(false);
             setPaymentUrl(null);
+            setQrCodeData(null);
             setCreatedTransactionId(null);
           }}
           title="Payment Transaction Created"
-          description="Click the link below to complete payment for this service request"
+          description={qrCodeData ? "Scan the QR code to complete payment" : "Click the link below to complete payment for this service request"}
           size="md"
         >
           <div className="space-y-4">
-            {paymentUrl ? (
+            {qrCodeData ? (
+              // PayOS QR Code Display
+              <div className="space-y-4">
+                <div className="flex justify-center">
+                  <div
+                    className="border border-gray-200 rounded-lg p-4 bg-white"
+                    dangerouslySetInnerHTML={{ __html: qrCodeData }}
+                  />
+                </div>
+                <div className="text-center space-y-2">
+                  <p className="text-sm text-gray-600">
+                    Scan this QR code with your payment app to complete the transaction.
+                  </p>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <p>
+                      <span className="font-medium">Total Amount:</span>{" "}
+                      {new Intl.NumberFormat("vi-VN", {
+                        style: "currency",
+                        currency: "VND",
+                      }).format(totalAmount)}
+                    </p>
+                    {createdTransactionId && (
+                      <p>
+                        <span className="font-medium">Transaction ID:</span>{" "}
+                        {createdTransactionId.slice(0, 8)}
+                      </p>
+                    )}
+                    <p>
+                      <span className="font-medium">Service Request ID:</span>{" "}
+                      {serviceRequestId.slice(0, 8)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      navigate({
+                        to: "/receptionist/transactions",
+                      });
+                    }}
+                  >
+                    View All Transactions
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setShowPaymentModal(false);
+                      setPaymentUrl(null);
+                      setQrCodeData(null);
+                      setCreatedTransactionId(null);
+                    }}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            ) : paymentUrl ? (
+              // VnPay Payment URL Display
               <div className="space-y-4">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-gray-600">
@@ -580,6 +700,7 @@ function ReceptionistServiceRequestDetailRoute() {
                       onClick={() => {
                         setShowPaymentModal(false);
                         setPaymentUrl(null);
+                        setQrCodeData(null);
                         setCreatedTransactionId(null);
                       }}
                     >
@@ -590,7 +711,7 @@ function ReceptionistServiceRequestDetailRoute() {
               </div>
             ) : (
               <div className="py-12 text-center text-gray-500">
-                Unable to get payment URL. Please try again.
+                Unable to get payment information. Please try again.
               </div>
             )}
           </div>

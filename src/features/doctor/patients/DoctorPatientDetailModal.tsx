@@ -6,6 +6,7 @@ import type {
   Patient,
   PatientDetailResponse,
   UserDetailResponse,
+  Relationship,
 } from "@/api/types";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -162,6 +163,56 @@ export function DoctorPatientDetailModal({
     },
   });
 
+  // Fetch relationships for partner information
+  const {
+    data: relationshipsResponse,
+    isLoading: relationshipsLoading,
+    isFetching: relationshipsFetching,
+  } = useQuery({
+    enabled: isOpen && Boolean(patientId),
+    queryKey: ["doctor", "patient", patientId, "relationships", "detail-modal"],
+    retry: false,
+    queryFn: async () => {
+      if (!patientId) return null;
+      try {
+        const response = await api.relationship.getRelationships(patientId);
+        return response.data ?? [];
+      } catch (error) {
+        if (
+          isAxiosError(error) &&
+          (error.response?.status === 404 || error.response?.status === 403)
+        ) {
+          return [];
+        }
+        console.warn("Failed to fetch relationships:", error);
+        return [];
+      }
+    },
+  });
+
+  const relationships = relationshipsResponse ?? [];
+
+  // Get active partner relationship (Married or Unmarried)
+  const partnerRelationship = useMemo(() => {
+    if (!relationships || relationships.length === 0) return null;
+    return relationships.find(
+      (rel: Relationship) =>
+        (rel.relationshipType === "Married" ||
+          rel.relationshipType === "Unmarried") &&
+        rel.isActive !== false
+    ) as Relationship | undefined;
+  }, [relationships]);
+
+  // Get partner info from relationship
+  const partnerInfo = useMemo(() => {
+    if (!partnerRelationship || !patientId) return null;
+    // Determine which patient is the partner
+    const isPatient1 = partnerRelationship.patient1Id === patientId;
+    return isPatient1
+      ? partnerRelationship.patient2Info
+      : partnerRelationship.patient1Info;
+  }, [partnerRelationship, patientId]);
+
   // Merge patient data with user details
   const mergedPatient = useMemo(() => {
     if (!patient) return null;
@@ -239,7 +290,12 @@ export function DoctorPatientDetailModal({
       onClose={onClose}
       size="xl"
     >
-      {isLoading || isFetching || userLoading || userFetching ? (
+      {isLoading ||
+      isFetching ||
+      userLoading ||
+      userFetching ||
+      relationshipsLoading ||
+      relationshipsFetching ? (
         <div className="py-10 text-center text-sm text-gray-500">
           Loading patient information...
         </div>
@@ -453,6 +509,52 @@ export function DoctorPatientDetailModal({
             </CardContent>
           </Card>
 
+          {partnerInfo && (
+            <Card className="border-gray-200">
+              <CardHeader>
+                <CardTitle className="text-base font-semibold text-gray-900">
+                  Partner Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-2">
+                <DetailField
+                  label="Partner name"
+                  value={partnerInfo.fullName}
+                />
+                <DetailField
+                  label="Relationship type"
+                  value={
+                    partnerRelationship?.relationshipTypeName ||
+                    partnerRelationship?.relationshipType
+                  }
+                />
+                <DetailField
+                  label="Partner patient code"
+                  value={partnerInfo.patientCode}
+                />
+                <DetailField
+                  label="Partner citizen ID"
+                  value={partnerInfo.nationalId}
+                />
+                <DetailField label="Partner email" value={partnerInfo.email} />
+                <DetailField label="Partner phone" value={partnerInfo.phone} />
+                {partnerRelationship?.establishedDate && (
+                  <DetailField
+                    label="Relationship established"
+                    value={formatDate(partnerRelationship.establishedDate)}
+                  />
+                )}
+                {partnerRelationship?.notes && (
+                  <DetailField
+                    label="Relationship notes"
+                    value={partnerRelationship.notes}
+                    multiline
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-gray-200">
             <CardHeader>
               <CardTitle className="text-base font-semibold text-gray-900">
@@ -472,7 +574,7 @@ export function DoctorPatientDetailModal({
               />
               <DetailField
                 label="Relationships on file"
-                value={patientDetail?.relationshipCount}
+                value={patientDetail?.relationshipCount ?? relationships.length}
                 placeholder="0"
               />
               <DetailField

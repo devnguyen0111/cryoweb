@@ -9,7 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
-import type { PaginatedResponse, TreatmentCycle, UserDetailResponse } from "@/api/types";
+import type {
+  PaginatedResponse,
+  TreatmentCycle,
+  UserDetailResponse,
+  PatientDetailResponse,
+  Relationship,
+} from "@/api/types";
 import { normalizeTreatmentCycleStatus } from "@/api/types";
 import { cn } from "@/utils/cn";
 import { DoctorPatientDetailModal } from "@/features/doctor/patients/DoctorPatientDetailModal";
@@ -18,6 +24,7 @@ import {
   getPatientProperty,
 } from "@/utils/patient-helpers";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 const emptyCycleResponse: PaginatedResponse<TreatmentCycle> = {
   code: 200,
@@ -250,6 +257,87 @@ function DoctorPatientsComponent() {
     if (!selectedPatientId) return null;
     return userDetailsMap.get(selectedPatientId) ?? null;
   }, [selectedPatientId, userDetailsMap]);
+
+  // Fetch full patient details for selected patient
+  const {
+    data: selectedPatientDetails,
+    isLoading: selectedPatientDetailsLoading,
+  } = useQuery<PatientDetailResponse | null>({
+    enabled: Boolean(selectedPatientId),
+    queryKey: ["doctor", "patients", selectedPatientId, "details"],
+    retry: false,
+    queryFn: async () => {
+      if (!selectedPatientId) return null;
+      try {
+        const response = await api.patient.getPatientById(selectedPatientId);
+        return response.data ?? null;
+      } catch (err) {
+        if (isAxiosError(err)) {
+          if (err.response?.status === 403) {
+            const fallback = await api.patient.getPatientDetails(
+              selectedPatientId
+            );
+            return fallback.data ?? null;
+          }
+          if (err.response?.status === 404) {
+            return null;
+          }
+        }
+        return null;
+      }
+    },
+  });
+
+  // Fetch relationships for partner information
+  const {
+    data: relationshipsResponse,
+    isLoading: relationshipsLoading,
+  } = useQuery({
+    enabled: Boolean(selectedPatientId),
+    queryKey: ["doctor", "patients", selectedPatientId, "relationships"],
+    retry: false,
+    queryFn: async () => {
+      if (!selectedPatientId) return null;
+      try {
+        const response = await api.relationship.getRelationships(
+          selectedPatientId
+        );
+        return response.data ?? [];
+      } catch (error) {
+        if (
+          isAxiosError(error) &&
+          (error.response?.status === 404 || error.response?.status === 403)
+        ) {
+          return [];
+        }
+        console.warn("Failed to fetch relationships:", error);
+        return [];
+      }
+    },
+  });
+
+  const relationships = relationshipsResponse ?? [];
+
+  // Get active partner relationship (Married or Unmarried)
+  const partnerRelationship = useMemo(() => {
+    if (!relationships || relationships.length === 0) return null;
+    return relationships.find(
+      (rel: Relationship) =>
+        (rel.relationshipType === "Married" ||
+          rel.relationshipType === "Unmarried") &&
+        rel.isActive !== false
+    ) as Relationship | undefined;
+  }, [relationships]);
+
+  // Get partner info from relationship
+  const partnerInfo = useMemo(() => {
+    if (!partnerRelationship || !selectedPatientId) return null;
+    // Determine which patient is the partner
+    const isPatient1 = partnerRelationship.patient1Id === selectedPatientId;
+    return isPatient1
+      ? partnerRelationship.patient2Info
+      : partnerRelationship.patient1Info;
+  }, [partnerRelationship, selectedPatientId]);
 
   const {
     data: selectedPatientCycles = emptyCycleResponse,
@@ -683,33 +771,79 @@ function DoctorPatientsComponent() {
                   <>
                     <div className="flex flex-col gap-2">
                       <h2 className="text-xl font-semibold text-gray-900">
-                        {(isPatientDetailResponse(selectedPatient)
-                          ? (selectedPatient as any).accountInfo?.username
-                          : null) ||
+                        {getFullNameFromObject(selectedPatientUserDetails) ||
+                          (isPatientDetailResponse(selectedPatient)
+                            ? (selectedPatient as any).accountInfo?.username
+                            : null) ||
                           selectedPatient.fullName ||
                           selectedPatient.patientCode ||
                           "Unnamed patient"}
                       </h2>
                       <p className="text-sm text-gray-600">
+                        Patient Code: {selectedPatient.patientCode ?? "—"}
+                      </p>
+                      <p className="text-sm text-gray-600">
                         Account ID: {getLast4Chars(selectedPatient.accountId)}
                       </p>
-                      <div className="space-y-1 text-sm text-gray-600">
-                        <p>
-                          <span className="font-medium">Date of Birth:</span>{" "}
-                          {selectedPatientUserDetails?.dob
-                            ? formatDate(selectedPatientUserDetails.dob)
-                            : selectedPatient.dateOfBirth
-                              ? formatDate(selectedPatient.dateOfBirth)
-                              : "—"}
-                        </p>
-                        <p>
-                          <span className="font-medium">Gender:</span>{" "}
-                          {selectedPatientUserDetails?.gender !== undefined
-                            ? selectedPatientUserDetails.gender
-                              ? "Male"
-                              : "Female"
-                            : selectedPatient.gender || "—"}
-                      </p>
+                      <div className="grid gap-2 text-sm text-gray-600 md:grid-cols-2">
+                        <div>
+                          <p>
+                            <span className="font-medium">Date of Birth:</span>{" "}
+                            {selectedPatientUserDetails?.dob
+                              ? formatDate(selectedPatientUserDetails.dob)
+                              : selectedPatientDetails?.dateOfBirth
+                                ? formatDate(selectedPatientDetails.dateOfBirth)
+                                : selectedPatient.dateOfBirth
+                                  ? formatDate(selectedPatient.dateOfBirth)
+                                  : "—"}
+                          </p>
+                          <p>
+                            <span className="font-medium">Gender:</span>{" "}
+                            {selectedPatientUserDetails?.gender !== undefined
+                              ? selectedPatientUserDetails.gender
+                                ? "Male"
+                                : "Female"
+                              : selectedPatientDetails?.gender ||
+                                  selectedPatient.gender ||
+                                  "—"}
+                          </p>
+                          <p>
+                            <span className="font-medium">Citizen ID:</span>{" "}
+                            {selectedPatientDetails?.nationalId ||
+                              selectedPatient.nationalId ||
+                              "—"}
+                          </p>
+                          <p>
+                            <span className="font-medium">Occupation:</span>{" "}
+                            {selectedPatientDetails?.occupation || "Not provided"}
+                          </p>
+                        </div>
+                        <div>
+                          <p>
+                            <span className="font-medium">Blood Type:</span>{" "}
+                            {selectedPatientDetails?.bloodType ||
+                              selectedPatient.bloodType ||
+                              "Not recorded"}
+                          </p>
+                          {selectedPatientDetails?.height && (
+                            <p>
+                              <span className="font-medium">Height:</span>{" "}
+                              {selectedPatientDetails.height} cm
+                            </p>
+                          )}
+                          {selectedPatientDetails?.weight && (
+                            <p>
+                              <span className="font-medium">Weight:</span>{" "}
+                              {selectedPatientDetails.weight} kg
+                            </p>
+                          )}
+                          {selectedPatientDetails?.bmi && (
+                            <p>
+                              <span className="font-medium">BMI:</span>{" "}
+                              {selectedPatientDetails.bmi.toFixed(1)}
+                            </p>
+                          )}
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2 text-xs font-medium">
                         <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">
@@ -718,6 +852,11 @@ function DoctorPatientsComponent() {
                         <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-600">
                           {getAccountStatus(selectedPatient).label}
                         </span>
+                        {selectedPatientDetails?.bloodType && (
+                          <span className="rounded-full bg-purple-100 px-3 py-1 text-purple-700">
+                            Blood: {selectedPatientDetails.bloodType}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -739,15 +878,16 @@ function DoctorPatientsComponent() {
 
                     <section className="space-y-3 text-sm text-gray-700">
                       <p className="text-sm font-semibold text-gray-900">
-                        Contact details
+                        Contact & coverage
                       </p>
                       <div className="grid gap-2 md:grid-cols-2">
                         <div>
                           <p className="text-gray-500">Email</p>
                           <p>
-                            {(isPatientDetailResponse(selectedPatient)
-                              ? (selectedPatient as any).accountInfo?.email
-                              : null) ||
+                            {selectedPatientDetails?.accountInfo?.email ||
+                              (isPatientDetailResponse(selectedPatient)
+                                ? (selectedPatient as any).accountInfo?.email
+                                : null) ||
                               selectedPatient.email ||
                               "Not provided"}
                           </p>
@@ -755,42 +895,130 @@ function DoctorPatientsComponent() {
                         <div>
                           <p className="text-gray-500">Phone</p>
                           <p>
-                            {(isPatientDetailResponse(selectedPatient)
-                              ? (selectedPatient as any).accountInfo?.phone
-                              : null) ||
+                            {selectedPatientDetails?.accountInfo?.phone ||
+                              (isPatientDetailResponse(selectedPatient)
+                                ? (selectedPatient as any).accountInfo?.phone
+                                : null) ||
                               selectedPatient.phoneNumber ||
                               "Not provided"}
                           </p>
                         </div>
                         <div>
-                          <p className="text-gray-500">Emergency contact</p>
+                          <p className="text-gray-500">Address</p>
                           <p>
-                            {getPatientProperty(
-                              selectedPatient,
-                              "emergencyContact",
-                              "Not provided"
-                            )}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {getPatientProperty(
-                              selectedPatient,
-                              "emergencyPhone",
-                              "—"
-                            )}
+                            {selectedPatientDetails?.accountInfo?.address ||
+                              selectedPatientDetails?.address ||
+                              selectedPatient.address ||
+                              "Not provided"}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Insurance</p>
                           <p>
-                            {getPatientProperty(
-                              selectedPatient,
-                              "insurance",
-                              "Not recorded"
-                            )}
+                            {selectedPatientDetails?.insurance ||
+                              getPatientProperty(
+                                selectedPatient,
+                                "insurance",
+                                "Not recorded"
+                              )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Emergency contact</p>
+                          <p>
+                            {selectedPatientDetails?.emergencyContact ||
+                              getPatientProperty(
+                                selectedPatient,
+                                "emergencyContact",
+                                "Not provided"
+                              )}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {selectedPatientDetails?.emergencyPhone ||
+                              getPatientProperty(
+                                selectedPatient,
+                                "emergencyPhone",
+                                "—"
+                              )}
                           </p>
                         </div>
                       </div>
                     </section>
+
+                    {(selectedPatientDetails?.medicalHistory ||
+                      selectedPatientDetails?.allergies) && (
+                      <section className="space-y-3 text-sm text-gray-700">
+                        <p className="text-sm font-semibold text-gray-900">
+                          Medical information
+                        </p>
+                        <div className="grid gap-2">
+                          {selectedPatientDetails?.medicalHistory && (
+                            <div>
+                              <p className="text-gray-500">Medical history</p>
+                              <p className="whitespace-pre-wrap">
+                                {selectedPatientDetails.medicalHistory}
+                              </p>
+                            </div>
+                          )}
+                          {selectedPatientDetails?.allergies && (
+                            <div>
+                              <p className="text-gray-500">Allergies</p>
+                              <p className="whitespace-pre-wrap">
+                                {selectedPatientDetails.allergies}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    )}
+
+                    {partnerInfo && (
+                      <section className="space-y-3 text-sm text-gray-700">
+                        <p className="text-sm font-semibold text-gray-900">
+                          Partner information
+                        </p>
+                        <div className="grid gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-2">
+                          <div>
+                            <p className="text-gray-500">Partner name</p>
+                            <p className="font-medium">{partnerInfo.fullName}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Relationship type</p>
+                            <p>
+                              {partnerRelationship?.relationshipTypeName ||
+                                partnerRelationship?.relationshipType ||
+                                "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Partner patient code</p>
+                            <p>{partnerInfo.patientCode}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Partner citizen ID</p>
+                            <p>{partnerInfo.nationalId}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Partner email</p>
+                            <p>{partnerInfo.email}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Partner phone</p>
+                            <p>{partnerInfo.phone}</p>
+                          </div>
+                          {partnerRelationship?.establishedDate && (
+                            <div>
+                              <p className="text-gray-500">
+                                Relationship established
+                              </p>
+                              <p>
+                                {formatDate(partnerRelationship.establishedDate)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    )}
 
                     <section className="space-y-3">
                       <div className="flex items-center justify-between">
@@ -855,13 +1083,24 @@ function DoctorPatientsComponent() {
                       </p>
                       <div className="grid gap-2">
                         <Button
+                          variant="default"
+                          type="button"
+                          onClick={() =>
+                            handleNavigateToPatientProfile(selectedPatient.id)
+                          }
+                          className="w-full"
+                        >
+                          View full patient profile
+                        </Button>
+                        <Button
                           variant="outline"
                           type="button"
                           onClick={() =>
                             handleOpenPatientDetailModal(selectedPatient.id)
                           }
+                          className="w-full"
                         >
-                          View full patient record
+                          Quick view patient details
                         </Button>
                         <Button
                           variant="outline"
@@ -876,6 +1115,7 @@ function DoctorPatientsComponent() {
                               } as any,
                             })
                           }
+                          className="w-full"
                         >
                           Create encounter
                         </Button>
@@ -888,8 +1128,22 @@ function DoctorPatientsComponent() {
                               search: { patientId: selectedPatient.id },
                             })
                           }
+                          className="w-full"
                         >
-                          Order prescription or service
+                          Create prescription
+                        </Button>
+                        <Button
+                          variant="outline"
+                          type="button"
+                          onClick={() =>
+                            navigate({
+                              to: "/doctor/treatment-cycles",
+                              search: { patientId: selectedPatient.id },
+                            })
+                          }
+                          className="w-full"
+                        >
+                          View treatment cycles
                         </Button>
                       </div>
                     </section>

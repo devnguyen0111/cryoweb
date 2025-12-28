@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -213,67 +212,6 @@ function ReceptionistAppointmentsComponent() {
     setPage(1);
   };
 
-  const updateStatusMutation = useMutation({
-    mutationFn: async (payload: { appointmentId: string; status: string }) => {
-      const result = await api.appointment.updateAppointmentStatus(
-        payload.appointmentId,
-        {
-          status: ensureAppointmentStatus(payload.status),
-        }
-      );
-      // Fetch appointment details to get patientId
-      try {
-        const appointmentDetails = await api.appointment.getAppointmentDetails(
-          payload.appointmentId
-        );
-        return { result, appointment: appointmentDetails.data };
-      } catch {
-        return { result, appointment: null };
-      }
-    },
-    onSuccess: async (data, variables) => {
-      toast.success("Appointment status updated");
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "appointments"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["receptionist", "service-requests"],
-      });
-
-      // Send notification to patient
-      if (data.appointment?.patientId) {
-        const { sendAppointmentNotification } = await import(
-          "@/utils/notifications"
-        );
-        await sendAppointmentNotification(
-          data.appointment.patientId,
-          "status_changed",
-          {
-            appointmentId: variables.appointmentId,
-            appointmentDate: data.appointment.appointmentDate,
-            status: variables.status,
-          }
-        );
-      }
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ||
-        "Unable to update appointment status. Please try again.";
-      toast.error(message);
-    },
-  });
-
-  const handleStatusChange = (
-    appointmentId: string,
-    status: AppointmentStatus
-  ) => {
-    updateStatusMutation.mutate({
-      appointmentId,
-      status,
-    });
-  };
-
   const openDetailModal = (appointment: Appointment) => {
     setDetailAppointmentId(appointment.id);
     setDetailAppointment(appointment);
@@ -445,31 +383,6 @@ function ReceptionistAppointmentsComponent() {
                                   >
                                     Details
                                   </Button>
-                                  <select
-                                    value={
-                                      normalizeAppointmentStatus(
-                                        appointment.status
-                                      ) || ""
-                                    }
-                                    onChange={(event) =>
-                                      handleStatusChange(
-                                        appointment.id,
-                                        event.target.value as AppointmentStatus
-                                      )
-                                    }
-                                    className="rounded-md border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
-                                  >
-                                    {statusOptions
-                                      .filter((option) => option.value)
-                                      .map((option) => (
-                                        <option
-                                          key={option.value}
-                                          value={option.value}
-                                        >
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                  </select>
                                 </div>
                               </td>
                             </tr>

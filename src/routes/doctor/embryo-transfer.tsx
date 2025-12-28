@@ -15,7 +15,8 @@ import { RefreshCw, CheckCircle2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
-import { EmbryoTransferConfirmationModal } from "@/features/doctor/embryo-transfer/EmbryoTransferConfirmationModal";
+import { Modal } from "@/components/ui/modal";
+import { EmbryoTransferForm } from "@/features/doctor/embryo-transfer/EmbryoTransferForm";
 
 export const Route = createFileRoute("/doctor/embryo-transfer")({
   component: EmbryoTransferComponent,
@@ -23,9 +24,9 @@ export const Route = createFileRoute("/doctor/embryo-transfer")({
 
 function EmbryoTransferComponent() {
   const queryClient = useQueryClient();
-  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -50,21 +51,42 @@ function EmbryoTransferComponent() {
     },
   });
 
-  // Filter cycles that are ready for embryo transfer (step7_embryo_transfer)
+  // Filter cycles that are ready for embryo transfer
+  // With new step plan: IVF_EmbryoTransfer (step 5) is the embryo transfer step
   const cyclesReadyForTransfer = useMemo(() => {
     if (!cyclesData) return [];
     
     return cyclesData.filter((cycle) => {
       // Check if cycle is ready for embryo transfer
-      const stepType = (cycle as any).currentStepType || cycle.currentStep;
-      const stepTypeStr = String(stepType || "").toUpperCase();
-      
-      return (
-        stepTypeStr.includes("EMBRYOTRANSFER") ||
-        stepTypeStr.includes("TRANSFER") ||
-        (cycle as any).cycleName?.toLowerCase().includes("embryo transfer") ||
-        (cycle as any).cycleName?.toLowerCase().includes("transfer")
-      );
+      // Priority 1: Check currentStep directly
+      if (cycle.currentStep === "step7_embryo_transfer") {
+        return true;
+      }
+
+      // Priority 2: Check stepType
+      const stepType = cycle.stepType;
+      if (stepType) {
+        const stepTypeStr = String(stepType).toUpperCase();
+        // New step plan: IVF_EmbryoTransfer
+        if (
+          stepTypeStr === "IVF_EMBRYOTRANSFER" ||
+          (stepTypeStr.includes("EMBRYOTRANSFER") && !stepTypeStr.includes("CULTURE")) ||
+          (stepTypeStr.includes("TRANSFER") && stepTypeStr.includes("EMBRYO"))
+        ) {
+          return true;
+        }
+      }
+
+      // Priority 3: Check cycleName as fallback
+      const cycleName = cycle.cycleName?.toLowerCase() || "";
+      if (
+        cycleName.includes("embryo transfer") ||
+        (cycleName.includes("transfer") && cycleName.includes("embryo"))
+      ) {
+        return true;
+      }
+
+      return false;
     });
   }, [cyclesData]);
 
@@ -420,16 +442,24 @@ function EmbryoTransferComponent() {
         </div>
 
         {selectedCycleId && (
-          <EmbryoTransferConfirmationModal
-            cycleId={selectedCycleId}
+          <Modal
+            title="Embryo Transfer Confirmation"
+            description="Fill in the information to confirm embryo transfer procedure"
             isOpen={!!selectedCycleId}
             onClose={() => setSelectedCycleId(null)}
-            onSuccess={() => {
-              queryClient.invalidateQueries({ queryKey: ["embryo-transfer-cycles"] });
-              queryClient.invalidateQueries({ queryKey: ["embryo-transfer-embryos"] });
-              setSelectedCycleId(null);
-            }}
-          />
+            size="2xl"
+          >
+            <EmbryoTransferForm
+              cycleId={selectedCycleId}
+              onSuccess={() => {
+                queryClient.invalidateQueries({ queryKey: ["embryo-transfer-cycles"] });
+                queryClient.invalidateQueries({ queryKey: ["embryo-transfer-embryos"] });
+                queryClient.invalidateQueries({ queryKey: ["treatment-cycle", selectedCycleId] });
+                setSelectedCycleId(null);
+              }}
+              onCancel={() => setSelectedCycleId(null)}
+            />
+          </Modal>
         )}
       </DashboardLayout>
     </ProtectedRoute>

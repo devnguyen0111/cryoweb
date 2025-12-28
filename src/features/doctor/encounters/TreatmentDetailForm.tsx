@@ -75,71 +75,51 @@ function DateField({
   );
 }
 
-// IUI Step definitions (7 steps matching backend TreatmentStepType enum) - same as HorizontalTreatmentTimeline
+// IUI Step definitions (4 steps matching backend TreatmentStepType enum) - same as HorizontalTreatmentTimeline
 const IUI_STEPS: Array<{ id: IUIStep; label: string }> = [
   {
     id: "step0_pre_cycle_prep",
-    label: "Pre-Cycle Preparation",
-  },
-  {
-    id: "step1_day2_3_assessment",
-    label: "Assessment",
+    label: "Initial Medical Examination",
   },
   {
     id: "step2_follicle_monitoring",
-    label: "Follicle Monitoring",
-  },
-  {
-    id: "step3_trigger",
-    label: "Trigger",
+    label: "Ovarian Stimulation",
   },
   {
     id: "step4_iui_procedure",
-    label: "IUI Procedure",
+    label: "Sperm Collection and Intrauterine Insemination",
   },
   {
     id: "step5_post_iui",
-    label: "Post-IUI Monitoring",
-  },
-  {
-    id: "step6_beta_hcg",
-    label: "Beta HCG Test",
+    label: "Post-Insemination Follow-Up",
   },
 ];
 
-// IVF Step definitions (8 steps matching backend TreatmentStepType enum) - same as HorizontalTreatmentTimeline
+// IVF Step definitions (6 steps matching backend TreatmentStepType enum) - same as HorizontalTreatmentTimeline
 const IVF_STEPS: Array<{ id: IVFStep; label: string }> = [
   {
     id: "step0_pre_cycle_prep",
-    label: "Pre-Cycle Preparation",
+    label: "Initial Medical Examination",
   },
   {
     id: "step1_stimulation",
-    label: "Controlled Ovarian Stimulation",
-  },
-  {
-    id: "step2_monitoring",
-    label: "Mid-Stimulation Monitoring",
-  },
-  {
-    id: "step3_trigger",
-    label: "Ovulation Trigger",
+    label: "Ovarian Stimulation",
   },
   {
     id: "step4_opu",
-    label: "Oocyte Pick-Up (OPU)",
+    label: "Oocyte Retrieval and Sperm Collection",
   },
   {
     id: "step5_fertilization",
-    label: "Fertilization/Lab",
-  },
-  {
-    id: "step6_embryo_culture",
-    label: "Embryo Culture",
+    label: "In Vitro Fertilization",
   },
   {
     id: "step7_embryo_transfer",
     label: "Embryo Transfer",
+  },
+  {
+    id: "step6_beta_hcg",
+    label: "Post-Transfer Follow-Up",
   },
 ];
 
@@ -246,6 +226,13 @@ function mapStepTypeToStepId(
       stepTypeStr.includes("TRANSFER")
     ) {
       return "step7_embryo_transfer";
+    }
+    if (
+      stepTypeStr === "IVF_BETAHCGTEST" ||
+      (stepTypeStr.includes("BETAHCG") && stepTypeStr.includes("IVF")) ||
+      (stepTypeStr.includes("BETA_HCG") && stepTypeStr.includes("IVF"))
+    ) {
+      return "step6_beta_hcg";
     }
   }
 

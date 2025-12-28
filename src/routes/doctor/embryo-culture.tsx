@@ -6,11 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import { toast } from "sonner";
 import { isAxiosError } from "axios";
-import type { LabSampleDetailResponse, TreatmentCycle, Patient, PatientDetailResponse } from "@/api/types";
+import type {
+  LabSampleDetailResponse,
+  Patient,
+  PatientDetailResponse,
+} from "@/api/types";
 import { RefreshCw, CheckCircle2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
@@ -29,7 +32,9 @@ function EmbryoCultureComponent() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await queryClient.invalidateQueries({ queryKey: ["embryo-culture-cycles"] });
+    await queryClient.invalidateQueries({
+      queryKey: ["embryo-culture-cycles"],
+    });
     setIsRefreshing(false);
   };
 
@@ -50,21 +55,56 @@ function EmbryoCultureComponent() {
     },
   });
 
-  // Filter cycles that are in embryo culture stage (step6_embryo_culture)
+  // Filter cycles that are in embryo culture stage
+  // With new step plan: IVF_Fertilization (step 4) is when embryos are created and need culture
+  // Legacy support: step6_embryo_culture for backward compatibility
   const cyclesInCulture = useMemo(() => {
     if (!cyclesData) return [];
-    
+
     return cyclesData.filter((cycle) => {
       // Check if cycle is in embryo culture stage
-      const stepType = (cycle as any).currentStepType || cycle.currentStep;
-      const stepTypeStr = String(stepType || "").toUpperCase();
-      
-      return (
-        stepTypeStr.includes("EMBRYOCULTURE") ||
-        stepTypeStr.includes("CULTURE") ||
-        (cycle as any).cycleName?.toLowerCase().includes("embryo culture") ||
-        (cycle as any).cycleName?.toLowerCase().includes("culture")
-      );
+      // Priority 1: Check currentStep directly
+      if (
+        cycle.currentStep === "step5_fertilization" ||
+        cycle.currentStep === "step6_embryo_culture" // Legacy support
+      ) {
+        return true;
+      }
+
+      // Priority 2: Check stepType
+      const stepType = cycle.stepType;
+      if (stepType) {
+        const stepTypeStr = String(stepType).toUpperCase();
+        // New step plan: IVF_Fertilization (In Vitro Fertilization)
+        if (
+          stepTypeStr === "IVF_FERTILIZATION" ||
+          stepTypeStr.includes("FERTILIZATION")
+        ) {
+          return true;
+        }
+        // Legacy support: Embryo Culture step
+        if (
+          stepTypeStr.includes("EMBRYO_CULTURE") ||
+          stepTypeStr.includes("EMBRYOCULTURE") ||
+          (stepTypeStr.includes("CULTURE") && !stepTypeStr.includes("TRANSFER"))
+        ) {
+          return true;
+        }
+      }
+
+      // Priority 3: Check cycleName as fallback
+      const cycleName = cycle.cycleName?.toLowerCase() || "";
+      if (
+        cycleName.includes("in vitro fertilization") ||
+        cycleName.includes("fertilization") ||
+        (cycleName.includes("embryo culture") &&
+          !cycleName.includes("transfer")) ||
+        (cycleName.includes("culture") && !cycleName.includes("transfer"))
+      ) {
+        return true;
+      }
+
+      return false;
     });
   }, [cyclesData]);
 
@@ -206,7 +246,7 @@ function EmbryoCultureComponent() {
     enabled: cyclesInCulture.length > 0,
     queryFn: async () => {
       const results: Record<string, LabSampleDetailResponse[]> = {};
-      
+
       await Promise.all(
         cyclesInCulture.map(async (cycle) => {
           try {
@@ -215,19 +255,19 @@ function EmbryoCultureComponent() {
               Page: 1,
               Size: 100,
             });
-            
+
             // Filter embryos for this cycle
             const cycleEmbryos = (response.data ?? []).filter(
               (embryo) => embryo.treatmentCycleId === cycle.id
             );
-            
+
             results[cycle.id] = cycleEmbryos;
           } catch (error) {
             results[cycle.id] = [];
           }
         })
       );
-      
+
       return results;
     },
   });
@@ -257,7 +297,9 @@ function EmbryoCultureComponent() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold">Embryo Culture Confirmation</h1>
+              <h1 className="text-3xl font-bold">
+                Embryo Culture Confirmation
+              </h1>
               <p className="text-gray-600 mt-2">
                 Confirm the number of embryos in culture
               </p>
@@ -356,7 +398,7 @@ function EmbryoCultureComponent() {
                             >
                               <td className="p-3">
                                 <span className="font-mono text-sm">
-                                  {cycle.cycleCode || getLast4Chars(cycle.id)}
+                                  {cycle.cycleName || getLast4Chars(cycle.id)}
                                 </span>
                               </td>
                               <td className="p-3 text-sm">
@@ -421,8 +463,12 @@ function EmbryoCultureComponent() {
             isOpen={!!selectedCycleId}
             onClose={() => setSelectedCycleId(null)}
             onSuccess={() => {
-              queryClient.invalidateQueries({ queryKey: ["embryo-culture-cycles"] });
-              queryClient.invalidateQueries({ queryKey: ["embryo-culture-embryos"] });
+              queryClient.invalidateQueries({
+                queryKey: ["embryo-culture-cycles"],
+              });
+              queryClient.invalidateQueries({
+                queryKey: ["embryo-culture-embryos"],
+              });
               setSelectedCycleId(null);
             }}
           />
@@ -431,4 +477,3 @@ function EmbryoCultureComponent() {
     </ProtectedRoute>
   );
 }
-

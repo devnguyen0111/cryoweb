@@ -19,6 +19,17 @@ import { Badge } from "@/components/ui/badge";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 
+interface EmbryoRow {
+  id: string;
+  code: string;
+  dayOfDevelopment: string;
+  grade: string;
+  cellCount: number;
+  quality: string;
+  notes: string;
+  creationDate: string;
+}
+
 interface EmbryoCultureConfirmationModalProps {
   cycleId: string;
   isOpen: boolean;
@@ -32,38 +43,40 @@ export function EmbryoCultureConfirmationModal({
   onClose,
   onSuccess,
 }: EmbryoCultureConfirmationModalProps) {
-  const [embryoQuantity, setEmbryoQuantity] = useState("");
-  const [stage, setStage] = useState("");
-  const [quality, setQuality] = useState("");
-  const [notes, setNotes] = useState("");
-  const [creationDate, setCreationDate] = useState(
+  const [embryos, setEmbryos] = useState<EmbryoRow[]>([]);
+  const [embryoCounter, setEmbryoCounter] = useState(1);
+  const [labTechName, setLabTechName] = useState("");
+  const [confirmationDate, setConfirmationDate] = useState(
     new Date().toISOString().split("T")[0]
   );
+  const [generalNotes, setGeneralNotes] = useState("");
 
-  const { data: cycle, isLoading: cycleLoading } = useQuery<TreatmentCycle | null>({
-    enabled: isOpen && Boolean(cycleId),
-    queryKey: ["treatment-cycle", cycleId],
-    retry: false,
-    queryFn: async () => {
-      if (!cycleId) return null;
-      try {
-        const response = await api.treatmentCycle.getTreatmentCycleById(cycleId);
-        return response.data ?? null;
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
+  const { data: cycle, isLoading: cycleLoading } =
+    useQuery<TreatmentCycle | null>({
+      enabled: isOpen && Boolean(cycleId),
+      queryKey: ["treatment-cycle", cycleId, "culture-modal"],
+      retry: false,
+      queryFn: async () => {
+        if (!cycleId) return null;
+        try {
+          const response =
+            await api.treatmentCycle.getTreatmentCycleById(cycleId);
+          return response.data ?? null;
+        } catch (error) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            return null;
+          }
+          throw error;
         }
-        throw error;
-      }
-    },
-  });
+      },
+    });
 
   // Fetch existing embryos for this cycle
   const { data: existingEmbryos, isLoading: embryosLoading } = useQuery<
     LabSampleDetailResponse[]
   >({
     enabled: isOpen && Boolean(cycleId),
-    queryKey: ["embryos", "cycle", cycleId],
+    queryKey: ["embryos", "cycle", cycleId, "culture-modal"],
     queryFn: async () => {
       if (!cycleId) return [];
       try {
@@ -135,7 +148,9 @@ export function EmbryoCultureConfirmationModal({
     queryFn: async () => {
       if (!cycle?.treatmentId) return null;
       try {
-        const response = await api.treatment.getTreatmentById(cycle.treatmentId);
+        const response = await api.treatment.getTreatmentById(
+          cycle.treatmentId
+        );
         return response.data ?? null;
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
@@ -147,28 +162,80 @@ export function EmbryoCultureConfirmationModal({
     retry: false,
   });
 
+  // Initialize embryos from existing data
   useEffect(() => {
     if (existingEmbryos && existingEmbryos.length > 0) {
-      const totalQuantity = existingEmbryos.reduce(
-        (sum, e) => sum + (e.embryo?.quantity || 0),
-        0
+      const initialEmbryos: EmbryoRow[] = existingEmbryos.map(
+        (embryo, index) => ({
+          id: embryo.id,
+          code: embryo.sampleCode || `E${String(index + 1).padStart(3, "0")}`,
+          dayOfDevelopment: embryo.embryo?.dayOfDevelopment?.toString() || "",
+          grade: embryo.embryo?.grade || "",
+          cellCount: embryo.embryo?.cellCount || embryo.embryo?.quantity || 0,
+          quality: embryo.embryo?.quality || "",
+          notes: embryo.notes || "",
+          creationDate: embryo.embryo?.creationDate
+            ? new Date(embryo.embryo.creationDate).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0],
+        })
       );
-      setEmbryoQuantity(totalQuantity.toString());
+      setEmbryos(initialEmbryos);
+      setEmbryoCounter(existingEmbryos.length + 1);
+    } else {
+      // Initialize with one empty row
+      setEmbryos([
+        {
+          id: `new-${embryoCounter}`,
+          code: `E${String(embryoCounter).padStart(3, "0")}`,
+          dayOfDevelopment: "",
+          grade: "",
+          cellCount: 0,
+          quality: "",
+          notes: "",
+          creationDate: new Date().toISOString().split("T")[0],
+        },
+      ]);
+      setEmbryoCounter(2);
     }
   }, [existingEmbryos]);
 
+  const addEmbryoRow = () => {
+    const newEmbryo: EmbryoRow = {
+      id: `new-${embryoCounter}`,
+      code: `E${String(embryoCounter).padStart(3, "0")}`,
+      dayOfDevelopment: "",
+      grade: "",
+      cellCount: 0,
+      quality: "",
+      notes: "",
+      creationDate: new Date().toISOString().split("T")[0],
+    };
+    setEmbryos([...embryos, newEmbryo]);
+    setEmbryoCounter((prev) => prev + 1);
+  };
+
+  const updateEmbryoRow = (id: string, field: keyof EmbryoRow, value: any) => {
+    setEmbryos(
+      embryos.map((embryo) =>
+        embryo.id === id ? { ...embryo, [field]: value } : embryo
+      )
+    );
+  };
+
+  const removeEmbryoRow = (id: string) => {
+    setEmbryos(embryos.filter((e) => e.id !== id));
+  };
+
   const createEmbryoMutation = useMutation({
     mutationFn: async (data: CreateLabSampleEmbryoRequest) => {
-      // Use new API endpoint for creating embryo
       return api.sample.createEmbryoSample(data);
     },
     onSuccess: () => {
-      toast.success("Embryo culture quantity confirmed successfully");
-      onSuccess();
+      toast.success("Embryo culture confirmed successfully");
     },
     onError: (error: any) => {
       toast.error(
-        error?.response?.data?.message || "Unable to confirm embryo quantity"
+        error?.response?.data?.message || "Unable to confirm embryo culture"
       );
     },
   });
@@ -176,134 +243,180 @@ export function EmbryoCultureConfirmationModal({
   const updateEmbryoMutation = useMutation({
     mutationFn: async ({
       embryoId,
-      quantity,
-      stage,
+      dayOfDevelopment,
+      grade,
+      cellCount,
       quality,
       notes,
     }: {
       embryoId: string;
-      quantity: number;
-      stage?: string;
+      dayOfDevelopment?: number;
+      grade?: string;
+      cellCount?: number;
       quality?: string;
       notes?: string;
     }) => {
       return api.sample.updateEmbryoSample(embryoId, {
-        status: undefined, // Keep existing status
+        status: undefined,
         notes,
         quality,
-        dayOfDevelopment: stage ? parseInt(stage.replace(/\D/g, ""), 10) : undefined,
-        grade: quality,
-        cellCount: quantity,
-        // Legacy support
-        quantity,
-        stage,
+        dayOfDevelopment,
+        grade,
+        cellCount,
+        quantity: cellCount,
       });
     },
     onSuccess: () => {
-      toast.success("Embryo quantity updated successfully");
-      onSuccess();
+      toast.success("Embryo updated successfully");
     },
     onError: (error: any) => {
-      toast.error(
-        error?.response?.data?.message || "Unable to update embryo quantity"
-      );
+      toast.error(error?.response?.data?.message || "Unable to update embryo");
     },
   });
 
   const handleSubmit = async () => {
-    if (!embryoQuantity || !cycle?.patientId) {
-      toast.error("Please enter embryo quantity");
+    if (embryos.length === 0) {
+      toast.error("Please add at least one embryo");
       return;
     }
 
-    const quantity = parseInt(embryoQuantity, 10);
-    if (isNaN(quantity) || quantity <= 0) {
-      toast.error("Embryo quantity must be a positive number");
+    // Validate embryos
+    for (const embryo of embryos) {
+      if (!embryo.code) {
+        toast.error("Please enter embryo code for all embryos");
+        return;
+      }
+      if (embryo.cellCount <= 0) {
+        toast.error("Cell count must be greater than 0");
+        return;
+      }
+    }
+
+    if (!cycle?.patientId) {
+      toast.error("Patient information not found");
       return;
     }
 
-    if (existingEmbryos && existingEmbryos.length > 0) {
-      // Update existing embryo
-      const embryo = existingEmbryos[0];
-      updateEmbryoMutation.mutate({
-        embryoId: embryo.id,
-        quantity,
-        stage: stage || undefined,
-        quality: quality || undefined,
-        notes: notes || undefined,
+    try {
+      // Fetch oocyte and sperm samples for this patient
+      // Fetch enough samples to find the ones belonging to this cycle
+      const oocyteResponse = await api.sample.getAllDetailSamples({
+        SampleType: "Oocyte",
+        PatientId: cycle.patientId,
+        Page: 1,
+        Size: 100, // Fetch more samples to find the correct one
+        Sort: "collectionDate",
+        Order: "desc",
       });
-    } else {
-      // Create new embryo record
-      // Try to find oocyte and sperm samples from the cycle
-      // If not found, we'll need to handle this case
-      try {
-        // Fetch samples for this cycle to find oocyte and sperm
-        const oocyteResponse = await api.sample.getAllDetailSamples({
-          SampleType: "Oocyte",
-          PatientId: cycle.patientId,
-          Size: 1,
-        });
-        const spermResponse = await api.sample.getAllDetailSamples({
-          SampleType: "Sperm",
-          PatientId: cycle.patientId,
-          Size: 1,
-        });
-        
-        const oocyteSample = oocyteResponse.data?.find(
-          (s) => s.treatmentCycleId === cycleId || !s.treatmentCycleId
-        );
-        const spermSample = spermResponse.data?.find(
-          (s) => s.treatmentCycleId === cycleId || !s.treatmentCycleId
-        );
+      const spermResponse = await api.sample.getAllDetailSamples({
+        SampleType: "Sperm",
+        PatientId: cycle.patientId,
+        Page: 1,
+        Size: 100, // Fetch more samples to find the correct one
+        Sort: "collectionDate",
+        Order: "desc",
+      });
 
-        if (oocyteSample && spermSample) {
-          // Use new API with required fields
-          createEmbryoMutation.mutate({
-            PatientId: cycle.patientId,
-            LabSampleOocyteId: oocyteSample.id,
-            LabSampleSpermId: spermSample.id,
-            DayOfDevelopment: stage ? parseInt(stage.replace(/\D/g, ""), 10) : undefined,
-            Grade: quality || undefined,
-            CellCount: quantity,
-            Notes: notes || undefined,
-            Quality: quality || undefined,
-            IsAvailable: true,
-            IsQualityCheck: false,
-          });
+      // Find samples that belong to this treatment cycle
+      // Priority: 1) samples with treatmentCycleId === cycleId, 2) samples without treatmentCycleId (fallback)
+      const oocyteSamples = oocyteResponse.data || [];
+      const spermSamples = spermResponse.data || [];
+
+      // First, try to find samples that explicitly belong to this cycle
+      let oocyteSample = oocyteSamples.find(
+        (s) => s.treatmentCycleId === cycleId
+      );
+      let spermSample = spermSamples.find(
+        (s) => s.treatmentCycleId === cycleId
+      );
+
+      // If not found, fallback to samples without treatmentCycleId (legacy samples)
+      // This is useful for backward compatibility
+      if (!oocyteSample) {
+        oocyteSample = oocyteSamples.find((s) => !s.treatmentCycleId);
+      }
+      if (!spermSample) {
+        spermSample = spermSamples.find((s) => !s.treatmentCycleId);
+      }
+
+      // Log warning if samples don't belong to this cycle (for debugging)
+      if (process.env.NODE_ENV === "development") {
+        if (oocyteSample && oocyteSample.treatmentCycleId !== cycleId) {
+          console.warn(
+            `[EmbryoCultureConfirmationModal] Using oocyte sample without treatmentCycleId for cycle ${cycleId}`
+          );
+        }
+        if (spermSample && spermSample.treatmentCycleId !== cycleId) {
+          console.warn(
+            `[EmbryoCultureConfirmationModal] Using sperm sample without treatmentCycleId for cycle ${cycleId}`
+          );
+        }
+      }
+
+      // Validate that we have patientId
+      if (!cycle.patientId) {
+        toast.error("Patient information not found");
+        return;
+      }
+
+      // Process each embryo
+      const promises = embryos.map(async (embryo) => {
+        if (embryo.id.startsWith("new-")) {
+          // Create new embryo
+          if (oocyteSample && spermSample) {
+            return createEmbryoMutation.mutateAsync({
+              PatientId: cycle.patientId!,
+              LabSampleOocyteId: oocyteSample.id,
+              LabSampleSpermId: spermSample.id,
+              DayOfDevelopment: embryo.dayOfDevelopment
+                ? parseInt(embryo.dayOfDevelopment, 10)
+                : undefined,
+              Grade: embryo.grade || undefined,
+              CellCount: embryo.cellCount,
+              Quality: embryo.quality || undefined,
+              Notes: embryo.notes || generalNotes || undefined,
+              IsAvailable: true,
+              IsQualityCheck: false,
+            });
+          } else {
+            // Fallback without oocyte/sperm IDs
+            return createEmbryoMutation.mutateAsync({
+              PatientId: cycle.patientId!,
+              LabSampleOocyteId: oocyteSample?.id || "",
+              LabSampleSpermId: spermSample?.id || "",
+              DayOfDevelopment: embryo.dayOfDevelopment
+                ? parseInt(embryo.dayOfDevelopment, 10)
+                : undefined,
+              Grade: embryo.grade || undefined,
+              CellCount: embryo.cellCount,
+              Quality: embryo.quality || undefined,
+              Notes: embryo.notes || generalNotes || undefined,
+              IsAvailable: true,
+              IsQualityCheck: false,
+            });
+          }
         } else {
-          // Fallback: use legacy format (may need backend support)
-          createEmbryoMutation.mutate({
-            patientId: cycle.patientId,
-            treatmentCycleId: cycleId,
-            creationDate: new Date(creationDate).toISOString(),
-            quantity,
-            stage: stage || undefined,
-            status: "Processing",
-            notes: notes || undefined,
-            // New API format with empty IDs (may fail, but try)
-            PatientId: cycle.patientId,
-            LabSampleOocyteId: oocyteSample?.id || "",
-            LabSampleSpermId: spermSample?.id || "",
-            DayOfDevelopment: stage ? parseInt(stage.replace(/\D/g, ""), 10) : undefined,
-            Grade: quality || undefined,
-            CellCount: quantity,
-            Quality: quality || undefined,
-            IsAvailable: true,
-            IsQualityCheck: false,
+          // Update existing embryo
+          return updateEmbryoMutation.mutateAsync({
+            embryoId: embryo.id,
+            dayOfDevelopment: embryo.dayOfDevelopment
+              ? parseInt(embryo.dayOfDevelopment, 10)
+              : undefined,
+            grade: embryo.grade || undefined,
+            cellCount: embryo.cellCount,
+            quality: embryo.quality || undefined,
+            notes: embryo.notes || generalNotes || undefined,
           });
         }
-      } catch (error) {
-        // If fetch fails, use legacy format
-        createEmbryoMutation.mutate({
-          patientId: cycle.patientId,
-          treatmentCycleId: cycleId,
-          creationDate: new Date(creationDate).toISOString(),
-          quantity,
-          stage: stage || undefined,
-          status: "Processing",
-          notes: notes || undefined,
-        });
-      }
+      });
+
+      await Promise.all(promises);
+      toast.success("Embryo culture confirmed successfully");
+      onSuccess();
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.message || "Unable to confirm embryo culture"
+      );
     }
   };
 
@@ -328,18 +441,15 @@ export function EmbryoCultureConfirmationModal({
     createEmbryoMutation.isPending ||
     updateEmbryoMutation.isPending;
 
-  const totalExistingQuantity = existingEmbryos?.reduce(
-    (sum, e) => sum + (e.embryo?.quantity || 0),
-    0
-  ) || 0;
+  const totalEmbryos = embryos.reduce((sum, e) => sum + e.cellCount, 0);
 
   return (
     <Modal
       title="Embryo Culture Confirmation"
-      description="Confirm the number of embryos in culture"
+      description="Confirm embryo culture information and details"
       isOpen={isOpen}
       onClose={onClose}
-      size="lg"
+      size="2xl"
     >
       {isLoading && !cycle ? (
         <div className="py-10 text-center text-sm text-gray-500">
@@ -354,7 +464,9 @@ export function EmbryoCultureConfirmationModal({
           {/* Cycle Information */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Treatment Cycle Information</CardTitle>
+              <CardTitle className="text-lg">
+                Treatment Cycle Information
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -363,7 +475,7 @@ export function EmbryoCultureConfirmationModal({
                     Cycle Code
                   </Label>
                   <p className="mt-1 text-sm font-mono">
-                    {cycle.cycleCode || getLast4Chars(cycle.id)}
+                    {cycle.cycleName || getLast4Chars(cycle.id)}
                   </p>
                 </div>
                 <div>
@@ -378,13 +490,9 @@ export function EmbryoCultureConfirmationModal({
                   </Label>
                   <p className="mt-1 text-sm">
                     {getFullNameFromObject(userDetails) ||
-                      getFullNameFromObject(patientDetails?.accountInfo) ||
                       getFullNameFromObject(patientDetails) ||
                       userDetails?.userName ||
-                      patientDetails?.accountInfo?.username ||
-                      (cycle.patientId
-                        ? getLast4Chars(cycle.patientId)
-                        : "—")}
+                      (cycle.patientId ? getLast4Chars(cycle.patientId) : "—")}
                   </p>
                 </div>
                 <div>
@@ -392,90 +500,226 @@ export function EmbryoCultureConfirmationModal({
                     Treatment Type
                   </Label>
                   <p className="mt-1 text-sm">
-                    {cycle.treatmentType ||
-                      treatmentData?.treatmentType ||
-                      "—"}
+                    {cycle.treatmentType || treatmentData?.treatmentType || "—"}
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Existing Embryos Info */}
-          {totalExistingQuantity > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Existing Embryos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-lg">
-                    {totalExistingQuantity} embryos
-                  </Badge>
-                  <span className="text-sm text-gray-600">
-                    in culture
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Embryo Culture Form */}
+          {/* Embryo Culture Information */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Confirm Embryo Quantity</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">
+                  Embryo Culture Information
+                </CardTitle>
+                <Badge variant="outline" className="text-lg">
+                  Total: {totalEmbryos} embryos
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="quantity">Embryo Quantity *</Label>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    min="1"
-                    value={embryoQuantity}
-                    onChange={(e) => setEmbryoQuantity(e.target.value)}
-                    placeholder="Enter embryo quantity"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="creationDate">Creation Date</Label>
-                  <Input
-                    id="creationDate"
-                    type="date"
-                    value={creationDate}
-                    onChange={(e) => setCreationDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="stage">Stage</Label>
-                  <Input
-                    id="stage"
-                    value={stage}
-                    onChange={(e) => setStage(e.target.value)}
-                    placeholder="VD: Day 3, Day 5"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="quality">Quality</Label>
-                  <Input
-                    id="quality"
-                    value={quality}
-                    onChange={(e) => setQuality(e.target.value)}
-                    placeholder="VD: Good, Fair"
-                  />
-                </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        No.
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Embryo Code
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Day of Development
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Grade
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Cell Count
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Quality
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Creation Date
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Notes
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {embryos.map((embryo, index) => (
+                      <tr key={embryo.id} className="border-b hover:bg-gray-50">
+                        <td className="p-2">{index + 1}</td>
+                        <td className="p-2">
+                          <Input
+                            value={embryo.code}
+                            onChange={(e) =>
+                              updateEmbryoRow(embryo.id, "code", e.target.value)
+                            }
+                            placeholder="E001"
+                            className="w-full"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            value={embryo.dayOfDevelopment}
+                            onChange={(e) =>
+                              updateEmbryoRow(
+                                embryo.id,
+                                "dayOfDevelopment",
+                                e.target.value
+                              )
+                            }
+                            placeholder="3, 5, 6"
+                            className="w-full"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <select
+                            value={embryo.grade}
+                            onChange={(e) =>
+                              updateEmbryoRow(
+                                embryo.id,
+                                "grade",
+                                e.target.value
+                              )
+                            }
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          >
+                            <option value="">Select grade</option>
+                            <option value="AA">AA</option>
+                            <option value="AB">AB</option>
+                            <option value="BB">BB</option>
+                            <option value="BC">BC</option>
+                            <option value="CC">CC</option>
+                          </select>
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            value={embryo.cellCount}
+                            onChange={(e) =>
+                              updateEmbryoRow(
+                                embryo.id,
+                                "cellCount",
+                                parseInt(e.target.value) || 0
+                              )
+                            }
+                            className="w-full"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            value={embryo.quality}
+                            onChange={(e) =>
+                              updateEmbryoRow(
+                                embryo.id,
+                                "quality",
+                                e.target.value
+                              )
+                            }
+                            placeholder="Good, Fair, Poor"
+                            className="w-full"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            type="date"
+                            value={embryo.creationDate}
+                            onChange={(e) =>
+                              updateEmbryoRow(
+                                embryo.id,
+                                "creationDate",
+                                e.target.value
+                              )
+                            }
+                            className="w-full"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            value={embryo.notes}
+                            onChange={(e) =>
+                              updateEmbryoRow(
+                                embryo.id,
+                                "notes",
+                                e.target.value
+                              )
+                            }
+                            placeholder="Notes..."
+                            className="w-full"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => removeEmbryoRow(embryo.id)}
+                          >
+                            Remove
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addEmbryoRow}
+                className="mt-2"
+              >
+                Add Embryo
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* General Notes and Confirmation */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">
+                General Notes and Confirmation
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="notes">Notes</Label>
+                <Label htmlFor="general-notes">General Notes</Label>
                 <Textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Enter notes (optional)"
+                  id="general-notes"
+                  value={generalNotes}
+                  onChange={(e) => setGeneralNotes(e.target.value)}
+                  placeholder="Enter general notes about the culture process..."
                   rows={3}
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="lab-tech">Lab Tech Name</Label>
+                  <Input
+                    id="lab-tech"
+                    value={labTechName}
+                    onChange={(e) => setLabTechName(e.target.value)}
+                    placeholder="Lab Tech Name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="confirmation-date">Confirmation Date</Label>
+                  <Input
+                    id="confirmation-date"
+                    type="date"
+                    value={confirmationDate}
+                    onChange={(e) => setConfirmationDate(e.target.value)}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -485,8 +729,11 @@ export function EmbryoCultureConfirmationModal({
             <Button variant="outline" onClick={onClose} disabled={isLoading}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={isLoading || !embryoQuantity}>
-              {isLoading ? "Processing..." : "Confirm"}
+            <Button
+              onClick={handleSubmit}
+              disabled={isLoading || embryos.length === 0}
+            >
+              {isLoading ? "Processing..." : "Confirm Culture"}
             </Button>
           </div>
         </div>
@@ -494,4 +741,3 @@ export function EmbryoCultureConfirmationModal({
     </Modal>
   );
 }
-

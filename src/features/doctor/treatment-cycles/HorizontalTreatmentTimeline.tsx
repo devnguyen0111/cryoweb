@@ -1,7 +1,7 @@
 /**
  * Horizontal Treatment Timeline Component
  * Displays the treatment cycle progress as a horizontal timeline
- * Supports both IVF (8 steps) and IUI (7 steps)
+ * Supports both IVF (6 steps) and IUI (4 steps)
  * Uses backend API to get the most accurate current step
  */
 
@@ -23,71 +23,51 @@ interface HorizontalTreatmentTimelineProps {
   className?: string;
 }
 
-// IVF Step definitions (8 steps matching backend TreatmentStepType enum)
+// IVF Step definitions (6 steps matching backend TreatmentStepType enum)
 const IVF_STEPS: Array<{ id: IVFStep; label: string }> = [
   {
     id: "step0_pre_cycle_prep",
-    label: "Pre-Cycle Preparation",
+    label: "Initial Medical Examination",
   },
   {
     id: "step1_stimulation",
-    label: "Controlled Ovarian Stimulation",
-  },
-  {
-    id: "step2_monitoring",
-    label: "Mid-Stimulation Monitoring",
-  },
-  {
-    id: "step3_trigger",
-    label: "Ovulation Trigger",
+    label: "Ovarian Stimulation",
   },
   {
     id: "step4_opu",
-    label: "Oocyte Pick-Up (OPU)",
+    label: "Oocyte Retrieval and Sperm Collection",
   },
   {
     id: "step5_fertilization",
-    label: "Fertilization/Lab",
-  },
-  {
-    id: "step6_embryo_culture",
-    label: "Embryo Culture",
+    label: "In Vitro Fertilization",
   },
   {
     id: "step7_embryo_transfer",
     label: "Embryo Transfer",
   },
+  {
+    id: "step6_beta_hcg",
+    label: "Post-Transfer Follow-Up",
+  },
 ];
 
-// IUI Step definitions (7 steps matching backend TreatmentStepType enum)
+// IUI Step definitions (4 steps matching backend TreatmentStepType enum)
 const IUI_STEPS: Array<{ id: IUIStep; label: string }> = [
   {
     id: "step0_pre_cycle_prep",
-    label: "Pre-Cycle Preparation",
-  },
-  {
-    id: "step1_day2_3_assessment",
-    label: "Assessment",
+    label: "Initial Medical Examination",
   },
   {
     id: "step2_follicle_monitoring",
-    label: "Follicle Monitoring",
-  },
-  {
-    id: "step3_trigger",
-    label: "Trigger",
+    label: "Ovarian Stimulation",
   },
   {
     id: "step4_iui_procedure",
-    label: "IUI Procedure",
+    label: "Sperm Collection and Intrauterine Insemination",
   },
   {
     id: "step5_post_iui",
-    label: "Post-IUI Monitoring",
-  },
-  {
-    id: "step6_beta_hcg",
-    label: "Beta HCG Test",
+    label: "Post-Insemination Follow-Up",
   },
 ];
 
@@ -195,6 +175,13 @@ function mapStepTypeToStepId(
     ) {
       return "step7_embryo_transfer";
     }
+    if (
+      stepTypeStr === "IVF_BETAHCGTEST" ||
+      (stepTypeStr.includes("BETAHCG") && stepTypeStr.includes("IVF")) ||
+      (stepTypeStr.includes("BETA_HCG") && stepTypeStr.includes("IVF"))
+    ) {
+      return "step6_beta_hcg";
+    }
   }
 
   return null;
@@ -210,65 +197,67 @@ function mapCycleNameToStep(
   const nameLower = cycleName.toLowerCase();
 
   if (treatmentType === "IUI") {
-    // Step 7: Beta HCG Test (IUI_BetaHCGTest) - check first to avoid conflicts
+    // Step 4: Post-Insemination Follow-Up (IUI_PostIUI)
     if (
-      nameLower.includes("beta") ||
-      nameLower.includes("hcg") ||
-      (nameLower.includes("pregnancy") && nameLower.includes("test")) ||
-      nameLower.includes("14 days")
-    ) {
-      return "step6_beta_hcg";
-    }
-    // Step 6: Post-IUI Monitoring (IUI_PostIUI)
-    if (
+      nameLower.includes("post-insemination") ||
       nameLower.includes("post-iui") ||
-      (nameLower.includes("post") && nameLower.includes("monitoring")) ||
-      (nameLower.includes("post") && nameLower.includes("iui"))
+      (nameLower.includes("post") && nameLower.includes("follow-up")) ||
+      (nameLower.includes("post") && nameLower.includes("monitoring"))
     ) {
       return "step5_post_iui";
     }
-    // Step 5: IUI Procedure (IUI_Procedure)
+    // Step 3: Sperm Collection and Intrauterine Insemination (IUI_Procedure)
     if (
+      nameLower.includes("sperm collection") ||
+      nameLower.includes("intrauterine insemination") ||
       (nameLower.includes("iui") && nameLower.includes("procedure")) ||
-      nameLower.includes("insemination") ||
-      (nameLower.includes("iui") &&
-        !nameLower.includes("post") &&
-        !nameLower.includes("pre"))
+      nameLower.includes("insemination")
     ) {
       return "step4_iui_procedure";
     }
-    // Step 4: Day 10-12 Trigger (IUI_Day10_12_Trigger)
+    // Step 2: Ovarian Stimulation (IUI_Day7_10_FollicleMonitoring)
     if (
-      nameLower.includes("day 10-12") ||
-      (nameLower.includes("trigger") && !nameLower.includes("pregnancy"))
-    ) {
-      return "step3_trigger";
-    }
-    // Step 3: Day 7-10 Follicle Monitoring (IUI_Day7_10_FollicleMonitoring)
-    if (
-      nameLower.includes("day 7-10") ||
-      (nameLower.includes("follicle") && nameLower.includes("monitoring")) ||
-      (nameLower.includes("monitoring") && !nameLower.includes("post"))
+      nameLower.includes("ovarian stimulation") ||
+      (nameLower.includes("stimulation") && nameLower.includes("ovarian")) ||
+      nameLower.includes("follicle monitoring") ||
+      nameLower.includes("day 7-10")
     ) {
       return "step2_follicle_monitoring";
     }
-    // Step 2: Day 2-3 Assessment (IUI_Day2_3_Assessment)
+    // Step 1: Initial Medical Examination (IUI_PreCyclePreparation)
     if (
-      nameLower.includes("day 2-3") ||
-      nameLower.includes("assessment") ||
-      nameLower.includes("baseline")
-    ) {
-      return "step1_day2_3_assessment";
-    }
-    // Step 1: Pre-Cycle Preparation (IUI_PreCyclePreparation)
-    if (
-      nameLower.includes("pre-cycle") ||
-      (nameLower.includes("preparation") && nameLower.includes("pre-cycle"))
+      nameLower.includes("initial medical examination") ||
+      nameLower.includes("medical examination") ||
+      nameLower.includes("baseline visit") ||
+      nameLower.includes("pre-cycle preparation")
     ) {
       return "step0_pre_cycle_prep";
     }
+    // Legacy mappings (for backward compatibility)
+    if (
+      nameLower.includes("beta") ||
+      nameLower.includes("hcg") ||
+      (nameLower.includes("pregnancy") && nameLower.includes("test"))
+    ) {
+      return "step6_beta_hcg";
+    }
+    if (nameLower.includes("day 10-12") || nameLower.includes("trigger")) {
+      return "step3_trigger";
+    }
+    if (nameLower.includes("day 2-3") || nameLower.includes("assessment")) {
+      return "step1_day2_3_assessment";
+    }
   } else if (treatmentType === "IVF") {
-    // Step 8: Embryo Transfer (IVF_EmbryoTransfer)
+    // Step 6: Post-Transfer Follow-Up (IVF_BetaHCGTest)
+    if (
+      nameLower.includes("post-transfer follow-up") ||
+      nameLower.includes("post-transfer") ||
+      (nameLower.includes("post") && nameLower.includes("transfer")) ||
+      (nameLower.includes("pregnancy") && nameLower.includes("test"))
+    ) {
+      return "step6_beta_hcg";
+    }
+    // Step 5: Embryo Transfer (IVF_EmbryoTransfer)
     if (
       nameLower.includes("embryo transfer") ||
       nameLower.includes("transfer") ||
@@ -276,23 +265,18 @@ function mapCycleNameToStep(
     ) {
       return "step7_embryo_transfer";
     }
-    // Step 7: Embryo Culture (IVF_EmbryoCulture)
+    // Step 4: In Vitro Fertilization (IVF_Fertilization)
     if (
-      nameLower.includes("embryo culture") ||
-      (nameLower.includes("culture") && !nameLower.includes("embryo transfer"))
-    ) {
-      return "step6_embryo_culture";
-    }
-    // Step 6: Fertilization/Lab (IVF_Fertilization)
-    if (
+      nameLower.includes("in vitro fertilization") ||
       nameLower.includes("fertilization") ||
-      nameLower.includes("fertilization/lab") ||
-      (nameLower.includes("lab") && !nameLower.includes("culture"))
+      nameLower.includes("icsi")
     ) {
       return "step5_fertilization";
     }
-    // Step 5: Oocyte Pick-Up (OPU) (IVF_OPU)
+    // Step 3: Oocyte Retrieval and Sperm Collection (IVF_OPU)
     if (
+      nameLower.includes("oocyte retrieval") ||
+      nameLower.includes("sperm collection") ||
       nameLower.includes("retrieval") ||
       nameLower.includes("opu") ||
       nameLower.includes("oocyte") ||
@@ -300,35 +284,33 @@ function mapCycleNameToStep(
     ) {
       return "step4_opu";
     }
-    // Step 4: Ovulation Trigger (IVF_Trigger)
+    // Step 2: Ovarian Stimulation (IVF_StimulationStart)
     if (
-      nameLower.includes("trigger") ||
-      nameLower.includes("ovulation trigger")
-    ) {
-      return "step3_trigger";
-    }
-    // Step 3: Mid-Stimulation Monitoring (IVF_Monitoring)
-    if (
-      nameLower.includes("mid-stimulation") ||
-      (nameLower.includes("monitoring") && !nameLower.includes("post"))
-    ) {
-      return "step2_monitoring";
-    }
-    // Step 2: Controlled Ovarian Stimulation (IVF_StimulationStart)
-    if (
+      nameLower.includes("ovarian stimulation") ||
       nameLower.includes("controlled ovarian stimulation") ||
       nameLower.includes("stimulation") ||
-      nameLower.includes("cos") ||
-      nameLower.includes("ovarian")
+      nameLower.includes("cos")
     ) {
       return "step1_stimulation";
     }
-    // Step 1: Pre-Cycle Preparation (IVF_PreCyclePreparation)
+    // Step 1: Initial Medical Examination (IVF_PreCyclePreparation)
     if (
-      nameLower.includes("pre-cycle") ||
-      (nameLower.includes("preparation") && nameLower.includes("pre-cycle"))
+      nameLower.includes("initial medical examination") ||
+      nameLower.includes("medical examination") ||
+      nameLower.includes("baseline evaluation") ||
+      nameLower.includes("pre-cycle preparation")
     ) {
       return "step0_pre_cycle_prep";
+    }
+    // Legacy mappings (for backward compatibility)
+    if (nameLower.includes("embryo culture") || nameLower.includes("culture")) {
+      return "step6_embryo_culture";
+    }
+    if (nameLower.includes("trigger") || nameLower.includes("ovulation trigger")) {
+      return "step3_trigger";
+    }
+    if (nameLower.includes("mid-stimulation") || nameLower.includes("monitoring")) {
+      return "step2_monitoring";
     }
   }
 

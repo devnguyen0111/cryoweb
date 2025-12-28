@@ -1,10 +1,4 @@
-/**
- * Cycle Update Form Component
- * Displays treatment progress, statistics, and allows creating medical records
- * and advancing to next treatment stage
- */
-
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { api } from "@/api/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -36,27 +30,22 @@ interface CycleUpdateFormProps {
   onStepAdvanced?: () => void;
 }
 
-// IVF Steps (8 steps matching backend TreatmentStepType enum)
+// IVF Steps (6 steps matching backend TreatmentStepType enum)
 const IVF_STEPS: IVFStep[] = [
-  "step0_pre_cycle_prep", // Pre-Cycle Preparation
-  "step1_stimulation", // Controlled Ovarian Stimulation
-  "step2_monitoring", // Mid-Stimulation Monitoring
-  "step3_trigger", // Ovulation Trigger
-  "step4_opu", // Oocyte Pick-Up (OPU)
-  "step5_fertilization", // Fertilization/Lab
-  "step6_embryo_culture", // Embryo Culture
+  "step0_pre_cycle_prep", // Initial Medical Examination
+  "step1_stimulation", // Ovarian Stimulation
+  "step4_opu", // Oocyte Retrieval and Sperm Collection
+  "step5_fertilization", // In Vitro Fertilization
   "step7_embryo_transfer", // Embryo Transfer
+  "step6_beta_hcg", // Post-Transfer Follow-Up
 ];
 
-// IUI Steps (7 steps matching backend TreatmentStepType enum)
+// IUI Steps (4 steps matching backend TreatmentStepType enum)
 const IUI_STEPS: IUIStep[] = [
-  "step0_pre_cycle_prep", // Pre-Cycle Preparation
-  "step1_day2_3_assessment", // Day 2-3 Assessment
-  "step2_follicle_monitoring", // Day 7-10 Follicle Monitoring
-  "step3_trigger", // Day 10-12 Trigger
-  "step4_iui_procedure", // IUI Procedure
-  "step5_post_iui", // Post-IUI Monitoring
-  "step6_beta_hcg", // Beta HCG Test
+  "step0_pre_cycle_prep", // Initial Medical Examination
+  "step2_follicle_monitoring", // Ovarian Stimulation
+  "step4_iui_procedure", // Sperm Collection and Intrauterine Insemination
+  "step5_post_iui", // Post-Insemination Follow-Up
 ];
 
 type MedicalRecordFormData = {
@@ -212,34 +201,42 @@ export function CycleUpdateForm({
     return activeCycles[0] || null;
   };
 
+  // Helper function to infer treatmentType for a cycle
+  const inferTreatmentType = useCallback(
+    (cycle: TreatmentCycle): "IUI" | "IVF" | undefined => {
+      // First, try cycle.treatmentType
+      if (
+        cycle.treatmentType === "IUI" ||
+        cycle.treatmentType === "IVF"
+      ) {
+        return cycle.treatmentType;
+      }
+      // Then try treatmentData?.treatmentType
+      if (treatmentData?.treatmentType) {
+        const type = String(treatmentData.treatmentType).toUpperCase();
+        if (type === "IUI") return "IUI";
+        if (type === "IVF") return "IVF";
+      }
+      // Try to infer from cycleName if available
+      if (cycle.cycleName) {
+        const cycleNameUpper = cycle.cycleName.toUpperCase();
+        if (cycleNameUpper.includes("IVF")) {
+          return "IVF";
+        } else if (cycleNameUpper.includes("IUI")) {
+          return "IUI";
+        }
+      }
+      return undefined;
+    },
+    [treatmentData]
+  );
+
   // Ensure currentCycle has treatmentType
   const currentCycle = useMemo(() => {
-    let treatmentType: "IUI" | "IVF" | undefined = undefined;
+    let treatmentType = inferTreatmentType(rawCurrentCycle);
 
-    // First, try cycle.treatmentType
-    if (
-      rawCurrentCycle.treatmentType === "IUI" ||
-      rawCurrentCycle.treatmentType === "IVF"
-    ) {
-      treatmentType = rawCurrentCycle.treatmentType;
-    }
-    // Then try treatmentData?.treatmentType
-    else if (treatmentData?.treatmentType) {
-      const type = String(treatmentData.treatmentType).toUpperCase();
-      if (type === "IUI") treatmentType = "IUI";
-      else if (type === "IVF") treatmentType = "IVF";
-    }
-    // Try to infer from cycleName if available (e.g., "IVF Treatment Plan 2025 - Pre-Cycle Preparation")
-    else if (rawCurrentCycle.cycleName) {
-      const cycleNameUpper = rawCurrentCycle.cycleName.toUpperCase();
-      if (cycleNameUpper.includes("IVF")) {
-        treatmentType = "IVF";
-      } else if (cycleNameUpper.includes("IUI")) {
-        treatmentType = "IUI";
-      }
-    }
-    // Try to infer from allCyclesData if available
-    else if (allCyclesDataForType && allCyclesDataForType.length > 0) {
+    // Try to infer from allCyclesData if still not found
+    if (!treatmentType && allCyclesDataForType && allCyclesDataForType.length > 0) {
       const cycleWithType = allCyclesDataForType.find(
         (c) => c.treatmentType === "IUI" || c.treatmentType === "IVF"
       );
@@ -257,7 +254,7 @@ export function CycleUpdateForm({
       ...rawCurrentCycle,
       treatmentType: treatmentType,
     };
-  }, [rawCurrentCycle, treatmentData, allCyclesDataForType]);
+  }, [rawCurrentCycle, treatmentData, allCyclesDataForType, inferTreatmentType]);
 
   const form = useForm<MedicalRecordFormData>({
     defaultValues: {
@@ -497,6 +494,85 @@ export function CycleUpdateForm({
     enabled: !!currentCycle.id,
   });
 
+  // Fetch ALL sperm samples of patient that have been quality checked (for validation)
+  const { data: spermSamplesData } = useQuery({
+    queryKey: ["sperm-samples", "patient", currentCycle.patientId, "quality-checked"],
+    queryFn: async () => {
+      if (!currentCycle.patientId) return { data: [] };
+      try {
+        const response = await api.sample.getAllDetailSamples({
+          SampleType: "Sperm",
+          PatientId: currentCycle.patientId,
+          Page: 1,
+          Size: 100,
+          Sort: "collectionDate",
+          Order: "desc",
+        });
+        const samples = response.data || [];
+        // Get ALL samples of patient that have been quality checked
+        // Statuses considered as quality checked: QualityChecked, Fertilized, CulturedEmbryo, Stored, Used, Frozen
+        const qualityCheckedStatuses = [
+          "QualityChecked",
+          "Fertilized",
+          "CulturedEmbryo",
+          "Stored",
+          "Used",
+          "Frozen",
+        ];
+        return {
+          data: samples.filter((sample) =>
+            qualityCheckedStatuses.includes(sample.status)
+          ),
+        };
+      } catch (error) {
+        console.error("Error fetching sperm samples:", error);
+        return { data: [] };
+      }
+    },
+    enabled: !!currentCycle.patientId,
+  });
+
+  // Fetch ALL oocyte samples of patient that have been quality checked (for validation)
+  const { data: oocyteSamplesData } = useQuery({
+    queryKey: ["oocyte-samples", "patient", currentCycle.patientId, "quality-checked"],
+    queryFn: async () => {
+      if (!currentCycle.patientId) return { data: [] };
+      try {
+        const response = await api.sample.getAllDetailSamples({
+          SampleType: "Oocyte",
+          PatientId: currentCycle.patientId,
+          Page: 1,
+          Size: 100,
+          Sort: "collectionDate",
+          Order: "desc",
+        });
+        const samples = response.data || [];
+        // Get ALL samples of patient that have been quality checked
+        // Statuses considered as quality checked: QualityChecked, Fertilized, CulturedEmbryo, Stored, Used, Frozen
+        const qualityCheckedStatuses = [
+          "QualityChecked",
+          "Fertilized",
+          "CulturedEmbryo",
+          "Stored",
+          "Used",
+          "Frozen",
+        ];
+        return {
+          data: samples.filter((sample) =>
+            qualityCheckedStatuses.includes(sample.status)
+          ),
+        };
+      } catch (error) {
+        console.error("Error fetching oocyte samples:", error);
+        return { data: [] };
+      }
+    },
+    enabled: !!currentCycle.patientId,
+  });
+
+  const spermSamples = spermSamplesData?.data || [];
+  const oocyteSamples = oocyteSamplesData?.data || [];
+
   // Fetch all cycles for this treatment to show progress
   // Use allCyclesDataForType if available, otherwise fetch separately
   const { data: allCyclesData } = useQuery({
@@ -518,7 +594,25 @@ export function CycleUpdateForm({
   });
 
   // Use allCyclesDataForType if available, otherwise use allCyclesData
-  const finalAllCyclesData = allCyclesDataForType || allCyclesData || [];
+  const rawFinalAllCyclesData = allCyclesDataForType || allCyclesData || [];
+
+  // Enhance allCyclesData with treatmentType to prevent "Treatment type not specified" error
+  const finalAllCyclesData = useMemo(() => {
+    if (!rawFinalAllCyclesData || rawFinalAllCyclesData.length === 0) {
+      return [currentCycle];
+    }
+    return rawFinalAllCyclesData.map((cycle) => {
+      const treatmentType = inferTreatmentType(cycle);
+      return {
+        ...cycle,
+        treatmentType: treatmentType || currentCycle.treatmentType,
+      };
+    });
+  }, [rawFinalAllCyclesData, currentCycle, inferTreatmentType]);
+
+  // Type assertion helpers to ensure legacy steps are recognized
+  const asIVFStep = (step: string): IVFStep => step as IVFStep;
+  const asIUIStep = (step: string): IUIStep => step as IUIStep;
 
   // Helper function to map stepType enum from backend to frontend step IDs
   const mapStepTypeToStepId = (
@@ -597,10 +691,10 @@ export function CycleUpdateForm({
         stepTypeStr === "IVF_MONITORING" ||
         (stepTypeStr.includes("MONITORING") && !stepTypeStr.includes("POST"))
       ) {
-        return "step2_monitoring";
+        return asIVFStep("step2_monitoring");
       }
       if (stepTypeStr === "IVF_TRIGGER" || stepTypeStr.includes("TRIGGER")) {
-        return "step3_trigger";
+        return asIVFStep("step3_trigger");
       }
       if (
         stepTypeStr === "IVF_OPU" ||
@@ -620,7 +714,7 @@ export function CycleUpdateForm({
         stepTypeStr.includes("EMBRYOCULTURE") ||
         stepTypeStr.includes("CULTURE")
       ) {
-        return "step6_embryo_culture";
+        return asIVFStep("step6_embryo_culture");
       }
       if (
         stepTypeStr === "IVF_EMBRYOTRANSFER" ||
@@ -628,6 +722,13 @@ export function CycleUpdateForm({
         stepTypeStr.includes("TRANSFER")
       ) {
         return "step7_embryo_transfer";
+      }
+      if (
+        stepTypeStr === "IVF_BETAHCGTEST" ||
+        (stepTypeStr.includes("BETAHCG") && stepTypeStr.includes("IVF")) ||
+        (stepTypeStr.includes("BETA_HCG") && stepTypeStr.includes("IVF"))
+      ) {
+        return "step6_beta_hcg";
       }
     }
 
@@ -644,63 +745,67 @@ export function CycleUpdateForm({
     const nameLower = cycleName.toLowerCase();
 
     if (treatmentType === "IUI") {
-      // Step 7: Beta HCG Test (IUI_BetaHCGTest) - check first to avoid conflicts
+      // Step 4: Post-Insemination Follow-Up (IUI_PostIUI)
       if (
-        nameLower.includes("beta") ||
-        nameLower.includes("hcg") ||
-        (nameLower.includes("pregnancy") && nameLower.includes("test")) ||
-        nameLower.includes("14 days")
-      ) {
-        return "step6_beta_hcg";
-      }
-      // Step 6: Post-IUI Monitoring (IUI_PostIUI)
-      if (
+        nameLower.includes("post-insemination") ||
         nameLower.includes("post-iui") ||
-        (nameLower.includes("post") && nameLower.includes("monitoring")) ||
-        (nameLower.includes("post") && nameLower.includes("iui"))
+        (nameLower.includes("post") && nameLower.includes("follow-up")) ||
+        (nameLower.includes("post") && nameLower.includes("monitoring"))
       ) {
         return "step5_post_iui";
       }
-      // Step 5: IUI Procedure (IUI_Procedure)
+      // Step 3: Sperm Collection and Intrauterine Insemination (IUI_Procedure)
       if (
+        nameLower.includes("sperm collection") ||
+        nameLower.includes("intrauterine insemination") ||
         (nameLower.includes("iui") && nameLower.includes("procedure")) ||
-        nameLower.includes("insemination") ||
-        (nameLower.includes("iui") && !nameLower.includes("post"))
+        nameLower.includes("insemination")
       ) {
         return "step4_iui_procedure";
       }
-      // Step 4: Day 10-12 Trigger (IUI_Day10_12_Trigger)
+      // Step 2: Ovarian Stimulation (IUI_Day7_10_FollicleMonitoring)
       if (
-        nameLower.includes("day 10-12") ||
-        (nameLower.includes("trigger") && !nameLower.includes("pregnancy"))
-      ) {
-        return "step3_trigger";
-      }
-      // Step 3: Day 7-10 Follicle Monitoring (IUI_Day7_10_FollicleMonitoring)
-      if (
-        nameLower.includes("day 7-10") ||
-        (nameLower.includes("follicle") && nameLower.includes("monitoring")) ||
-        (nameLower.includes("monitoring") && !nameLower.includes("post"))
+        nameLower.includes("ovarian stimulation") ||
+        (nameLower.includes("stimulation") && nameLower.includes("ovarian")) ||
+        nameLower.includes("follicle monitoring") ||
+        nameLower.includes("day 7-10")
       ) {
         return "step2_follicle_monitoring";
       }
-      // Step 2: Day 2-3 Assessment (IUI_Day2_3_Assessment)
+      // Step 1: Initial Medical Examination (IUI_PreCyclePreparation)
       if (
-        nameLower.includes("day 2-3") ||
-        nameLower.includes("assessment") ||
-        nameLower.includes("baseline")
-      ) {
-        return "step1_day2_3_assessment";
-      }
-      // Step 1: Pre-Cycle Preparation (IUI_PreCyclePreparation)
-      if (
-        nameLower.includes("pre-cycle") ||
-        (nameLower.includes("preparation") && nameLower.includes("pre-cycle"))
+        nameLower.includes("initial medical examination") ||
+        nameLower.includes("medical examination") ||
+        nameLower.includes("baseline visit") ||
+        nameLower.includes("pre-cycle preparation")
       ) {
         return "step0_pre_cycle_prep";
       }
+      // Legacy mappings (for backward compatibility)
+      if (
+        nameLower.includes("beta") ||
+        nameLower.includes("hcg") ||
+        (nameLower.includes("pregnancy") && nameLower.includes("test"))
+      ) {
+        return "step6_beta_hcg";
+      }
+      if (nameLower.includes("day 10-12") || nameLower.includes("trigger")) {
+        return "step3_trigger";
+      }
+      if (nameLower.includes("day 2-3") || nameLower.includes("assessment")) {
+        return "step1_day2_3_assessment";
+      }
     } else if (treatmentType === "IVF") {
-      // Step 8: Embryo Transfer (IVF_EmbryoTransfer)
+      // Step 6: Post-Transfer Follow-Up (IVF_BetaHCGTest)
+      if (
+        nameLower.includes("post-transfer follow-up") ||
+        nameLower.includes("post-transfer") ||
+        (nameLower.includes("post") && nameLower.includes("transfer")) ||
+        (nameLower.includes("pregnancy") && nameLower.includes("test"))
+      ) {
+        return "step6_beta_hcg";
+      }
+      // Step 5: Embryo Transfer (IVF_EmbryoTransfer)
       if (
         nameLower.includes("embryo transfer") ||
         nameLower.includes("transfer") ||
@@ -708,24 +813,18 @@ export function CycleUpdateForm({
       ) {
         return "step7_embryo_transfer";
       }
-      // Step 7: Embryo Culture (IVF_EmbryoCulture)
+      // Step 4: In Vitro Fertilization (IVF_Fertilization)
       if (
-        nameLower.includes("embryo culture") ||
-        nameLower.includes("culture") ||
-        nameLower.includes("blastocyst")
-      ) {
-        return "step6_embryo_culture";
-      }
-      // Step 6: Fertilization/Lab (IVF_Fertilization)
-      if (
+        nameLower.includes("in vitro fertilization") ||
         nameLower.includes("fertilization") ||
-        nameLower.includes("fertilization/lab") ||
-        (nameLower.includes("lab") && !nameLower.includes("culture"))
+        nameLower.includes("icsi")
       ) {
         return "step5_fertilization";
       }
-      // Step 5: Oocyte Pick-Up (OPU) (IVF_OPU)
+      // Step 3: Oocyte Retrieval and Sperm Collection (IVF_OPU)
       if (
+        nameLower.includes("oocyte retrieval") ||
+        nameLower.includes("sperm collection") ||
         nameLower.includes("retrieval") ||
         nameLower.includes("opu") ||
         nameLower.includes("oocyte") ||
@@ -733,36 +832,42 @@ export function CycleUpdateForm({
       ) {
         return "step4_opu";
       }
-      // Step 4: Ovulation Trigger (IVF_Trigger)
+      // Step 2: Ovarian Stimulation (IVF_StimulationStart)
+      if (
+        nameLower.includes("ovarian stimulation") ||
+        nameLower.includes("controlled ovarian stimulation") ||
+        nameLower.includes("stimulation") ||
+        nameLower.includes("cos")
+      ) {
+        return "step1_stimulation";
+      }
+      // Step 1: Initial Medical Examination (IVF_PreCyclePreparation)
+      if (
+        nameLower.includes("initial medical examination") ||
+        nameLower.includes("medical examination") ||
+        nameLower.includes("baseline evaluation") ||
+        nameLower.includes("pre-cycle preparation")
+      ) {
+        return "step0_pre_cycle_prep";
+      }
+      // Legacy mappings (for backward compatibility)
+      if (
+        nameLower.includes("embryo culture") ||
+        nameLower.includes("culture")
+      ) {
+        return asIVFStep("step6_embryo_culture");
+      }
       if (
         nameLower.includes("trigger") ||
         nameLower.includes("ovulation trigger")
       ) {
-        return "step3_trigger";
+        return asIVFStep("step3_trigger");
       }
-      // Step 3: Mid-Stimulation Monitoring (IVF_Monitoring)
       if (
         nameLower.includes("mid-stimulation") ||
-        nameLower.includes("monitoring") ||
-        (nameLower.includes("mid") && nameLower.includes("stimulation"))
+        nameLower.includes("monitoring")
       ) {
-        return "step2_monitoring";
-      }
-      // Step 2: Controlled Ovarian Stimulation (IVF_StimulationStart)
-      if (
-        nameLower.includes("controlled ovarian stimulation") ||
-        nameLower.includes("stimulation") ||
-        nameLower.includes("cos") ||
-        nameLower.includes("ovarian")
-      ) {
-        return "step1_stimulation";
-      }
-      // Step 1: Pre-Cycle Preparation (IVF_PreCyclePreparation)
-      if (
-        nameLower.includes("pre-cycle") ||
-        (nameLower.includes("preparation") && nameLower.includes("pre-cycle"))
-      ) {
-        return "step0_pre_cycle_prep";
+        return asIVFStep("step2_monitoring");
       }
     }
 
@@ -800,8 +905,15 @@ export function CycleUpdateForm({
         normalized: normalizeTreatmentCycleStatus(c.status),
       })),
     });
+    // Ensure activeCycle has treatmentType from currentCycle if not set
+    if (active && !active.treatmentType && currentCycle.treatmentType) {
+      return {
+        ...active,
+        treatmentType: currentCycle.treatmentType,
+      };
+    }
     return active;
-  }, [finalAllCyclesData, currentCycle.id]);
+  }, [finalAllCyclesData, currentCycle.id, currentCycle.treatmentType]);
 
   // Get current step and next step - ALWAYS use active cycle, not viewing cycle
   const { currentStep, nextStep } = useMemo(() => {
@@ -1043,21 +1155,22 @@ export function CycleUpdateForm({
     if (!step) return "Unknown";
 
     const stepLabels: Record<string, string> = {
-      // IVF steps (8 steps)
-      step0_pre_cycle_prep: "Pre-Cycle Preparation",
-      step1_stimulation: "Controlled Ovarian Stimulation",
+      // IVF steps (6 steps)
+      step0_pre_cycle_prep: "Initial Medical Examination",
+      step1_stimulation: "Ovarian Stimulation",
+      step4_opu: "Oocyte Retrieval and Sperm Collection",
+      step5_fertilization: "In Vitro Fertilization",
+      step7_embryo_transfer: "Embryo Transfer",
+      step6_beta_hcg: "Post-Transfer Follow-Up",
+      // IUI steps (4 steps)
+      step2_follicle_monitoring: "Ovarian Stimulation",
+      step4_iui_procedure: "Sperm Collection and Intrauterine Insemination",
+      step5_post_iui: "Post-Insemination Follow-Up",
+      // Legacy steps (for backward compatibility)
       step2_monitoring: "Mid-Stimulation Monitoring",
       step3_trigger: "Ovulation Trigger",
-      step4_opu: "Oocyte Pick-Up (OPU)",
-      step5_fertilization: "Fertilization/Lab",
       step6_embryo_culture: "Embryo Culture",
-      step7_embryo_transfer: "Embryo Transfer",
-      // IUI steps (7 steps)
       step1_day2_3_assessment: "Day 2-3 Assessment",
-      step2_follicle_monitoring: "Day 7-10 Follicle Monitoring",
-      step4_iui_procedure: "IUI Procedure",
-      step5_post_iui: "Post-IUI Monitoring",
-      step6_beta_hcg: "Beta HCG Test",
     };
 
     return stepLabels[step] || step;
@@ -1125,7 +1238,14 @@ export function CycleUpdateForm({
         </CardHeader>
         <CardContent>
           <HorizontalTreatmentTimeline
-            cycle={currentCycle}
+            cycle={{
+              ...currentCycle,
+              treatmentType:
+                currentCycle.treatmentType === "IUI" ||
+                currentCycle.treatmentType === "IVF"
+                  ? currentCycle.treatmentType
+                  : undefined,
+            }}
             allCycles={finalAllCyclesData}
           />
         </CardContent>
@@ -1213,383 +1333,7 @@ export function CycleUpdateForm({
               <p className="text-xs text-gray-400 mt-1">{nextStep}</p>
             </div>
           )}
-          {(() => {
-            const normalizedStatus = normalizeTreatmentCycleStatus(
-              currentCycle.status
-            );
-            return (
-              normalizedStatus !== "Completed" &&
-              normalizedStatus !== "Cancelled" && (
-                <div className="flex flex-wrap gap-2">
-                  {(normalizedStatus === "Planned" ||
-                    normalizedStatus === "Scheduled") &&
-                    // Show Start Cycle button if cycle hasn't been started yet
-                    // Allow starting even if viewing non-active cycle (will start active cycle with warning)
-                    !cycle.currentStep &&
-                    !rawCurrentCycle.currentStep && (
-                      <Button
-                        type="button"
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-
-                          // Always start the ACTIVE cycle, not the viewing cycle
-                          // This ensures we follow the correct workflow order
-                          const cycleToStart = activeCycle || currentCycle;
-                          const cycleIdToStart = cycleToStart.id;
-                          const cycleNumberToStart = cycleToStart.cycleNumber;
-
-                          // Check if viewing cycle is different from active cycle
-                          const isViewingActiveCycleForStart =
-                            activeCycle &&
-                            (activeCycle.id === cycle.id ||
-                              activeCycle.cycleNumber === cycle.cycleNumber);
-
-                          console.log(
-                            `[CycleUpdateForm] Start button clicked:`,
-                            {
-                              viewingCycleId: cycle.id,
-                              viewingCycleNumber: cycle.cycleNumber,
-                              viewingCycleName: cycle.cycleName,
-                              activeCycleId: activeCycle?.id,
-                              activeCycleNumber: activeCycle?.cycleNumber,
-                              activeCycleName: activeCycle?.cycleName,
-                              willStartCycleId: cycleIdToStart,
-                              willStartCycleNumber: cycleNumberToStart,
-                              isViewingActiveCycle:
-                                isViewingActiveCycleForStart,
-                            }
-                          );
-
-                          // Show warning if trying to start while viewing a different cycle
-                          if (!isViewingActiveCycleForStart && activeCycle) {
-                            const confirmMessage =
-                              `You are viewing Cycle ${cycle.cycleNumber} (${cycle.cycleName}), ` +
-                              `but the active cycle to start is Cycle ${cycleToStart.cycleNumber} (${cycleToStart.cycleName}). ` +
-                              `Do you want to start Cycle ${cycleToStart.cycleNumber}?`;
-
-                            if (!confirm(confirmMessage)) {
-                              return;
-                            }
-                          }
-
-                          // Additional validation: verify this cycle should be started
-                          // If cycle has a step determined from cycleName, it might already be in progress
-                          const cycleStepFromName = cycleToStart.cycleName
-                            ? mapCycleNameToStep(
-                                cycleToStart.cycleName,
-                                cycleToStart.treatmentType as
-                                  | "IUI"
-                                  | "IVF"
-                                  | undefined
-                              )
-                            : null;
-
-                          if (cycleStepFromName) {
-                            console.warn(
-                              `[CycleUpdateForm] Cycle ${cycleNumberToStart} appears to have step ${cycleStepFromName} from cycleName "${cycleToStart.cycleName}". ` +
-                                `This cycle may already be in progress. Proceeding with start anyway.`
-                            );
-                          }
-
-                          try {
-                            // IMPORTANT: Use cycle.id (from prop) instead of currentCycle.id
-                            // This ensures we start the correct cycle that was passed to this component
-                            // currentCycle might be modified by logic, but cycle prop is always the original
-
-                            // Verify we're starting the correct cycle
-                            if (cycleIdToStart !== currentCycle.id) {
-                              console.warn(
-                                `Cycle ID mismatch: prop cycle.id (${cycleIdToStart}) vs currentCycle.id (${currentCycle.id}). Using prop cycle.id.`
-                              );
-                            }
-
-                            // CRITICAL: Determine the correct step for THIS CYCLE (cycleToStart) before starting
-                            // This ensures we start the cycle at the correct step based on its stepType/cycleName
-                            let expectedStep: IVFStep | IUIStep | null = null;
-
-                            // Priority 1: Use stepType if available (most accurate)
-                            if (cycleToStart.stepType) {
-                              const stepId = mapStepTypeToStepId(
-                                cycleToStart.stepType,
-                                cycleToStart.treatmentType as
-                                  | "IUI"
-                                  | "IVF"
-                                  | undefined
-                              );
-                              if (stepId) {
-                                expectedStep = stepId;
-                              }
-                            }
-
-                            // Priority 2: Use cycleName if stepType didn't work
-                            if (!expectedStep && cycleToStart.cycleName) {
-                              const stepId = mapCycleNameToStep(
-                                cycleToStart.cycleName,
-                                cycleToStart.treatmentType as
-                                  | "IUI"
-                                  | "IVF"
-                                  | undefined
-                              );
-                              if (stepId) {
-                                expectedStep = stepId;
-                              }
-                            }
-
-                            // Log cycle information before starting
-                            console.log(`[CycleUpdateForm] Starting cycle:`, {
-                              cycleId: cycleIdToStart,
-                              cycleNumber: cycleNumberToStart,
-                              cycleName: cycleToStart.cycleName,
-                              stepType: cycleToStart.stepType,
-                              expectedStep: expectedStep,
-                              currentStep: currentStep,
-                              isViewingActiveCycle: isViewingActiveCycle,
-                              viewingCycle: cycle.cycleNumber,
-                              activeCycle: activeCycle?.cycleNumber,
-                            });
-
-                            // Use POST /api/treatment-cycles/{id}/start
-                            const response =
-                              await api.treatmentCycle.startTreatmentCycle(
-                                cycleIdToStart,
-                                {
-                                  startDate: new Date().toISOString(),
-                                }
-                              );
-
-                            // Verify the response is for the correct cycle
-                            if (response.data) {
-                              if (response.data.id !== cycleIdToStart) {
-                                console.error(
-                                  `[CycleUpdateForm] Backend returned different cycle! Expected: ${cycleIdToStart}, Got: ${response.data.id}`
-                                );
-                                toast.error(
-                                  `Warning: Started cycle ${response.data.cycleNumber} instead of cycle ${cycleNumberToStart}. Please verify.`
-                                );
-                              } else {
-                                console.log(
-                                  `[CycleUpdateForm] Successfully started cycle ${cycleNumberToStart} (ID: ${cycleIdToStart})`
-                                );
-
-                                // CRITICAL: Verify and fix currentStep if backend didn't set it correctly
-                                // If we have an expected step and backend didn't set it, update it
-                                if (
-                                  expectedStep &&
-                                  response.data.currentStep !== expectedStep
-                                ) {
-                                  console.warn(
-                                    `[CycleUpdateForm] Backend set currentStep to ${response.data.currentStep}, but expected ${expectedStep}. Updating...`
-                                  );
-
-                                  // Update cycle with correct currentStep
-                                  try {
-                                    const updateResponse =
-                                      await api.treatmentCycle.updateTreatmentCycle(
-                                        cycleIdToStart,
-                                        {
-                                          currentStep: expectedStep,
-                                          stepDates: {
-                                            ...(response.data.stepDates || {}),
-                                            [expectedStep]:
-                                              new Date().toISOString(),
-                                          },
-                                        }
-                                      );
-
-                                    if (updateResponse.data) {
-                                      // Update response data with corrected step
-                                      response.data = updateResponse.data;
-                                      console.log(
-                                        `[CycleUpdateForm] Successfully updated cycle ${cycleNumberToStart} with correct currentStep: ${expectedStep}`
-                                      );
-                                    }
-                                  } catch (updateError: any) {
-                                    console.error(
-                                      `[CycleUpdateForm] Failed to update currentStep:`,
-                                      updateError
-                                    );
-                                    // Don't show error to user, just log it
-                                  }
-                                }
-                              }
-                            }
-
-                            // Update query data immediately with response data
-                            if (response.data) {
-                              queryClient.setQueryData(
-                                ["doctor", "treatment-cycle", cycleIdToStart],
-                                response.data
-                              );
-                            }
-
-                            toast.success("Cycle started successfully");
-
-                            // Invalidate queries without immediate refetch to avoid page reload
-                            // Use refetchType: 'none' to prevent automatic refetch
-                            // Use cycleIdToStart to ensure we invalidate the correct cycle
-                            queryClient.invalidateQueries({
-                              queryKey: [
-                                "doctor",
-                                "treatment-cycle",
-                                cycleIdToStart,
-                              ],
-                              refetchType: "none", // Don't refetch immediately
-                            });
-
-                            // Invalidate other queries in background (non-blocking)
-                            setTimeout(() => {
-                              queryClient.invalidateQueries({
-                                queryKey: ["doctor", "treatment-cycles"],
-                                refetchType: "none",
-                              });
-                              queryClient.invalidateQueries({
-                                queryKey: [
-                                  "treatment-cycles",
-                                  "treatment",
-                                  currentCycle.treatmentId,
-                                ],
-                                refetchType: "none",
-                              });
-                            }, 100);
-
-                            // Send notification to patient
-                            if (currentCycle.patientId) {
-                              const { sendTreatmentCycleNotification } =
-                                await import("@/utils/notifications");
-                              await sendTreatmentCycleNotification(
-                                currentCycle.patientId,
-                                "started",
-                                {
-                                  cycleId: currentCycle.id,
-                                  cycleName: currentCycle.cycleName,
-                                  cycleNumber: currentCycle.cycleNumber,
-                                  treatmentType: currentCycle.treatmentType,
-                                },
-                                doctorId || undefined
-                              );
-                            }
-
-                            // Show appointment creation modal after successfully starting cycle
-                            if (currentCycle.patientId && doctorId) {
-                              setShowCreateAppointmentModal(true);
-                            }
-
-                            // Don't call onStepAdvanced when starting cycle
-                            // Only call it when actually advancing a step
-                            // onStepAdvanced?.();
-                          } catch (error: any) {
-                            toast.error(
-                              error?.response?.data?.message ||
-                                "Failed to start cycle"
-                            );
-                          }
-                        }}
-                      >
-                        Start Cycle
-                      </Button>
-                    )}
-                  {normalizedStatus === "InProgress" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowCompleteConfirm(true)}
-                      >
-                        Complete Cycle
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowCancelConfirm(true)}
-                      >
-                        Cancel Cycle
-                      </Button>
-                    </>
-                  )}
-                  {/* Only show Create Medical Record button if cycle has been started */}
-                  {(() => {
-                    const cycleStatus = normalizeTreatmentCycleStatus(
-                      currentCycle.status
-                    );
-                    // Cycle is considered started if:
-                    // 1. Status is "InProgress" (actively running)
-                    // 2. Has currentStep (cycle has progressed to a step)
-                    // 3. Has startDate (cycle has been started)
-                    // Note: "Scheduled" and "Planned" are not considered started
-                    const hasStarted =
-                      cycleStatus === "InProgress" ||
-                      !!currentCycle.currentStep ||
-                      !!currentCycle.startDate;
-
-                    if (!hasStarted) {
-                      return null;
-                    }
-
-                    return (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          setShowMedicalRecordForm(!showMedicalRecordForm)
-                        }
-                      >
-                        {showMedicalRecordForm
-                          ? "Cancel Medical Record"
-                          : "Create Medical Record"}
-                      </Button>
-                    );
-                  })()}
-                  {/* Only show Create Service Request button if cycle has been started */}
-                  {(() => {
-                    const cycleStatus = normalizeTreatmentCycleStatus(
-                      currentCycle.status
-                    );
-                    const hasStarted =
-                      cycleStatus === "InProgress" ||
-                      !!currentCycle.currentStep ||
-                      !!currentCycle.startDate;
-
-                    if (!hasStarted) {
-                      return null;
-                    }
-
-                    return (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowServiceRequestModal(true)}
-                      >
-                        Create Service Request
-                      </Button>
-                    );
-                  })()}
-                  {/* Only show Create Appointment button if cycle has been started */}
-                  {(() => {
-                    const cycleStatus = normalizeTreatmentCycleStatus(
-                      currentCycle.status
-                    );
-                    const hasStarted =
-                      cycleStatus === "InProgress" ||
-                      !!currentCycle.currentStep ||
-                      !!currentCycle.startDate;
-
-                    if (!hasStarted || !currentCycle.patientId || !doctorId) {
-                      return null;
-                    }
-
-                    return (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowCreateAppointmentModal(true)}
-                      >
-                        Create Appointment
-                      </Button>
-                    );
-                  })()}
-                </div>
-              )
-            );
-          })()}
+          {/* Buttons removed per user request */}
         </CardContent>
       </Card>
 
@@ -1932,6 +1676,74 @@ export function CycleUpdateForm({
                       throw new Error("Cycle ID is missing");
                     }
 
+                    // Check if cycle has started before allowing completion
+                    const cycleStatus = normalizeTreatmentCycleStatus(currentCycle.status);
+                    const hasStarted = cycleStatus === "InProgress";
+                    const isCompleted = cycleStatus === "Completed";
+                    const isCancelled = cycleStatus === "Cancelled";
+
+                    if (!hasStarted) {
+                      throw new Error("Cannot complete cycle: Cycle has not been started yet.");
+                    }
+
+                    if (isCompleted) {
+                      throw new Error("Cannot complete cycle: Cycle is already completed.");
+                    }
+
+                    if (isCancelled) {
+                      throw new Error("Cannot complete cycle: Cycle has been cancelled.");
+                    }
+
+                    // Validate IVF cycle 3 before completing
+                    const isIVFCycle3 = (() => {
+                      if (currentCycle.treatmentType !== "IVF") return false;
+                      if (currentCycle.cycleNumber === 3) return true;
+                      const stepTypeStr = currentCycle.stepType
+                        ? String(currentCycle.stepType).toUpperCase()
+                        : "";
+                      if (stepTypeStr === "IVF_OPU") return true;
+                      const currentStep = currentCycle.currentStep as string | undefined;
+                      if (currentStep === "step4_opu") return true;
+                      const cycleNameLower = currentCycle.cycleName?.toLowerCase() || "";
+                      if (
+                        cycleNameLower.includes("oocyte retrieval") ||
+                        cycleNameLower.includes("sperm collection") ||
+                        (cycleNameLower.includes("opu") && cycleNameLower.includes("cycle"))
+                      ) {
+                        return true;
+                      }
+                      return false;
+                    })();
+
+                    if (isIVFCycle3) {
+                      // Only validate if samples exist - if no samples exist, allow completion
+                      const hasAnySpermSamples = spermSamples.length > 0;
+                      const hasAnyOocyteSamples = oocyteSamples.length > 0;
+                      
+                      // If no samples exist at all, allow completion (samples might not be collected yet)
+                      if (!hasAnySpermSamples && !hasAnyOocyteSamples) {
+                        // Allow completion - no samples to validate
+                      } else {
+                        // We have some samples, check that we have quality-checked samples for both types
+                        // We already filtered for quality-checked samples in the query, so if they exist, they're quality-checked
+                        if (hasAnySpermSamples && hasAnyOocyteSamples) {
+                          // Both types exist and are quality-checked - allow completion
+                        } else {
+                          // Only one type exists, we still need both for cycle 3
+                          const missingSamples: string[] = [];
+                          if (!hasAnySpermSamples) {
+                            missingSamples.push("sperm quality check");
+                          }
+                          if (!hasAnyOocyteSamples) {
+                            missingSamples.push("oocyte quality check");
+                          }
+                          throw new Error(
+                            `Cannot complete cycle: Lab has not returned ${missingSamples.join(" and ")} data. Please wait for lab to complete quality checks.`
+                          );
+                        }
+                      }
+                    }
+
                     // Build request body with all fields
                     const completeRequest: {
                       endDate: string;
@@ -2186,7 +1998,11 @@ export function CycleUpdateForm({
             >
               <DoctorCreateAppointmentForm
                 doctorId={doctorId}
-                doctorName={doctorProfile?.fullName}
+                doctorName={
+                  doctorProfile
+                    ? `${doctorProfile.firstName} ${doctorProfile.lastName}`.trim()
+                    : undefined
+                }
                 layout="modal"
                 defaultPatientId={currentCycle.patientId}
                 disablePatientSelection={true}

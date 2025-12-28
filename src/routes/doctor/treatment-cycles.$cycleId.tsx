@@ -11,6 +11,7 @@ import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { api } from "@/api/client";
 import { TreatmentTimeline } from "@/features/doctor/treatment-cycles/TreatmentTimeline";
 import { CycleUpdateForm } from "@/features/doctor/treatment-cycles/CycleUpdateForm";
@@ -19,8 +20,12 @@ import {
   type IVFStep,
   type IUIStep,
   type MedicalRecord,
+  type LabSampleDetailResponse,
 } from "@/api/types";
 import { cn } from "@/utils/cn";
+import { getLast4Chars } from "@/utils/id-helpers";
+import { getStatusBadgeClass } from "@/utils/status-colors";
+import { FlaskConical } from "lucide-react";
 
 export const Route = createFileRoute("/doctor/treatment-cycles/$cycleId")({
   component: DoctorTreatmentCycleDetail,
@@ -156,9 +161,9 @@ function DoctorTreatmentCycleDetail() {
   const hasStarted = cycleStatus === "InProgress" || cycle.currentStep;
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<"overview" | "medical-records">(
-    "overview"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "medical-records" | "oocytes" | "sperm"
+  >("overview");
 
   // Fetch medical records for this cycle
   const { data: medicalRecordsData, isLoading: medicalRecordsLoading } =
@@ -185,6 +190,85 @@ function DoctorTreatmentCycleDetail() {
     });
 
   const medicalRecords = medicalRecordsData || [];
+
+  // Format date helper
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return "—";
+    try {
+      return new Date(dateString).toLocaleDateString("vi-VN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+    } catch {
+      return "—";
+    }
+  };
+
+  // Fetch oocyte samples for this patient and cycle
+  const { data: oocyteSamplesData, isLoading: oocyteSamplesLoading } =
+    useQuery({
+      queryKey: ["oocyte-samples", "cycle", cycleId, cycle.patientId],
+      queryFn: async () => {
+        if (!cycle.patientId) return { data: [] };
+        try {
+          const response = await api.sample.getAllDetailSamples({
+            SampleType: "Oocyte",
+            PatientId: cycle.patientId,
+            Page: 1,
+            Size: 100,
+            Sort: "collectionDate",
+            Order: "desc",
+          });
+          // Filter by treatmentCycleId if available
+          const samples = response.data || [];
+          return {
+            data: samples.filter(
+              (sample) =>
+                !sample.treatmentCycleId || sample.treatmentCycleId === cycleId
+            ),
+          };
+        } catch (error) {
+          console.error("Error fetching oocyte samples:", error);
+          return { data: [] };
+        }
+      },
+      enabled: !!cycle.patientId && activeTab === "oocytes",
+    });
+
+  // Fetch sperm samples for this patient and cycle
+  const { data: spermSamplesData, isLoading: spermSamplesLoading } =
+    useQuery({
+      queryKey: ["sperm-samples", "cycle", cycleId, cycle.patientId],
+      queryFn: async () => {
+        if (!cycle.patientId) return { data: [] };
+        try {
+          const response = await api.sample.getAllDetailSamples({
+            SampleType: "Sperm",
+            PatientId: cycle.patientId,
+            Page: 1,
+            Size: 100,
+            Sort: "collectionDate",
+            Order: "desc",
+          });
+          // Filter by treatmentCycleId if available
+          const samples = response.data || [];
+          return {
+            data: samples.filter(
+              (sample) =>
+                !sample.treatmentCycleId || sample.treatmentCycleId === cycleId
+            ),
+          };
+        } catch (error) {
+          console.error("Error fetching sperm samples:", error);
+          return { data: [] };
+        }
+      },
+      enabled: !!cycle.patientId && activeTab === "sperm",
+    });
+
+  const oocyteSamples = oocyteSamplesData?.data || [];
+  const spermSamples = spermSamplesData?.data || [];
 
   return (
     <ProtectedRoute allowedRoles={["Doctor"]}>
@@ -240,6 +324,38 @@ function DoctorTreatmentCycleDetail() {
                 {medicalRecords.length > 0 && (
                   <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
                     {medicalRecords.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("oocytes")}
+                className={cn(
+                  "whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium",
+                  activeTab === "oocytes"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                )}
+              >
+                Oocytes
+                {oocyteSamples.length > 0 && (
+                  <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                    {oocyteSamples.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("sperm")}
+                className={cn(
+                  "whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium",
+                  activeTab === "sperm"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                )}
+              >
+                Sperm
+                {spermSamples.length > 0 && (
+                  <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                    {spermSamples.length}
                   </span>
                 )}
               </button>
@@ -467,6 +583,204 @@ function DoctorTreatmentCycleDetail() {
                         </CardContent>
                       </Card>
                     ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Oocytes Tab */}
+          {activeTab === "oocytes" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Oocyte Samples</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {oocyteSamplesLoading ? (
+                  <div className="py-12 text-center text-gray-500">
+                    Loading oocyte samples...
+                  </div>
+                ) : oocyteSamples.length === 0 ? (
+                  <div className="py-12 text-center text-gray-500">
+                    <p>No oocyte samples found for this treatment cycle.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left p-3">Sample Code</th>
+                          <th className="text-left p-3">Collection Date</th>
+                          <th className="text-left p-3">Status</th>
+                          <th className="text-left p-3">Quantity</th>
+                          <th className="text-left p-3">Maturity Stage</th>
+                          <th className="text-left p-3">Is Mature</th>
+                          <th className="text-left p-3">Quality</th>
+                          <th className="text-left p-3">Is Vitrified</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {oocyteSamples.map((sample: LabSampleDetailResponse) => (
+                          <tr
+                            key={sample.id}
+                            className="border-b hover:bg-gray-50"
+                          >
+                            <td className="p-3">
+                              <div className="flex items-center gap-2">
+                                <FlaskConical className="h-4 w-4 text-pink-500" />
+                                <span className="font-mono text-sm">
+                                  {sample.sampleCode ||
+                                    getLast4Chars(sample.id)}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="p-3 text-sm">
+                              {formatDate(sample.collectionDate)}
+                            </td>
+                            <td className="p-3">
+                              <Badge
+                                className={cn(
+                                  "inline-flex rounded-full px-2 py-1 text-xs font-semibold border",
+                                  getStatusBadgeClass(sample.status)
+                                )}
+                              >
+                                {sample.status}
+                              </Badge>
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.oocyte?.quantity !== undefined &&
+                              sample.oocyte.quantity !== null
+                                ? sample.oocyte.quantity
+                                : "—"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.oocyte?.maturityStage || "—"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.oocyte?.isMature !== undefined &&
+                              sample.oocyte.isMature !== null
+                                ? sample.oocyte.isMature
+                                  ? "Yes"
+                                  : "No"
+                                : "—"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.oocyte?.quality || sample.quality || "—"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.oocyte?.isVitrified !== undefined &&
+                              sample.oocyte.isVitrified !== null
+                                ? sample.oocyte.isVitrified
+                                  ? "Yes"
+                                  : "No"
+                                : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Sperm Tab */}
+          {activeTab === "sperm" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Sperm Samples</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {spermSamplesLoading ? (
+                  <div className="py-12 text-center text-gray-500">
+                    Loading sperm samples...
+                  </div>
+                ) : spermSamples.length === 0 ? (
+                  <div className="py-12 text-center text-gray-500">
+                    <p>No sperm samples found for this treatment cycle.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left p-3">Sample Code</th>
+                          <th className="text-left p-3">Collection Date</th>
+                          <th className="text-left p-3">Status</th>
+                          <th className="text-left p-3">Volume</th>
+                          <th className="text-left p-3">Concentration</th>
+                          <th className="text-left p-3">Motility</th>
+                          <th className="text-left p-3">Progressive Motility</th>
+                          <th className="text-left p-3">Morphology</th>
+                          <th className="text-left p-3">Quality</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {spermSamples.map((sample: LabSampleDetailResponse) => (
+                          <tr
+                            key={sample.id}
+                            className="border-b hover:bg-gray-50"
+                          >
+                            <td className="p-3">
+                              <div className="flex items-center gap-2">
+                                <FlaskConical className="h-4 w-4 text-blue-500" />
+                                <span className="font-mono text-sm">
+                                  {sample.sampleCode ||
+                                    getLast4Chars(sample.id)}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="p-3 text-sm">
+                              {formatDate(sample.collectionDate)}
+                            </td>
+                            <td className="p-3">
+                              <Badge
+                                className={cn(
+                                  "inline-flex rounded-full px-2 py-1 text-xs font-semibold border",
+                                  getStatusBadgeClass(sample.status)
+                                )}
+                              >
+                                {sample.status}
+                              </Badge>
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.sperm?.volume !== undefined &&
+                              sample.sperm.volume !== null
+                                ? `${sample.sperm.volume} mL`
+                                : "—"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.sperm?.concentration !== undefined &&
+                              sample.sperm.concentration !== null
+                                ? `${sample.sperm.concentration} million/mL`
+                                : "—"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.sperm?.motility !== undefined &&
+                              sample.sperm.motility !== null
+                                ? `${sample.sperm.motility}%`
+                                : "—"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.sperm?.progressiveMotility !== undefined &&
+                              sample.sperm.progressiveMotility !== null
+                                ? `${sample.sperm.progressiveMotility}%`
+                                : "—"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.sperm?.morphology !== undefined &&
+                              sample.sperm.morphology !== null
+                                ? `${sample.sperm.morphology}%`
+                                : "—"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {sample.sperm?.quality || sample.quality || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </CardContent>

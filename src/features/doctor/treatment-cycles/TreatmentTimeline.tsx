@@ -1,10 +1,12 @@
 /**
  * Treatment Timeline Component
  * Displays the treatment cycle progress as a visual timeline
- * Supports both IVF (7 steps) and IUI (6 steps)
+ * Supports both IVF (6 steps) and IUI (4 steps)
  */
 
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api/client";
 import { cn } from "@/utils/cn";
 import {
   normalizeTreatmentCycleStatus,
@@ -19,86 +21,61 @@ interface TreatmentTimelineProps {
   className?: string;
 }
 
-// IVF Step definitions (8 steps matching backend TreatmentStepType enum)
+// IVF Step definitions (6 steps matching backend TreatmentStepType enum)
 const IVF_STEPS: Array<{ id: IVFStep; label: string; description: string }> = [
   {
     id: "step0_pre_cycle_prep",
-    label: "Pre-Cycle Preparation",
-    description: "Pre-Cycle Preparation (~2 weeks before baseline)",
+    label: "Initial Medical Examination",
+    description: "Baseline visit, counseling, and protocol setup (3 days)",
   },
   {
     id: "step1_stimulation",
-    label: "Controlled Ovarian Stimulation",
-    description: "COS - Controlled Ovarian Stimulation (Day 1)",
-  },
-  {
-    id: "step2_monitoring",
-    label: "Mid-Stimulation Monitoring",
-    description: "Mid-Stimulation Monitoring (Day 4)",
-  },
-  {
-    id: "step3_trigger",
-    label: "Ovulation Trigger",
-    description: "Ovulation Trigger (~Day 10)",
+    label: "Ovarian Stimulation",
+    description: "Controlled ovarian stimulation with monitoring (10 days)",
   },
   {
     id: "step4_opu",
-    label: "Oocyte Pick-Up (OPU)",
-    description: "OPU - Oocyte Pick-Up (~36h after trigger)",
+    label: "Oocyte Retrieval and Sperm Collection",
+    description: "OPU and partner sperm collection (1 day)",
   },
   {
     id: "step5_fertilization",
-    label: "Fertilization/Lab",
-    description: "Fertilization at lab",
-  },
-  {
-    id: "step6_embryo_culture",
-    label: "Embryo Culture",
-    description: "Embryo Culture (Day 3 checkpoint)",
+    label: "In Vitro Fertilization",
+    description: "Fertilization/ICSI in the lab (1 day)",
   },
   {
     id: "step7_embryo_transfer",
     label: "Embryo Transfer",
-    description: "Embryo Transfer (Day 5)",
-  },
-];
-
-// IUI Step definitions (7 steps matching backend TreatmentStepType enum)
-const IUI_STEPS: Array<{ id: IUIStep; label: string; description: string }> = [
-  {
-    id: "step0_pre_cycle_prep",
-    label: "Pre-Cycle Preparation",
-    description: "Pre-Cycle Preparation (~2 weeks before baseline)",
-  },
-  {
-    id: "step1_day2_3_assessment",
-    label: "Day 2-3 Assessment",
-    description: "Baseline ultrasound/test (Day 2-3)",
-  },
-  {
-    id: "step2_follicle_monitoring",
-    label: "Day 7-10 Follicle Monitoring",
-    description: "Follicle monitoring mid-cycle",
-  },
-  {
-    id: "step3_trigger",
-    label: "Day 10-12 Trigger",
-    description: "Ovulation trigger planning",
-  },
-  {
-    id: "step4_iui_procedure",
-    label: "IUI Procedure",
-    description: "IUI Insemination procedure",
-  },
-  {
-    id: "step5_post_iui",
-    label: "Post-IUI Monitoring",
-    description: "Post-IUI care and monitoring",
+    description: "Transfer planned per protocol (1 day)",
   },
   {
     id: "step6_beta_hcg",
-    label: "Beta HCG Test",
-    description: "Pregnancy test 14 days after IUI",
+    label: "Post-Transfer Follow-Up",
+    description: "Monitoring and pregnancy test after transfer (14 days)",
+  },
+];
+
+// IUI Step definitions (4 steps matching backend TreatmentStepType enum)
+const IUI_STEPS: Array<{ id: IUIStep; label: string; description: string }> = [
+  {
+    id: "step0_pre_cycle_prep",
+    label: "Initial Medical Examination",
+    description: "Baseline visit, counseling, and protocol confirmation (3 days)",
+  },
+  {
+    id: "step2_follicle_monitoring",
+    label: "Ovarian Stimulation",
+    description: "Stimulation with ultrasound/hormone monitoring (10 days)",
+  },
+  {
+    id: "step4_iui_procedure",
+    label: "Sperm Collection and Intrauterine Insemination",
+    description: "Collect sample and perform insemination (1 day)",
+  },
+  {
+    id: "step5_post_iui",
+    label: "Post-Insemination Follow-Up",
+    description: "Luteal support and monitoring until pregnancy test (14 days)",
   },
 ];
 
@@ -111,14 +88,116 @@ export function TreatmentTimeline({
   const isIUI = cycle.treatmentType === "IUI";
   const steps = isIVF ? IVF_STEPS : isIUI ? IUI_STEPS : [];
 
+  // Fetch current step from backend API (most accurate source)
+  const { data: currentStepFromApi } = useQuery({
+    queryKey: [
+      "treatment-current-step",
+      cycle.treatmentId,
+      cycle.treatmentType,
+    ],
+    queryFn: async () => {
+      if (!cycle.treatmentId || !cycle.treatmentType) return null;
+      try {
+        if (isIUI) {
+          const response = await api.treatmentIUI.getCurrentStep(
+            cycle.treatmentId
+          );
+          return response.data ?? null;
+        } else if (isIVF) {
+          const response = await api.treatmentIVF.getCurrentStep(
+            cycle.treatmentId
+          );
+          return response.data ?? null;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!cycle.treatmentId && (isIUI || isIVF),
+    staleTime: 30000, // Cache for 30 seconds
+  });
+
+  // Helper to convert step number from API to step ID
+  const getStepIdFromNumber = (
+    stepNumber: number | null | undefined
+  ): IVFStep | IUIStep | undefined => {
+    if (stepNumber === null || stepNumber === undefined) return undefined;
+    // API returns 0-based index: 0 = step0, 1 = step1, 2 = step2, etc.
+    if (stepNumber >= 0 && stepNumber < steps.length) {
+      return steps[stepNumber].id;
+    }
+    return undefined;
+  };
+
+  // Calculate currentStep and completedSteps
+  const { currentStep, completedSteps } = useMemo(() => {
+    // PRIORITY 1: Use currentStepFromApi (most accurate)
+    if (currentStepFromApi !== null && currentStepFromApi !== undefined) {
+      const stepFromApi = getStepIdFromNumber(currentStepFromApi);
+      if (stepFromApi) {
+        const currentIndex = steps.findIndex((s) => s.id === stepFromApi);
+        // Mark all steps before current step as completed
+        const completed = new Set<IVFStep | IUIStep>();
+        if (currentIndex > 0) {
+          for (let i = 0; i < currentIndex; i++) {
+            completed.add(steps[i].id);
+          }
+        }
+        // Also add any steps from cycle.completedSteps
+        if (cycle.completedSteps) {
+          cycle.completedSteps.forEach((step) => {
+            if (step !== stepFromApi) {
+              completed.add(step);
+            }
+          });
+        }
+        return {
+          currentStep: stepFromApi,
+          completedSteps: Array.from(completed),
+        };
+      }
+    }
+
+    // PRIORITY 2: Use cycle.currentStep if available
+    if (cycle.currentStep) {
+      const currentIndex = steps.findIndex((s) => s.id === cycle.currentStep);
+      const completed = new Set<IVFStep | IUIStep>();
+      // Mark all steps before current step as completed
+      if (currentIndex > 0) {
+        for (let i = 0; i < currentIndex; i++) {
+          completed.add(steps[i].id);
+        }
+      }
+      // Also add any steps from cycle.completedSteps
+      if (cycle.completedSteps) {
+        cycle.completedSteps.forEach((step) => {
+          if (step !== cycle.currentStep) {
+            completed.add(step);
+          }
+        });
+      }
+      return {
+        currentStep: cycle.currentStep,
+        completedSteps: Array.from(completed),
+      };
+    }
+
+    // FALLBACK: Use cycle.completedSteps only
+    return {
+      currentStep: undefined,
+      completedSteps: cycle.completedSteps || [],
+    };
+  }, [currentStepFromApi, cycle.currentStep, cycle.completedSteps, steps, isIUI, isIVF]);
+
   const currentStepIndex = useMemo(() => {
-    if (!cycle.currentStep) return -1;
-    return steps.findIndex((step) => step.id === cycle.currentStep);
-  }, [cycle.currentStep, steps]);
+    if (!currentStep) return -1;
+    return steps.findIndex((step) => step.id === currentStep);
+  }, [currentStep, steps]);
 
   const completedStepsSet = useMemo(() => {
-    return new Set(cycle.completedSteps || []);
-  }, [cycle.completedSteps]);
+    return new Set(completedSteps);
+  }, [completedSteps]);
 
   if (!isIVF && !isIUI) {
     return (
@@ -138,7 +217,7 @@ export function TreatmentTimeline({
         <div className="relative space-y-6">
           {steps.map((step, index) => {
             const isCompleted = completedStepsSet.has(step.id);
-            const isCurrent = cycle.currentStep === step.id;
+            const isCurrent = currentStep === step.id;
             const isPast = currentStepIndex > index;
 
             return (

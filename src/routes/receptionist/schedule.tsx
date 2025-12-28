@@ -64,6 +64,7 @@ export const Route = createFileRoute("/receptionist/schedule")({
 function ReceptionistScheduleComponent() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(
     () => new Date().toISOString().split("T")[0]
   );

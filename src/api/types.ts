@@ -774,16 +774,18 @@ export interface TreatmentListQuery extends GetTreatmentsRequest {}
 // Treatment Cycle Types - Timeline Based System
 // ============================================================================
 
-// IVF Timeline Steps (7 steps)
+// IVF Timeline Steps (6 steps + legacy steps for backward compatibility)
 export type IVFStep =
-  | "step0_pre_cycle_prep" // Pre-Cycle Preparation (IVF_PreCyclePreparation)
-  | "step1_stimulation" // Controlled Ovarian Stimulation (IVF_StimulationStart)
-  | "step2_monitoring" // Mid-Stimulation Monitoring (IVF_Monitoring)
-  | "step3_trigger" // Ovulation Trigger (IVF_Trigger)
-  | "step4_opu" // Oocyte Pick-Up (OPU) (IVF_OPU)
-  | "step5_fertilization" // Fertilization/Lab (IVF_Fertilization)
-  | "step6_embryo_culture" // Embryo Culture (IVF_EmbryoCulture)
-  | "step7_embryo_transfer"; // Embryo Transfer (IVF_EmbryoTransfer)
+  | "step0_pre_cycle_prep" // Initial Medical Examination (IVF_PreCyclePreparation)
+  | "step1_stimulation" // Ovarian Stimulation (IVF_StimulationStart)
+  | "step4_opu" // Oocyte Retrieval and Sperm Collection (IVF_OPU)
+  | "step5_fertilization" // In Vitro Fertilization (IVF_Fertilization)
+  | "step7_embryo_transfer" // Embryo Transfer (IVF_EmbryoTransfer)
+  | "step6_beta_hcg" // Post-Transfer Follow-Up (IVF_BetaHCGTest)
+  // Legacy steps (for backward compatibility with old data)
+  | "step2_monitoring" // Mid-Stimulation Monitoring (IVF_Monitoring) - Legacy
+  | "step3_trigger" // Ovulation Trigger (IVF_Trigger) - Legacy
+  | "step6_embryo_culture"; // Embryo Culture (IVF_EmbryoCulture) - Legacy
 
 // IUI Timeline Steps (7 steps matching backend TreatmentStepType enum)
 export type IUIStep =
@@ -1858,30 +1860,54 @@ export interface GetTransactionsRequest {
 // Relationship Types
 // ============================================================================
 
-export type RelationshipType = "Spouse" | "Partner" | "Other";
+export type RelationshipType =
+  | "Married"
+  | "Unmarried"
+  | "Spouse"
+  | "Partner"
+  | "Other";
 export type RelationshipStatus = "Pending" | "Approved" | "Rejected";
+
+export interface RelationshipPatientInfo {
+  id: string;
+  patientCode: string;
+  nationalId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  isActive: boolean;
+}
 
 export interface Relationship {
   id: string;
   patient1Id: string;
   patient2Id: string;
   relationshipType: RelationshipType;
-  status: RelationshipStatus;
+  relationshipTypeName?: string;
+  establishedDate?: string;
   notes?: string;
+  isActive?: boolean;
+  status?: RelationshipStatus;
   createdAt?: string;
   updatedAt?: string;
+  patient1Info?: RelationshipPatientInfo;
+  patient2Info?: RelationshipPatientInfo;
 }
 
 export interface CreateRelationshipRequest {
   patient1Id: string;
   patient2Id: string;
   relationshipType: RelationshipType;
+  establishedDate?: string;
   notes?: string;
+  isActive?: boolean;
 }
 
 export interface UpdateRelationshipRequest {
   relationshipType?: RelationshipType;
+  establishedDate?: string;
   notes?: string;
+  isActive?: boolean;
 }
 
 export interface ApproveRelationshipRequest {

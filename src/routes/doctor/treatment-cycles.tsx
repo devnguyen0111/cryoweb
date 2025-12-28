@@ -18,8 +18,8 @@ import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 import { HorizontalTreatmentTimeline } from "@/features/doctor/treatment-cycles/HorizontalTreatmentTimeline";
-import { PatientDetailModal } from "@/features/doctor/treatment-cycles/PatientDetailModal";
 import { CycleUpdateModal } from "@/features/doctor/treatment-cycles/CycleUpdateModal";
+import { TreatmentCycleDetailModal } from "@/features/doctor/treatment-cycles/TreatmentCycleDetailModal";
 import { cn } from "@/utils/cn";
 import {
   normalizeTreatmentCycleStatus,
@@ -310,8 +310,8 @@ function DoctorTreatmentCyclesComponent() {
 
   // Component to fetch and display patient info
   function PatientCard({ patient }: { patient: PatientInTreatment }) {
-    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+    const [isCycleDetailModalOpen, setIsCycleDetailModalOpen] = useState(false);
     const activeCycle = patient.activeCycle;
 
     // Fetch treatment to ensure we have treatmentType for the cycle
@@ -653,7 +653,9 @@ function DoctorTreatmentCyclesComponent() {
                   size="sm"
                   variant="outline"
                   className="border-blue-200 text-blue-700 hover:bg-blue-50"
-                  onClick={() => setIsDetailModalOpen(true)}
+                  onClick={() => {
+                    setIsCycleDetailModalOpen(true);
+                  }}
                 >
                   View Details
                 </Button>
@@ -702,20 +704,20 @@ function DoctorTreatmentCyclesComponent() {
           </CardContent>
         </Card>
 
-        {/* Patient Detail Modal */}
-        <PatientDetailModal
-          patientId={patient.patientId}
-          isOpen={isDetailModalOpen}
-          onClose={() => setIsDetailModalOpen(false)}
-        />
-
         {/* Cycle Update Modal */}
         {cycleWithType && (
-          <CycleUpdateModal
-            cycle={cycleWithType}
-            isOpen={isUpdateModalOpen}
-            onClose={() => setIsUpdateModalOpen(false)}
-          />
+          <>
+            <CycleUpdateModal
+              cycle={cycleWithType}
+              isOpen={isUpdateModalOpen}
+              onClose={() => setIsUpdateModalOpen(false)}
+            />
+            <TreatmentCycleDetailModal
+              cycle={cycleWithType}
+              isOpen={isCycleDetailModalOpen}
+              onClose={() => setIsCycleDetailModalOpen(false)}
+            />
+          </>
         )}
       </>
     );

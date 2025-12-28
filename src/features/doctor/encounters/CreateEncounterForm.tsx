@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 import { TreatmentPlanForm } from "@/features/doctor/treatment-cycles/TreatmentPlanForm";
 import { TreatmentPlanSignature } from "@/features/doctor/treatment-cycles/TreatmentPlanSignature";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 import type { TreatmentType } from "@/api/types";
 
 // Type for pending treatment data (simplified - only treatmentType is actually used)
@@ -503,10 +504,16 @@ export function CreateEncounterForm({
                   <CardContent>
                     {(() => {
                       const encounterPatientName =
+                        getFullNameFromObject(encounterUserDetails) ||
+                        getFullNameFromObject(
+                          encounterPatientDetails?.accountInfo
+                        ) ||
+                        getFullNameFromObject(encounterPatientDetails) ||
                         encounterPatientDetails?.accountInfo?.username ||
                         encounterUserDetails?.fullName ||
                         encounterUserDetails?.userName ||
                         encounterPatientDetails?.fullName ||
+                        encounterPatientDetails?.patientCode ||
                         "Unknown";
                       const encounterPatientCode =
                         encounterPatientDetails?.patientCode || "";
@@ -1474,10 +1481,16 @@ export function CreateEncounterForm({
                     <CardContent>
                       {(() => {
                         const encounterPatientName =
+                          getFullNameFromObject(encounterUserDetails) ||
+                          getFullNameFromObject(
+                            encounterPatientDetails?.accountInfo
+                          ) ||
+                          getFullNameFromObject(encounterPatientDetails) ||
                           encounterPatientDetails?.accountInfo?.username ||
                           encounterUserDetails?.fullName ||
                           encounterUserDetails?.userName ||
                           encounterPatientDetails?.fullName ||
+                          encounterPatientDetails?.patientCode ||
                           "Unknown";
                         const encounterPatientCode =
                           encounterPatientDetails?.patientCode || "";

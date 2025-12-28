@@ -48,116 +48,81 @@ interface TreatmentPlanFormProps {
   showNextStep?: boolean; // Show "Next Step" button instead of/in addition to "Create Plan"
 }
 
-// IUI Step definitions (7 steps matching backend TreatmentStepType enum)
+// IUI Step definitions (4 steps matching backend TreatmentStepType enum)
 const IUI_STEP_PLAN = [
   {
     cycleNumber: 1,
-    cycleName: "Pre-Cycle Preparation",
+    cycleName: "Initial Medical Examination",
     stepType: "IUI_PreCyclePreparation",
-    expectedDurationDays: 14,
-    notes: "Preparation phase begins at baseline.",
+    expectedDurationDays: 3,
+    notes: "Baseline visit, counseling, and protocol confirmation.",
   },
   {
     cycleNumber: 2,
-    cycleName: "Assessment",
-    stepType: "IUI_Day2_3_Assessment",
-    expectedDurationDays: 1,
-    notes: "Baseline ultrasound/bloodwork (Day 2-3).",
+    cycleName: "Ovarian Stimulation",
+    stepType: "IUI_Day7_10_FollicleMonitoring",
+    expectedDurationDays: 10,
+    notes: "Stimulation with ultrasound/hormone monitoring.",
   },
   {
     cycleNumber: 3,
-    cycleName: "Follicle Monitoring",
-    stepType: "IUI_Day7_10_FollicleMonitoring",
+    cycleName: "Sperm Collection and Intrauterine Insemination",
+    stepType: "IUI_Procedure",
     expectedDurationDays: 1,
-    notes: "Mid-cycle follicle monitoring (Day 7-10).",
+    notes: "Collect sample and perform insemination.",
   },
   {
     cycleNumber: 4,
-    cycleName: "Trigger",
-    stepType: "IUI_Day10_12_Trigger",
-    expectedDurationDays: 1,
-    notes: "Ovulation trigger planning (Day 10-12).",
-  },
-  {
-    cycleNumber: 5,
-    cycleName: "IUI Procedure",
-    stepType: "IUI_Procedure",
-    expectedDurationDays: 1,
-    notes: "Intrauterine insemination procedure.",
-  },
-  {
-    cycleNumber: 6,
-    cycleName: "Post-IUI Monitoring",
+    cycleName: "Post-Insemination Follow-Up",
     stepType: "IUI_PostIUI",
-    expectedDurationDays: 1,
-    notes: "Immediate post-procedure care.",
-  },
-  {
-    cycleNumber: 7,
-    cycleName: "Beta HCG",
-    stepType: "IUI_BetaHCGTest",
-    expectedDurationDays: 1,
-    notes: "Pregnancy test 14 days after procedure (14 days).",
+    expectedDurationDays: 14,
+    notes: "Luteal support and monitoring until pregnancy test.",
   },
 ];
 
-// IVF Step definitions (8 steps matching backend TreatmentStepType enum)
+// IVF Step definitions (6 steps matching backend TreatmentStepType enum)
 const IVF_STEP_PLAN = [
   {
     cycleNumber: 1,
-    cycleName: "Pre-Cycle Preparation",
+    cycleName: "Initial Medical Examination",
     stepType: "IVF_PreCyclePreparation",
-    expectedDurationDays: 14,
-    notes: "Patient prep and protocol confirmation starts at baseline.",
+    expectedDurationDays: 3,
+    notes: "Baseline evaluation, counseling, and protocol setup.",
   },
   {
     cycleNumber: 2,
-    cycleName: "Controlled Ovarian Stimulation",
+    cycleName: "Ovarian Stimulation",
     stepType: "IVF_StimulationStart",
     expectedDurationDays: 10,
-    notes: "Stimulation start (COS day 1).",
+    notes: "Controlled ovarian stimulation with monitoring.",
   },
   {
     cycleNumber: 3,
-    cycleName: "Mid-Stimulation Monitoring",
-    stepType: "IVF_Monitoring",
+    cycleName: "Oocyte Retrieval and Sperm Collection",
+    stepType: "IVF_OPU",
     expectedDurationDays: 1,
-    notes: "Ultrasound/bloodwork mid stimulation.",
+    notes: "OPU and partner sperm collection.",
   },
   {
     cycleNumber: 4,
-    cycleName: "Ovulation Trigger",
-    stepType: "IVF_Trigger",
+    cycleName: "In Vitro Fertilization",
+    stepType: "IVF_Fertilization",
     expectedDurationDays: 1,
-    notes: "Trigger shot ~day 10.",
+    notes: "Fertilization/ICSI in the lab.",
   },
   {
     cycleNumber: 5,
-    cycleName: "Oocyte Pick-Up (OPU)",
-    stepType: "IVF_OPU",
-    expectedDurationDays: 1,
-    notes: "Oocyte retrieval ~36h post trigger.",
-  },
-  {
-    cycleNumber: 6,
-    cycleName: "Fertilization/Lab",
-    stepType: "IVF_Fertilization",
-    expectedDurationDays: 1,
-    notes: "Fertilization/ICSI lab work.",
-  },
-  {
-    cycleNumber: 7,
-    cycleName: "Embryo Culture",
-    stepType: "IVF_EmbryoCulture",
-    expectedDurationDays: 3,
-    notes: "Embryo assessment (Day 3 checkpoint).",
-  },
-  {
-    cycleNumber: 8,
     cycleName: "Embryo Transfer",
     stepType: "IVF_EmbryoTransfer",
     expectedDurationDays: 1,
-    notes: "Default day-5 transfer.",
+    notes: "Transfer planned per protocol.",
+  },
+  {
+    cycleNumber: 6,
+    cycleName: "Post-Transfer Follow-Up",
+    stepType: "IVF_BetaHCGTest",
+    expectedDurationDays: 14,
+    notes: "Monitoring and pregnancy test after transfer.",
   },
 ];
 
@@ -815,15 +780,14 @@ export function TreatmentPlanForm({
 
   // Generate plan name based on treatment type
   const generatePlanName = (treatmentType: string): string => {
-    const currentYear = new Date().getFullYear();
     if (treatmentType === "IUI") {
-      return `IUI Treatment Plan ${currentYear}`;
+      return `IUI Treatment Plan`;
     } else if (treatmentType === "IVF") {
-      return `IVF Treatment Plan ${currentYear}`;
+      return `IVF Treatment Plan`;
     } else if (treatmentType === "Consultation") {
-      return `Consultation Plan ${currentYear}`;
+      return `Consultation Plan`;
     } else {
-      return `Treatment Plan ${currentYear}`;
+      return `Treatment Plan`;
     }
   };
 
@@ -920,7 +884,7 @@ export function TreatmentPlanForm({
     const suggestedPhases: TreatmentPhase[] = [];
 
     if (formState.treatmentType === "IUI") {
-      // IUI: 7 phases (1 step = 1 phase) following standard protocol from backend
+      // IUI: 4 phases (1 step = 1 phase) following standard protocol from backend
       let currentDate = new Date(startDate);
 
       IUI_STEP_PLAN.forEach((step, stepIndex) => {
@@ -946,7 +910,7 @@ export function TreatmentPlanForm({
         currentDate.setDate(currentDate.getDate() + 1);
       });
     } else if (formState.treatmentType === "IVF") {
-      // IVF phases following standard 8-step protocol from backend
+      // IVF phases following standard 6-step protocol from backend
       let currentDate = new Date(startDate);
 
       IVF_STEP_PLAN.forEach((step, stepIndex) => {
@@ -1278,7 +1242,7 @@ export function TreatmentPlanForm({
                 Plan Name <span className="text-red-500">*</span>
               </label>
               <Input
-                placeholder="e.g., IVF Treatment Plan 2025"
+                placeholder="e.g., IVF Treatment Plan"
                 value={formState.planName}
                 onChange={(e) => handleFieldChange("planName", e.target.value)}
                 required

@@ -28,6 +28,7 @@ interface EmbryoRow {
   quality: string;
   notes: string;
   creationDate: string;
+  isFromDatabase?: boolean; // Track if embryo is selected from database
 }
 
 interface EmbryoCultureConfirmationModalProps {
@@ -50,6 +51,7 @@ export function EmbryoCultureConfirmationModal({
     new Date().toISOString().split("T")[0]
   );
   const [generalNotes, setGeneralNotes] = useState("");
+  const [selectedEmbryoId, setSelectedEmbryoId] = useState<string>("");
 
   const { data: cycle, isLoading: cycleLoading } =
     useQuery<TreatmentCycle | null>({
@@ -93,6 +95,35 @@ export function EmbryoCultureConfirmationModal({
       }
     },
   });
+
+  // Fetch all available embryos from database (for selection)
+  const { data: availableEmbryos, isLoading: availableEmbryosLoading } =
+    useQuery<LabSampleDetailResponse[]>({
+      enabled: isOpen && Boolean(cycle?.patientId),
+      queryKey: ["embryos", "available", cycle?.patientId, "culture-modal"],
+      queryFn: async () => {
+        if (!cycle?.patientId) return [];
+        try {
+          const response = await api.sample.getAllDetailSamples({
+            SampleType: "Embryo",
+            PatientId: cycle.patientId,
+            Page: 1,
+            Size: 100,
+            Sort: "collectionDate",
+            Order: "desc",
+          });
+          // Filter out embryos already added to current cycle
+          const cycleEmbryoIds = new Set(
+            existingEmbryos?.map((e) => e.id) ?? []
+          );
+          return (response.data ?? []).filter(
+            (e) => !cycleEmbryoIds.has(e.id) && e.status === "QualityChecked"
+          );
+        } catch (error) {
+          return [];
+        }
+      },
+    });
 
   // Fetch patient details for patient name
   const { data: patientDetails } = useQuery({
@@ -177,6 +208,7 @@ export function EmbryoCultureConfirmationModal({
           creationDate: embryo.embryo?.creationDate
             ? new Date(embryo.embryo.creationDate).toISOString().split("T")[0]
             : new Date().toISOString().split("T")[0],
+          isFromDatabase: true, // Existing embryos are from database
         })
       );
       setEmbryos(initialEmbryos);
@@ -193,6 +225,7 @@ export function EmbryoCultureConfirmationModal({
           quality: "",
           notes: "",
           creationDate: new Date().toISOString().split("T")[0],
+          isFromDatabase: false,
         },
       ]);
       setEmbryoCounter(2);
@@ -209,9 +242,55 @@ export function EmbryoCultureConfirmationModal({
       quality: "",
       notes: "",
       creationDate: new Date().toISOString().split("T")[0],
+      isFromDatabase: false,
     };
     setEmbryos([...embryos, newEmbryo]);
     setEmbryoCounter((prev) => prev + 1);
+  };
+
+  const addEmbryoFromDatabase = () => {
+    if (!selectedEmbryoId) {
+      toast.error("Please select an embryo from the list");
+      return;
+    }
+
+    const selectedEmbryo = availableEmbryos?.find(
+      (e) => e.id === selectedEmbryoId
+    );
+    if (!selectedEmbryo) {
+      toast.error("Selected embryo not found");
+      return;
+    }
+
+    // Check if embryo already added
+    if (embryos.some((e) => e.id === selectedEmbryoId)) {
+      toast.error("This embryo has already been added to the list");
+      return;
+    }
+
+    const newEmbryo: EmbryoRow = {
+      id: selectedEmbryo.id,
+      code: selectedEmbryo.sampleCode || getLast4Chars(selectedEmbryo.id),
+      dayOfDevelopment:
+        selectedEmbryo.embryo?.dayOfDevelopment?.toString() || "",
+      grade: selectedEmbryo.embryo?.grade || "",
+      cellCount:
+        selectedEmbryo.embryo?.cellCount ||
+        selectedEmbryo.embryo?.quantity ||
+        0,
+      quality: selectedEmbryo.embryo?.quality || "",
+      notes: selectedEmbryo.notes || "",
+      creationDate: selectedEmbryo.embryo?.creationDate
+        ? new Date(selectedEmbryo.embryo.creationDate)
+            .toISOString()
+            .split("T")[0]
+        : new Date().toISOString().split("T")[0],
+      isFromDatabase: true,
+    };
+
+    setEmbryos([...embryos, newEmbryo]);
+    setSelectedEmbryoId(""); // Reset selection
+    toast.success("Embryo added from database");
   };
 
   const updateEmbryoRow = (id: string, field: keyof EmbryoRow, value: any) => {
@@ -438,6 +517,7 @@ export function EmbryoCultureConfirmationModal({
   const isLoading =
     cycleLoading ||
     embryosLoading ||
+    availableEmbryosLoading ||
     createEmbryoMutation.isPending ||
     updateEmbryoMutation.isPending;
 
@@ -520,6 +600,53 @@ export function EmbryoCultureConfirmationModal({
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Add Embryo from Database Section */}
+              <div className="border rounded-lg p-4 bg-gray-50 space-y-3">
+                <Label className="text-sm font-semibold text-gray-700">
+                  Select Embryo from Database
+                </Label>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedEmbryoId}
+                    onChange={(e) => setSelectedEmbryoId(e.target.value)}
+                    className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    disabled={availableEmbryosLoading}
+                  >
+                    <option value="">
+                      {availableEmbryosLoading
+                        ? "Loading..."
+                        : availableEmbryos && availableEmbryos.length > 0
+                          ? "-- Select embryo --"
+                          : "No embryos available"}
+                    </option>
+                    {availableEmbryos?.map((embryo) => (
+                      <option key={embryo.id} value={embryo.id}>
+                        {embryo.sampleCode || getLast4Chars(embryo.id)} - Day{" "}
+                        {embryo.embryo?.dayOfDevelopment || "?"} - Grade{" "}
+                        {embryo.embryo?.grade || "?"} -
+                        {embryo.embryo?.cellCount || 0} cells
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addEmbryoFromDatabase}
+                    disabled={!selectedEmbryoId || availableEmbryosLoading}
+                  >
+                    Add from Database
+                  </Button>
+                </div>
+                {availableEmbryos &&
+                  availableEmbryos.length === 0 &&
+                  !availableEmbryosLoading && (
+                    <p className="text-xs text-gray-500 italic">
+                      No embryos available in database for this patient. You can
+                      add new embryos manually.
+                    </p>
+                  )}
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
@@ -556,7 +683,19 @@ export function EmbryoCultureConfirmationModal({
                   <tbody>
                     {embryos.map((embryo, index) => (
                       <tr key={embryo.id} className="border-b hover:bg-gray-50">
-                        <td className="p-2">{index + 1}</td>
+                        <td className="p-2">
+                          <div className="flex items-center gap-2">
+                            <span>{index + 1}</span>
+                            {embryo.isFromDatabase && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                              >
+                                DB
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-2">
                           <Input
                             value={embryo.code}
@@ -565,6 +704,12 @@ export function EmbryoCultureConfirmationModal({
                             }
                             placeholder="E001"
                             className="w-full"
+                            disabled={embryo.isFromDatabase}
+                            title={
+                              embryo.isFromDatabase
+                                ? "Embryo code from database cannot be edited"
+                                : ""
+                            }
                           />
                         </td>
                         <td className="p-2">
@@ -678,7 +823,7 @@ export function EmbryoCultureConfirmationModal({
                 onClick={addEmbryoRow}
                 className="mt-2"
               >
-                Add Embryo
+                Add New Embryo (Manual)
               </Button>
             </CardContent>
           </Card>

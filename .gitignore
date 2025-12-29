@@ -31,3 +31,4 @@ dist-ssr
 # TanStack Router
 src/routeTree.gen.ts
 
+.cursor/rules/rule.mdc

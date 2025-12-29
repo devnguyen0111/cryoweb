@@ -23,7 +23,7 @@ import {
   type Relationship,
 } from "@/api/types";
 import { getLast4Chars } from "@/utils/id-helpers";
-import { getStatusBadgeClass } from "@/utils/status-colors";
+import { getSampleStatusBadgeClass } from "@/utils/status-colors";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { FlaskConical } from "lucide-react";
 import { TreatmentTimeline } from "./TreatmentTimeline";
@@ -709,7 +709,7 @@ export function TreatmentCycleDetailModal({
                                 <Badge
                                   className={cn(
                                     "inline-flex rounded-full px-2 py-1 text-xs font-semibold border",
-                                    getStatusBadgeClass(sample.status)
+                                    getSampleStatusBadgeClass(sample.status)
                                   )}
                                 >
                                   {sample.status}
@@ -811,7 +811,7 @@ export function TreatmentCycleDetailModal({
                               <Badge
                                 className={cn(
                                   "inline-flex rounded-full px-2 py-1 text-xs font-semibold border",
-                                  getStatusBadgeClass(sample.status)
+                                  getSampleStatusBadgeClass(sample.status)
                                 )}
                               >
                                 {sample.status}

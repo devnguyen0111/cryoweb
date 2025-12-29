@@ -375,4 +375,19 @@ export class SampleApi {
     );
     return response.data;
   }
+
+  /**
+   * Update fertilize status for a sample (sperm or oocyte)
+   * PUT /api/labsample/fertilize/{id}
+   */
+  async updateFertilizeStatus(
+    id: string,
+    canFertilize: boolean
+  ): Promise<BaseResponse<LabSample>> {
+    const response = await this.client.put<BaseResponse<LabSample>>(
+      `/labsample/fertilize/${id}`,
+      { canFertilize }
+    );
+    return response.data;
+  }
 }

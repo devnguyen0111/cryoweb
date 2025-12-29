@@ -6,14 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import { toast } from "sonner";
 import type { LabSampleDetailResponse } from "@/api/types";
-import { RefreshCw, CheckCircle2, XCircle, Snowflake } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { EmbryoQualityCheckModal } from "@/features/doctor/embryo-quality-check/EmbryoQualityCheckModal";
+import { getSampleStatusBadgeClass } from "@/utils/status-colors";
 
 export const Route = createFileRoute("/doctor/embryo-quality-check")({
   component: EmbryoQualityCheckComponent,
@@ -54,7 +54,7 @@ function EmbryoQualityCheckComponent() {
   // Filter embryos that need quality check (status: Processing or not QualityChecked/Used/Discarded)
   const embryosNeedingCheck = useMemo(() => {
     if (!embryosData?.data) return [];
-    
+
     return (embryosData.data ?? []).filter(
       (embryo) =>
         embryo.sampleType === "Embryo" &&
@@ -84,15 +84,7 @@ function EmbryoQualityCheckComponent() {
   };
 
   const getStatusBadgeClass = (status: string) => {
-    const statusClasses: Record<string, string> = {
-      Collected: "bg-blue-100 text-blue-800 border-blue-200",
-      Processing: "bg-yellow-100 text-yellow-800 border-yellow-200",
-      Stored: "bg-green-100 text-green-800 border-green-200",
-      Used: "bg-purple-100 text-purple-800 border-purple-200",
-      Discarded: "bg-red-100 text-red-800 border-red-200",
-      QualityChecked: "bg-emerald-100 text-emerald-800 border-emerald-200",
-    };
-    return statusClasses[status] || "bg-gray-100 text-gray-800 border-gray-200";
+    return getSampleStatusBadgeClass(status);
   };
 
   return (
@@ -103,7 +95,8 @@ function EmbryoQualityCheckComponent() {
             <div>
               <h1 className="text-3xl font-bold">Embryo Quality Check</h1>
               <p className="text-gray-600 mt-2">
-                Check embryo quality and select embryos to use, cancel, or freeze
+                Check embryo quality and select embryos to use, cancel, or
+                freeze
               </p>
             </div>
             <Button
@@ -155,9 +148,9 @@ function EmbryoQualityCheckComponent() {
                       <thead>
                         <tr className="border-b">
                           <th className="text-left p-3">Embryo Code</th>
-                          <th className="text-left p-3">Creation Date</th>
-                          <th className="text-left p-3">Quantity</th>
-                          <th className="text-left p-3">Stage</th>
+                          <th className="text-left p-3">Fertilization Date</th>
+                          <th className="text-left p-3">Day of Development</th>
+                          <th className="text-left p-3">Grade</th>
                           <th className="text-left p-3">Quality</th>
                           <th className="text-left p-3">Status</th>
                           <th className="text-left p-3">Actions</th>
@@ -176,19 +169,51 @@ function EmbryoQualityCheckComponent() {
                             </td>
                             <td className="p-3 text-sm">
                               {formatDate(
-                                embryo.embryo?.creationDate || embryo.collectionDate
+                                embryo.embryo?.fertilizationDate ||
+                                  embryo.collectionDate
                               )}
                             </td>
                             <td className="p-3">
-                              <Badge variant="outline">
-                                {embryo.embryo?.quantity || 0} embryos
-                              </Badge>
+                              {embryo.embryo?.dayOfDevelopment ? (
+                                <Badge variant="outline">
+                                  Day {embryo.embryo.dayOfDevelopment}
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-gray-50 text-gray-500 border-gray-300"
+                                >
+                                  Not Checked
+                                </Badge>
+                              )}
                             </td>
-                            <td className="p-3 text-sm">
-                              {embryo.embryo?.stage || "—"}
+                            <td className="p-3">
+                              {embryo.embryo?.grade ? (
+                                <span className="text-sm">
+                                  {embryo.embryo.grade}
+                                </span>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-gray-50 text-gray-500 border-gray-300"
+                                >
+                                  Not Checked
+                                </Badge>
+                              )}
                             </td>
-                            <td className="p-3 text-sm">
-                              {embryo.embryo?.quality || "—"}
+                            <td className="p-3">
+                              {embryo.quality ? (
+                                <span className="text-sm">
+                                  {embryo.quality}
+                                </span>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-gray-50 text-gray-500 border-gray-300"
+                                >
+                                  Not Checked
+                                </Badge>
+                              )}
                             </td>
                             <td className="p-3">
                               <Badge
@@ -226,7 +251,9 @@ function EmbryoQualityCheckComponent() {
             isOpen={!!selectedEmbryoId}
             onClose={() => setSelectedEmbryoId(null)}
             onSuccess={() => {
-              queryClient.invalidateQueries({ queryKey: ["embryo-quality-check"] });
+              queryClient.invalidateQueries({
+                queryKey: ["embryo-quality-check"],
+              });
               setSelectedEmbryoId(null);
             }}
           />
@@ -235,4 +262,3 @@ function EmbryoQualityCheckComponent() {
     </ProtectedRoute>
   );
 }
-

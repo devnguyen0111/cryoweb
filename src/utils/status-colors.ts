@@ -2,6 +2,7 @@ import type {
   AppointmentStatus,
   ServiceRequestStatus,
   TreatmentCycleStatus,
+  SpecimenStatus,
 } from "@/api/types";
 import { normalizeAppointmentStatus } from "./appointments";
 import { normalizeTreatmentCycleStatus } from "@/api/types";
@@ -284,13 +285,144 @@ export function getTreatmentCycleStatusBadgeClass(
 // UNIFIED STATUS COLOR HELPER
 // ============================================================================
 
+// ============================================================================
+// SAMPLE STATUS COLORS
+// ============================================================================
+
+/**
+ * Get color classes for sample/specimen status
+ * Standardized colors:
+ * - Collected: Blue (collected)
+ * - Processing: Amber (processing)
+ * - Stored: Emerald/Green (stored)
+ * - Used: Purple (used)
+ * - Discarded: Rose/Red (discarded)
+ * - QualityChecked: Emerald/Green (quality checked)
+ * - Fertilized: Purple (fertilized)
+ * - CulturedEmbryo: Purple (cultured embryo)
+ * - Frozen: Cyan (frozen)
+ * - Disposed: Rose/Red (disposed)
+ * - Thawed: Blue (thawed)
+ */
+export function getSampleStatusColor(
+  status: SpecimenStatus | string | undefined | null
+): StatusColorClasses {
+  const statusStr = String(status || "").trim();
+
+  switch (statusStr) {
+    case "Collected":
+      return {
+        bg: "bg-blue-50",
+        text: "text-blue-700",
+        border: "border-blue-200",
+        dot: "bg-blue-500",
+      };
+    case "Processing":
+      return {
+        bg: "bg-amber-50",
+        text: "text-amber-700",
+        border: "border-amber-200",
+        dot: "bg-amber-500",
+      };
+    case "Stored":
+      return {
+        bg: "bg-emerald-50",
+        text: "text-emerald-700",
+        border: "border-emerald-200",
+        dot: "bg-emerald-500",
+      };
+    case "Used":
+      return {
+        bg: "bg-purple-50",
+        text: "text-purple-700",
+        border: "border-purple-200",
+        dot: "bg-purple-500",
+      };
+    case "Discarded":
+      return {
+        bg: "bg-rose-50",
+        text: "text-rose-700",
+        border: "border-rose-200",
+        dot: "bg-rose-500",
+      };
+    case "QualityChecked":
+      return {
+        bg: "bg-emerald-50",
+        text: "text-emerald-700",
+        border: "border-emerald-200",
+        dot: "bg-emerald-500",
+      };
+    case "Fertilized":
+      return {
+        bg: "bg-purple-50",
+        text: "text-purple-700",
+        border: "border-purple-200",
+        dot: "bg-purple-500",
+      };
+    case "CulturedEmbryo":
+      return {
+        bg: "bg-purple-50",
+        text: "text-purple-700",
+        border: "border-purple-200",
+        dot: "bg-purple-500",
+      };
+    case "Frozen":
+      return {
+        bg: "bg-cyan-50",
+        text: "text-cyan-700",
+        border: "border-cyan-200",
+        dot: "bg-cyan-500",
+      };
+    case "Disposed":
+      return {
+        bg: "bg-rose-50",
+        text: "text-rose-700",
+        border: "border-rose-200",
+        dot: "bg-rose-500",
+      };
+    case "Thawed":
+      return {
+        bg: "bg-blue-50",
+        text: "text-blue-700",
+        border: "border-blue-200",
+        dot: "bg-blue-500",
+      };
+    default:
+      return {
+        bg: "bg-slate-100",
+        text: "text-slate-700",
+        border: "border-slate-200",
+        dot: "bg-slate-400",
+      };
+  }
+}
+
+/**
+ * Get Tailwind classes string for sample status badge
+ */
+export function getSampleStatusBadgeClass(
+  status: SpecimenStatus | string | undefined | null
+): string {
+  const colors = getSampleStatusColor(status);
+  return `${colors.bg} ${colors.text} ${colors.border || ""}`.trim();
+}
+
+// ============================================================================
+// UNIFIED STATUS COLOR HELPER
+// ============================================================================
+
 /**
  * Get status badge class automatically detecting the status type
  * This is useful when the status type is unknown or could be multiple types
  */
 export function getStatusBadgeClass(
   status: string | number | undefined | null,
-  type?: "appointment" | "service-request" | "treatment-cycle" | "auto"
+  type?:
+    | "appointment"
+    | "service-request"
+    | "treatment-cycle"
+    | "sample"
+    | "auto"
 ): string {
   if (!status) {
     return "bg-slate-100 text-slate-700 border-slate-200";
@@ -300,6 +432,23 @@ export function getStatusBadgeClass(
 
   // Auto-detect type if not specified
   if (!type || type === "auto") {
+    // Check for sample-specific statuses first
+    if (
+      statusStr === "Collected" ||
+      statusStr === "Processing" ||
+      statusStr === "Stored" ||
+      statusStr === "Used" ||
+      statusStr === "Discarded" ||
+      statusStr === "QualityChecked" ||
+      statusStr === "Fertilized" ||
+      statusStr === "CulturedEmbryo" ||
+      statusStr === "Frozen" ||
+      statusStr === "Disposed" ||
+      statusStr === "Thawed"
+    ) {
+      return getSampleStatusBadgeClass(status as any);
+    }
+
     // Check for appointment-specific statuses
     if (
       statusStr === "CheckedIn" ||
@@ -357,6 +506,8 @@ export function getStatusBadgeClass(
       return getServiceRequestStatusBadgeClass(status as any);
     case "treatment-cycle":
       return getTreatmentCycleStatusBadgeClass(status as any);
+    case "sample":
+      return getSampleStatusBadgeClass(status as any);
     default:
       return getAppointmentStatusBadgeClass(status as any);
   }

@@ -3,7 +3,7 @@ import { api } from "@/api/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { X } from "lucide-react";
+import { X, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { Modal } from "@/components/ui/modal";
 import { HorizontalTreatmentTimeline } from "./HorizontalTreatmentTimeline";
 import { CreateServiceRequestForCycleModal } from "./CreateServiceRequestForCycleModal";
 import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
+import { FertilizationModal } from "@/features/doctor/fertilization/FertilizationModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 import {
@@ -24,6 +25,7 @@ import {
   type CreateMedicalRecordRequest,
 } from "@/api/types";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
 
 interface CycleUpdateFormProps {
   cycle: TreatmentCycle;
@@ -90,6 +92,7 @@ export function CycleUpdateForm({
   const [showServiceRequestModal, setShowServiceRequestModal] = useState(false);
   const [showCreateAppointmentModal, setShowCreateAppointmentModal] =
     useState(false);
+  const [showFertilizationModal, setShowFertilizationModal] = useState(false);
 
   // Fetch cycle details to ensure we have latest data
   const { data: cycleDetails } = useQuery({
@@ -205,10 +208,7 @@ export function CycleUpdateForm({
   const inferTreatmentType = useCallback(
     (cycle: TreatmentCycle): "IUI" | "IVF" | undefined => {
       // First, try cycle.treatmentType
-      if (
-        cycle.treatmentType === "IUI" ||
-        cycle.treatmentType === "IVF"
-      ) {
+      if (cycle.treatmentType === "IUI" || cycle.treatmentType === "IVF") {
         return cycle.treatmentType;
       }
       // Then try treatmentData?.treatmentType
@@ -236,7 +236,11 @@ export function CycleUpdateForm({
     let treatmentType = inferTreatmentType(rawCurrentCycle);
 
     // Try to infer from allCyclesData if still not found
-    if (!treatmentType && allCyclesDataForType && allCyclesDataForType.length > 0) {
+    if (
+      !treatmentType &&
+      allCyclesDataForType &&
+      allCyclesDataForType.length > 0
+    ) {
       const cycleWithType = allCyclesDataForType.find(
         (c) => c.treatmentType === "IUI" || c.treatmentType === "IVF"
       );
@@ -254,7 +258,12 @@ export function CycleUpdateForm({
       ...rawCurrentCycle,
       treatmentType: treatmentType,
     };
-  }, [rawCurrentCycle, treatmentData, allCyclesDataForType, inferTreatmentType]);
+  }, [
+    rawCurrentCycle,
+    treatmentData,
+    allCyclesDataForType,
+    inferTreatmentType,
+  ]);
 
   const form = useForm<MedicalRecordFormData>({
     defaultValues: {
@@ -496,7 +505,12 @@ export function CycleUpdateForm({
 
   // Fetch ALL sperm samples of patient that have been quality checked (for validation)
   const { data: spermSamplesData } = useQuery({
-    queryKey: ["sperm-samples", "patient", currentCycle.patientId, "quality-checked"],
+    queryKey: [
+      "sperm-samples",
+      "patient",
+      currentCycle.patientId,
+      "quality-checked",
+    ],
     queryFn: async () => {
       if (!currentCycle.patientId) return { data: [] };
       try {
@@ -534,7 +548,12 @@ export function CycleUpdateForm({
 
   // Fetch ALL oocyte samples of patient that have been quality checked (for validation)
   const { data: oocyteSamplesData } = useQuery({
-    queryKey: ["oocyte-samples", "patient", currentCycle.patientId, "quality-checked"],
+    queryKey: [
+      "oocyte-samples",
+      "patient",
+      currentCycle.patientId,
+      "quality-checked",
+    ],
     queryFn: async () => {
       if (!currentCycle.patientId) return { data: [] };
       try {
@@ -1337,6 +1356,72 @@ export function CycleUpdateForm({
         </CardContent>
       </Card>
 
+      {/* In Vitro Fertilization Section - only show for step5_fertilization */}
+      {currentStep === "step5_fertilization" &&
+        currentCycle.treatmentType === "IVF" &&
+        normalizeTreatmentCycleStatus(currentCycle.status) !== "Completed" &&
+        normalizeTreatmentCycleStatus(currentCycle.status) !== "Cancelled" && (
+          <Card className="border-primary/50 bg-primary/5">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FlaskConical className="h-5 w-5 text-primary" />
+                    In Vitro Fertilization (IVF)
+                  </CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Select sperm and oocyte samples to send to the lab for
+                    fertilization
+                  </p>
+                </div>
+                <Button
+                  onClick={() => setShowFertilizationModal(true)}
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  Select Samples for Fertilization
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border border-gray-200 bg-white p-4">
+                  <p className="text-sm font-medium text-gray-700 mb-2">
+                    Sperm Samples
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {spermSamples?.filter((s) => s.canFertilize).length || 0}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    marked for fertilization
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-white p-4">
+                  <p className="text-sm font-medium text-gray-700 mb-2">
+                    Oocyte Samples
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {oocyteSamples?.filter((s) => s.canFertilize).length || 0}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    marked for fertilization
+                  </p>
+                </div>
+              </div>
+              {((spermSamples?.filter((s) => s.canFertilize).length || 0) > 0 ||
+                (oocyteSamples?.filter((s) => s.canFertilize).length || 0) >
+                  0) && (
+                <div className="mt-4 rounded-lg bg-blue-50 border border-blue-200 p-3">
+                  <p className="text-sm text-blue-900">
+                    ✓ Samples have been marked and are ready for lab
+                    fertilization. The lab will create embryos upon receiving
+                    the samples.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
       {/* Service Requests List */}
       {serviceRequestsData && serviceRequestsData.length > 0 && (
         <Card>
@@ -1347,19 +1432,7 @@ export function CycleUpdateForm({
             <div className="space-y-3">
               {serviceRequestsData.slice(0, 5).map((request) => {
                 const statusBadgeClass = (status?: string) => {
-                  switch (status) {
-                    case "Pending":
-                      return "bg-amber-100 text-amber-800";
-                    case "Approved":
-                      return "bg-blue-100 text-blue-700";
-                    case "Completed":
-                      return "bg-emerald-100 text-emerald-700";
-                    case "Cancelled":
-                    case "Rejected":
-                      return "bg-rose-100 text-rose-700";
-                    default:
-                      return "bg-gray-100 text-gray-700";
-                  }
+                  return getServiceRequestStatusBadgeClass(status);
                 };
 
                 const formatDate = (dateString?: string | null) => {
@@ -1677,21 +1750,29 @@ export function CycleUpdateForm({
                     }
 
                     // Check if cycle has started before allowing completion
-                    const cycleStatus = normalizeTreatmentCycleStatus(currentCycle.status);
+                    const cycleStatus = normalizeTreatmentCycleStatus(
+                      currentCycle.status
+                    );
                     const hasStarted = cycleStatus === "InProgress";
                     const isCompleted = cycleStatus === "Completed";
                     const isCancelled = cycleStatus === "Cancelled";
 
                     if (!hasStarted) {
-                      throw new Error("Cannot complete cycle: Cycle has not been started yet.");
+                      throw new Error(
+                        "Cannot complete cycle: Cycle has not been started yet."
+                      );
                     }
 
                     if (isCompleted) {
-                      throw new Error("Cannot complete cycle: Cycle is already completed.");
+                      throw new Error(
+                        "Cannot complete cycle: Cycle is already completed."
+                      );
                     }
 
                     if (isCancelled) {
-                      throw new Error("Cannot complete cycle: Cycle has been cancelled.");
+                      throw new Error(
+                        "Cannot complete cycle: Cycle has been cancelled."
+                      );
                     }
 
                     // Validate IVF cycle 3 before completing
@@ -1702,13 +1783,17 @@ export function CycleUpdateForm({
                         ? String(currentCycle.stepType).toUpperCase()
                         : "";
                       if (stepTypeStr === "IVF_OPU") return true;
-                      const currentStep = currentCycle.currentStep as string | undefined;
+                      const currentStep = currentCycle.currentStep as
+                        | string
+                        | undefined;
                       if (currentStep === "step4_opu") return true;
-                      const cycleNameLower = currentCycle.cycleName?.toLowerCase() || "";
+                      const cycleNameLower =
+                        currentCycle.cycleName?.toLowerCase() || "";
                       if (
                         cycleNameLower.includes("oocyte retrieval") ||
                         cycleNameLower.includes("sperm collection") ||
-                        (cycleNameLower.includes("opu") && cycleNameLower.includes("cycle"))
+                        (cycleNameLower.includes("opu") &&
+                          cycleNameLower.includes("cycle"))
                       ) {
                         return true;
                       }
@@ -1719,7 +1804,7 @@ export function CycleUpdateForm({
                       // Only validate if samples exist - if no samples exist, allow completion
                       const hasAnySpermSamples = spermSamples.length > 0;
                       const hasAnyOocyteSamples = oocyteSamples.length > 0;
-                      
+
                       // If no samples exist at all, allow completion (samples might not be collected yet)
                       if (!hasAnySpermSamples && !hasAnyOocyteSamples) {
                         // Allow completion - no samples to validate
@@ -1945,6 +2030,27 @@ export function CycleUpdateForm({
         variant="destructive"
         isLoading={isCancelling}
       />
+
+      {/* Fertilization Modal */}
+      {showFertilizationModal && currentCycle.patientId && (
+        <FertilizationModal
+          cycleId={currentCycle.id}
+          patientId={currentCycle.patientId}
+          isOpen={showFertilizationModal}
+          onClose={() => setShowFertilizationModal(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({
+              queryKey: ["sperm-samples"],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["oocyte-samples"],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["doctor", "treatment-cycle", currentCycle.id],
+            });
+          }}
+        />
+      )}
 
       {/* Create Appointment Modal - shown after starting cycle */}
       {doctorId &&

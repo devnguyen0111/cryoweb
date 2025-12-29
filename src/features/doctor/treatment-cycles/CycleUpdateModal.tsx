@@ -37,15 +37,21 @@ import type {
   PaginatedResponse,
   IUIStep,
   LabSampleDetailResponse,
+  Relationship,
 } from "@/api/types";
 import { HorizontalTreatmentTimeline } from "./HorizontalTreatmentTimeline";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 import { normalizeTreatmentCycleStatus } from "@/api/types";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  getAppointmentStatusBadgeClass,
+  getSampleStatusBadgeClass,
+} from "@/utils/status-colors";
 import { CreateMedicalRecordForm } from "@/features/doctor/medical-records/CreateMedicalRecordForm";
 import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
 import { CreateServiceRequestModal } from "@/features/doctor/service-requests/CreateServiceRequestModal";
+import { FertilizationModal } from "@/features/doctor/fertilization/FertilizationModal";
 import { Modal } from "@/components/ui/modal";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
@@ -255,6 +261,7 @@ export function CycleUpdateModal({
   const [selectedSpermSampleId, setSelectedSpermSampleId] = useState<
     string | null
   >(null);
+  const [showFertilizationModal, setShowFertilizationModal] = useState(false);
   const { data: doctorProfile } = useDoctorProfile();
 
   // Reset selectedSpermSampleId when modal closes or cycle changes
@@ -313,10 +320,7 @@ export function CycleUpdateModal({
   const inferTreatmentType = useCallback(
     (cycle: TreatmentCycle): "IUI" | "IVF" | undefined => {
       // First, try cycle.treatmentType
-      if (
-        cycle.treatmentType === "IUI" ||
-        cycle.treatmentType === "IVF"
-      ) {
+      if (cycle.treatmentType === "IUI" || cycle.treatmentType === "IVF") {
         return cycle.treatmentType;
       }
       // Then try treatmentData?.treatmentType
@@ -539,24 +543,90 @@ export function CycleUpdateModal({
     );
   }, [currentCycle.treatmentType, treatmentData?.treatmentType]);
 
-  // Check if current cycle is IUI
-  const isIUICycle = useMemo(() => {
-    return (
-      currentCycle.treatmentType === "IUI" ||
-      treatmentData?.treatmentType === "IUI"
-    );
-  }, [currentCycle.treatmentType, treatmentData?.treatmentType]);
+  // Note: isIUICycle is available if needed for future IUI-specific logic
+  // const isIUICycle = useMemo(() => {
+  //   return (
+  //     currentCycle.treatmentType === "IUI" ||
+  //     treatmentData?.treatmentType === "IUI"
+  //   );
+  // }, [currentCycle.treatmentType, treatmentData?.treatmentType]);
 
   // Fetch ALL sperm samples of patient that have been quality checked (for validation)
-  // For both IVF and IUI cycles (IUI needs it for step4_iui_procedure)
-  const { data: spermSamplesData, isLoading: spermSamplesLoading } = useQuery({
-    queryKey: ["sperm-samples", "patient", currentCycle.patientId, "quality-checked"],
+  // Fetch relationships to get partner patient ID for sperm samples (IVF only)
+  const { data: relationshipsResponse } = useQuery({
+    queryKey: [
+      "doctor",
+      "patient",
+      currentCycle.patientId,
+      "relationships",
+      "cycle-update",
+    ],
     queryFn: async () => {
-      if (!currentCycle.patientId) return { data: [] };
+      if (!currentCycle.patientId) return [];
+      try {
+        const response = await api.relationship.getRelationships(
+          currentCycle.patientId
+        );
+        return response.data ?? [];
+      } catch (error: any) {
+        if (
+          error?.response?.status === 404 ||
+          error?.response?.status === 403
+        ) {
+          return [];
+        }
+        console.warn(
+          "[CycleUpdateModal] Failed to fetch relationships:",
+          error
+        );
+        return [];
+      }
+    },
+    enabled: isOpen && !!currentCycle.patientId && isIVFCycle,
+    retry: false,
+  });
+
+  const relationships = relationshipsResponse ?? [];
+
+  // Get active partner relationship (Married or Unmarried) - for IVF cycles
+  const partnerRelationship: Relationship | undefined = isIVFCycle
+    ? relationships.find(
+        (rel: Relationship) =>
+          (rel.relationshipType === "Married" ||
+            rel.relationshipType === "Unmarried") &&
+          rel.isActive !== false
+      )
+    : undefined;
+
+  // Get partner patient ID from relationship - for IVF cycles
+  const partnerPatientId =
+    isIVFCycle && partnerRelationship
+      ? partnerRelationship.patient1Id === currentCycle.patientId
+        ? partnerRelationship.patient2Id
+        : partnerRelationship.patient1Id
+      : null;
+
+  // For both IVF and IUI cycles (IUI needs it for step4_iui_procedure)
+  // For IVF: fetch from partner patient (male has sperm)
+  // For IUI: fetch from main patient (male patient has sperm)
+  const { data: spermSamplesData, isLoading: spermSamplesLoading } = useQuery({
+    queryKey: [
+      "sperm-samples",
+      isIVFCycle ? "partner" : "patient",
+      isIVFCycle ? partnerPatientId : currentCycle.patientId,
+      "quality-checked",
+    ],
+    queryFn: async () => {
+      // For IVF: use partner patient ID, for IUI: use main patient ID
+      const targetPatientId = isIVFCycle
+        ? partnerPatientId
+        : currentCycle.patientId;
+
+      if (!targetPatientId) return { data: [] };
       try {
         const response = await api.sample.getAllDetailSamples({
           SampleType: "Sperm",
-          PatientId: currentCycle.patientId,
+          PatientId: targetPatientId,
           Page: 1,
           Size: 100,
           Sort: "collectionDate",
@@ -573,60 +643,114 @@ export function CycleUpdateModal({
           "Used",
           "Frozen",
         ];
-        return {
-          data: samples.filter((sample) =>
-            qualityCheckedStatuses.includes(sample.status)
-          ),
-        };
+        const filtered = samples.filter((sample) =>
+          qualityCheckedStatuses.includes(sample.status)
+        );
+
+        // Debug log
+        if (process.env.NODE_ENV === "development") {
+          console.log("[CycleUpdateModal] Sperm samples fetched:", {
+            targetPatientId: isIVFCycle
+              ? partnerPatientId
+              : currentCycle.patientId,
+            isIVFCycle,
+            total: samples.length,
+            qualityChecked: filtered.length,
+            markedForFertilization: filtered.filter(
+              (s) => s.canFertilize === true
+            ).length,
+            samples: filtered.map((s) => ({
+              id: s.id,
+              status: s.status,
+              canFertilize: s.canFertilize,
+            })),
+          });
+        }
+
+        return { data: filtered };
       } catch (error) {
         console.error("Error fetching sperm samples:", error);
         return { data: [] };
       }
     },
-    enabled: !!currentCycle.patientId && isOpen && (isIVFCycle || isIUICycle || activeTab === "sperm"),
+    enabled:
+      !!currentCycle.patientId &&
+      isOpen &&
+      (isIVFCycle ? !!partnerPatientId : true) && // For IVF, need partner; for IUI, just need patient
+      (!isIVFCycle || !!relationshipsResponse), // For IVF, wait for relationships
+    staleTime: 0, // Always fetch fresh data
   });
 
-  // Fetch ALL oocyte samples of patient that have been quality checked (for validation)
-  const { data: oocyteSamplesData, isLoading: oocyteSamplesLoading } = useQuery({
-    queryKey: ["oocyte-samples", "patient", currentCycle.patientId, "quality-checked"],
-    queryFn: async () => {
-      if (!currentCycle.patientId) return { data: [] };
-      try {
-        const response = await api.sample.getAllDetailSamples({
-          SampleType: "Oocyte",
-          PatientId: currentCycle.patientId,
-          Page: 1,
-          Size: 100,
-          Sort: "collectionDate",
-          Order: "desc",
-        });
-        const samples = response.data || [];
-        // Get ALL samples of patient that have been quality checked
-        // Statuses considered as quality checked: QualityChecked, Fertilized, CulturedEmbryo, Stored, Used, Frozen
-        const qualityCheckedStatuses = [
-          "QualityChecked",
-          "Fertilized",
-          "CulturedEmbryo",
-          "Stored",
-          "Used",
-          "Frozen",
-        ];
-        return {
-          data: samples.filter((sample) =>
+  // Fetch ALL oocyte samples of patient that have been quality checked (for validation and display)
+  const { data: oocyteSamplesData, isLoading: oocyteSamplesLoading } = useQuery(
+    {
+      queryKey: [
+        "oocyte-samples",
+        "patient",
+        currentCycle.patientId,
+        "quality-checked",
+      ],
+      queryFn: async () => {
+        if (!currentCycle.patientId) return { data: [] };
+        try {
+          const response = await api.sample.getAllDetailSamples({
+            SampleType: "Oocyte",
+            PatientId: currentCycle.patientId,
+            Page: 1,
+            Size: 100,
+            Sort: "collectionDate",
+            Order: "desc",
+          });
+          const samples = response.data || [];
+          // Get ALL samples of patient that have been quality checked
+          // Statuses considered as quality checked: QualityChecked, Fertilized, CulturedEmbryo, Stored, Used, Frozen
+          const qualityCheckedStatuses = [
+            "QualityChecked",
+            "Fertilized",
+            "CulturedEmbryo",
+            "Stored",
+            "Used",
+            "Frozen",
+          ];
+          const filtered = samples.filter((sample) =>
             qualityCheckedStatuses.includes(sample.status)
-          ),
-        };
-      } catch (error) {
-        console.error("Error fetching oocyte samples:", error);
-        return { data: [] };
-      }
-    },
-    enabled: !!currentCycle.patientId && isOpen && (isIVFCycle || activeTab === "oocyte"),
-  });
+          );
+
+          // Debug log
+          if (process.env.NODE_ENV === "development") {
+            console.log("[CycleUpdateModal] Oocyte samples fetched:", {
+              total: samples.length,
+              qualityChecked: filtered.length,
+              markedForFertilization: filtered.filter(
+                (s) => s.canFertilize === true
+              ).length,
+              samples: filtered.map((s) => ({
+                id: s.id,
+                status: s.status,
+                canFertilize: s.canFertilize,
+              })),
+            });
+          }
+
+          return { data: filtered };
+        } catch (error) {
+          console.error("Error fetching oocyte samples:", error);
+          return { data: [] };
+        }
+      },
+      enabled: !!currentCycle.patientId && isOpen,
+      staleTime: 0, // Always fetch fresh data
+    }
+  );
 
   // For display in tabs, also fetch samples for current cycle (not filtered by quality check)
   const { data: cycleSpermSamplesData } = useQuery({
-    queryKey: ["sperm-samples", "cycle", currentCycle.id, currentCycle.patientId],
+    queryKey: [
+      "sperm-samples",
+      "cycle",
+      currentCycle.id,
+      currentCycle.patientId,
+    ],
     queryFn: async () => {
       if (!currentCycle.patientId) return { data: [] };
       try {
@@ -642,7 +766,8 @@ export function CycleUpdateModal({
         return {
           data: samples.filter(
             (sample) =>
-              !sample.treatmentCycleId || sample.treatmentCycleId === currentCycle.id
+              !sample.treatmentCycleId ||
+              sample.treatmentCycleId === currentCycle.id
           ),
         };
       } catch (error) {
@@ -654,7 +779,12 @@ export function CycleUpdateModal({
   });
 
   const { data: cycleOocyteSamplesData } = useQuery({
-    queryKey: ["oocyte-samples", "cycle", currentCycle.id, currentCycle.patientId],
+    queryKey: [
+      "oocyte-samples",
+      "cycle",
+      currentCycle.id,
+      currentCycle.patientId,
+    ],
     queryFn: async () => {
       if (!currentCycle.patientId) return { data: [] };
       try {
@@ -670,7 +800,8 @@ export function CycleUpdateModal({
         return {
           data: samples.filter(
             (sample) =>
-              !sample.treatmentCycleId || sample.treatmentCycleId === currentCycle.id
+              !sample.treatmentCycleId ||
+              sample.treatmentCycleId === currentCycle.id
           ),
         };
       } catch (error) {
@@ -684,7 +815,7 @@ export function CycleUpdateModal({
   // For validation: use all quality-checked samples of patient
   const spermSamples = spermSamplesData?.data || [];
   const oocyteSamples = oocyteSamplesData?.data || [];
-  
+
   // For display in tabs: use samples for current cycle
   const cycleSpermSamples = cycleSpermSamplesData?.data || [];
   const cycleOocyteSamples = cycleOocyteSamplesData?.data || [];
@@ -1062,14 +1193,15 @@ export function CycleUpdateModal({
     },
   });
 
-  const onSubmit = form.handleSubmit(async (data) => {
-    setIsSubmitting(true);
-    try {
-      await updateMutation.mutateAsync(data);
-    } finally {
-      setIsSubmitting(false);
-    }
-  });
+  // Note: onSubmit handler available if form submission is needed
+  // const onSubmit = form.handleSubmit(async (data) => {
+  //   setIsSubmitting(true);
+  //   try {
+  //     await updateMutation.mutateAsync(data);
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // });
 
   // Check cycle status
   const cycleStatus = normalizeTreatmentCycleStatus(currentCycle.status);
@@ -1133,20 +1265,20 @@ export function CycleUpdateModal({
   // Check if this is IVF cycle 3 (Oocyte Retrieval and Sperm Collection)
   const isIVFCycle3 = useMemo(() => {
     if (currentCycle.treatmentType !== "IVF") return false;
-    
+
     // Check by cycleNumber
     if (currentCycle.cycleNumber === 3) return true;
-    
+
     // Check by stepType
     const stepTypeStr = currentCycle.stepType
       ? String(currentCycle.stepType).toUpperCase()
       : "";
     if (stepTypeStr === "IVF_OPU") return true;
-    
+
     // Check by currentStep
     const currentStep = currentCycle.currentStep as string | undefined;
     if (currentStep === "step4_opu") return true;
-    
+
     // Check by cycleName
     const cycleNameLower = currentCycle.cycleName?.toLowerCase() || "";
     if (
@@ -1156,7 +1288,7 @@ export function CycleUpdateModal({
     ) {
       return true;
     }
-    
+
     return false;
   }, [currentCycle]);
 
@@ -1164,30 +1296,31 @@ export function CycleUpdateModal({
   // Only validate if there are samples - if no samples exist, allow completion
   const canCompleteCycle3 = useMemo(() => {
     if (!isIVFCycle3) return true; // Not cycle 3, no validation needed
-    
+
     // If no samples exist at all, allow completion (samples might not be collected yet)
     const hasAnySpermSamples = spermSamples.length > 0;
     const hasAnyOocyteSamples = oocyteSamples.length > 0;
-    
+
     // If no samples exist, allow completion
     if (!hasAnySpermSamples && !hasAnyOocyteSamples) {
       return true;
     }
-    
+
     // If we have samples, check that we have quality-checked samples for both types
     // We already filtered for quality-checked samples in the query, so if they exist, they're quality-checked
     if (hasAnySpermSamples && hasAnyOocyteSamples) {
       return true; // Both types exist and are quality-checked
     }
-    
+
     // If only one type exists, we still need both for cycle 3
     return false;
   }, [isIVFCycle3, spermSamples, oocyteSamples]);
 
   // Check if cycle can be completed (simple version - just check if started)
   // For IVF cycle 3, also check that samples are processed
-  const canCompleteCycle = hasStarted && !isCompleted && !isCancelled && canCompleteCycle3;
-  
+  const canCompleteCycle =
+    hasStarted && !isCompleted && !isCancelled && canCompleteCycle3;
+
   // Check if cycle can be cancelled (not completed and not already cancelled)
   const canCancelCycle = !isCompleted && !isCancelled;
 
@@ -1244,7 +1377,7 @@ export function CycleUpdateModal({
             missingSamples.push("oocyte quality check");
           }
         }
-        
+
         throw new Error(
           `Cannot complete cycle: Lab has not returned ${missingSamples.join(" and ")} sample data. Please wait for lab to complete quality checks.`
         );
@@ -1449,7 +1582,10 @@ export function CycleUpdateModal({
             await api.sample.updateSample(selectedSpermSampleId, {
               treatmentCycleId: currentCycle.id,
             } as any);
-            console.log("[Confirm IUI] Sperm sample linked to cycle:", selectedSpermSampleId);
+            console.log(
+              "[Confirm IUI] Sperm sample linked to cycle:",
+              selectedSpermSampleId
+            );
           } catch (error: any) {
             console.warn("Could not update sperm sample with cycle ID:", error);
             // Don't throw - continue with completion
@@ -1465,7 +1601,7 @@ export function CycleUpdateModal({
           month: "long",
           day: "numeric",
         })}. Procedure completed and ready for post-IUI monitoring.`;
-        
+
         // Add sperm sample info to notes if selected
         if (selectedSpermSampleId) {
           const selectedSample = spermSamplesData?.data?.find(
@@ -1674,23 +1810,7 @@ export function CycleUpdateModal({
   };
 
   const getStatusBadgeClass = (status?: string) => {
-    switch (status?.toLowerCase()) {
-      case "scheduled":
-      case "confirmed":
-        return "bg-blue-100 text-blue-700 border-blue-200";
-      case "checkedin":
-        return "bg-amber-100 text-amber-700 border-amber-200";
-      case "inprogress":
-        return "bg-purple-100 text-purple-700 border-purple-200";
-      case "completed":
-        return "bg-green-100 text-green-700 border-green-200";
-      case "cancelled":
-        return "bg-red-100 text-red-700 border-red-200";
-      case "noshow":
-        return "bg-gray-100 text-gray-700 border-gray-200";
-      default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
-    }
+    return getAppointmentStatusBadgeClass(status);
   };
 
   return (
@@ -1758,7 +1878,12 @@ export function CycleUpdateModal({
                   { id: "service" as TabType, label: "Service" },
                   // Show IUI Procedure tab for IUI cycles at IUI Procedure step
                   ...(isIUIProcedureStep && hasStarted
-                    ? [{ id: "iui-procedure" as TabType, label: "IUI Procedure" }]
+                    ? [
+                        {
+                          id: "iui-procedure" as TabType,
+                          label: "IUI Procedure",
+                        },
+                      ]
                     : []),
                   // Only show Sperm and Oocyte tabs for IVF cycles
                   ...(isIVFCycle
@@ -1897,6 +2022,171 @@ export function CycleUpdateModal({
                   </div>
                 )}
 
+                {/* In Vitro Fertilization Section - only show for step5_fertilization */}
+                {(() => {
+                  // Check if we're at fertilization step
+                  const currentStep = String(
+                    currentCycle.currentStep || ""
+                  ).toLowerCase();
+                  const stepType = String(
+                    currentCycle.stepType || ""
+                  ).toUpperCase();
+                  const cycleName = String(
+                    currentCycle.cycleName || ""
+                  ).toLowerCase();
+                  const cycleNumber = currentCycle.cycleNumber;
+
+                  const isFertilizationStep =
+                    currentStep === "step5_fertilization" ||
+                    stepType === "IVF_FERTILIZATION" ||
+                    stepType.includes("FERTILIZATION") ||
+                    cycleName.includes("fertilization") ||
+                    cycleName.includes("in vitro") ||
+                    cycleNumber === 4; // Step 4 in the timeline is fertilization
+
+                  const shouldShow =
+                    isFertilizationStep &&
+                    isIVFCycle &&
+                    !isCompleted &&
+                    !isCancelled;
+
+                  // Always log to debug
+                  console.log("[FertilizationSection] Full Check:", {
+                    currentStep,
+                    stepType,
+                    cycleName,
+                    cycleNumber,
+                    isFertilizationStep,
+                    isIVFCycle,
+                    isCompleted,
+                    isCancelled,
+                    shouldShow,
+                    cycleId: currentCycle.id,
+                    treatmentType: currentCycle.treatmentType,
+                    status: currentCycle.status,
+                  });
+
+                  return shouldShow;
+                })() && (
+                  <Card className="border-primary/50 bg-primary/5">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-base">
+                            <FlaskConical className="h-5 w-5 text-primary" />
+                            In Vitro Fertilization (IVF)
+                          </CardTitle>
+                          <p className="text-sm text-gray-600 mt-1 font-normal">
+                            Select sperm and oocyte samples to send to the lab
+                            for fertilization
+                          </p>
+                        </div>
+                        <Button
+                          onClick={() => setShowFertilizationModal(true)}
+                          className="bg-primary hover:bg-primary/90"
+                          size="sm"
+                        >
+                          Select Samples for Fertilization
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="rounded-lg border border-gray-200 bg-white p-4">
+                          <p className="text-sm font-medium text-gray-700 mb-2">
+                            Sperm Samples
+                          </p>
+                          <p className="text-2xl font-bold text-gray-900">
+                            {(() => {
+                              const count = Array.isArray(spermSamples)
+                                ? spermSamples.filter(
+                                    (s) => s.canFertilize === true
+                                  ).length
+                                : 0;
+                              // Debug log
+                              if (process.env.NODE_ENV === "development") {
+                                console.log(
+                                  "[CycleUpdateModal] Sperm samples count:",
+                                  {
+                                    total: Array.isArray(spermSamples)
+                                      ? spermSamples.length
+                                      : 0,
+                                    marked: count,
+                                    samples: Array.isArray(spermSamples)
+                                      ? spermSamples.map((s) => ({
+                                          id: s.id,
+                                          canFertilize: s.canFertilize,
+                                          status: s.status,
+                                        }))
+                                      : [],
+                                  }
+                                );
+                              }
+                              return count;
+                            })()}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            marked for fertilization
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-white p-4">
+                          <p className="text-sm font-medium text-gray-700 mb-2">
+                            Oocyte Samples
+                          </p>
+                          <p className="text-2xl font-bold text-gray-900">
+                            {(() => {
+                              const count = Array.isArray(oocyteSamples)
+                                ? oocyteSamples.filter(
+                                    (s) => s.canFertilize === true
+                                  ).length
+                                : 0;
+                              // Debug log
+                              if (process.env.NODE_ENV === "development") {
+                                console.log(
+                                  "[CycleUpdateModal] Oocyte samples count:",
+                                  {
+                                    total: Array.isArray(oocyteSamples)
+                                      ? oocyteSamples.length
+                                      : 0,
+                                    marked: count,
+                                    samples: Array.isArray(oocyteSamples)
+                                      ? oocyteSamples.map((s) => ({
+                                          id: s.id,
+                                          canFertilize: s.canFertilize,
+                                          status: s.status,
+                                        }))
+                                      : [],
+                                  }
+                                );
+                              }
+                              return count;
+                            })()}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            marked for fertilization
+                          </p>
+                        </div>
+                      </div>
+                      {((Array.isArray(spermSamples)
+                        ? spermSamples.filter((s) => s.canFertilize === true)
+                            .length
+                        : 0) > 0 ||
+                        (Array.isArray(oocyteSamples)
+                          ? oocyteSamples.filter((s) => s.canFertilize === true)
+                              .length
+                          : 0) > 0) && (
+                        <div className="mt-4 rounded-lg bg-blue-50 border border-blue-200 p-3">
+                          <p className="text-sm text-blue-900">
+                            ✓ Samples have been marked and are ready for lab
+                            fertilization. The lab will create embryos upon
+                            receiving the samples.
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Cycle Actions */}
                 <Card>
                   <CardContent className="space-y-3 pt-4">
@@ -1929,12 +2219,14 @@ export function CycleUpdateModal({
                     )}
                     {/* Complete Cycle Section - Show if cycle has started */}
                     {hasStarted && !isCompleted && !isCancelled && (
-                      <div className={cn(
-                        "rounded-lg border p-4",
-                        canCompleteCycle
-                          ? "border-green-200 bg-green-50/50"
-                          : "border-amber-200 bg-amber-50/50"
-                      )}>
+                      <div
+                        className={cn(
+                          "rounded-lg border p-4",
+                          canCompleteCycle
+                            ? "border-green-200 bg-green-50/50"
+                            : "border-amber-200 bg-amber-50/50"
+                        )}
+                      >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-900 mb-1">
@@ -1943,7 +2235,9 @@ export function CycleUpdateModal({
                             <p className="text-xs text-gray-600">
                               {isIVFCycle3 && !canCompleteCycle3 ? (
                                 <span className="text-amber-700">
-                                  Waiting for lab to return sperm and oocyte sample data. Both samples must be quality checked before completing this cycle.
+                                  Waiting for lab to return sperm and oocyte
+                                  sample data. Both samples must be quality
+                                  checked before completing this cycle.
                                 </span>
                               ) : (
                                 "Mark this treatment cycle as complete"
@@ -1955,11 +2249,16 @@ export function CycleUpdateModal({
                               // Validate IVF cycle 3 before showing confirmation
                               if (isIVFCycle3 && !canCompleteCycle3) {
                                 const missingSamples: string[] = [];
-                                const hasAnySpermSamples = spermSamples.length > 0;
-                                const hasAnyOocyteSamples = oocyteSamples.length > 0;
-                                
+                                const hasAnySpermSamples =
+                                  spermSamples.length > 0;
+                                const hasAnyOocyteSamples =
+                                  oocyteSamples.length > 0;
+
                                 // If no samples exist at all, allow completion
-                                if (!hasAnySpermSamples && !hasAnyOocyteSamples) {
+                                if (
+                                  !hasAnySpermSamples &&
+                                  !hasAnyOocyteSamples
+                                ) {
                                   // Allow completion - no samples to validate
                                 } else {
                                   // We have some samples, check which ones are missing
@@ -1969,7 +2268,7 @@ export function CycleUpdateModal({
                                   if (!hasAnyOocyteSamples) {
                                     missingSamples.push("oocyte quality check");
                                   }
-                                  
+
                                   if (missingSamples.length > 0) {
                                     toast.error(
                                       `Cannot complete cycle: Lab has not returned ${missingSamples.join(" and ")} data. Please wait for lab to complete quality checks.`
@@ -2489,166 +2788,239 @@ export function CycleUpdateModal({
             )}
 
             {/* IUI Procedure Tab */}
-            {activeTab === "iui-procedure" && isIUIProcedureStep && hasStarted && (
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>IUI Procedure</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="relative overflow-hidden rounded-xl border border-purple-200 bg-white shadow-md">
-                      {/* Decorative gradient background */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-purple-50/50 via-white to-blue-50/30" />
+            {activeTab === "iui-procedure" &&
+              isIUIProcedureStep &&
+              hasStarted && (
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>IUI Procedure</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="relative overflow-hidden rounded-xl border border-purple-200 bg-white shadow-md">
+                        {/* Decorative gradient background */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-50/50 via-white to-blue-50/30" />
 
-                      <div className="relative p-4">
-                        <div className="flex items-start gap-3">
-                          {/* Icon */}
-                          <div className="flex-shrink-0 rounded-lg bg-purple-100 p-2.5">
-                            <Syringe className="h-5 w-5 text-purple-600" />
-                          </div>
-
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-semibold text-gray-900 mb-1.5">
-                              Confirm IUI Procedure
-                            </h3>
-                            <p className="text-xs leading-relaxed text-gray-600 mb-3">
-                              Select the sperm sample used for insemination and confirm that the intrauterine insemination (IUI)
-                              procedure has been performed. This will
-                              automatically move the treatment cycle to the
-                              post-IUI monitoring step.
-                            </p>
-
-                            {/* Sperm Sample Selection */}
-                            <div className="mb-3 space-y-2">
-                              <Label className="text-xs font-medium text-gray-700">
-                                Sperm Sample Used for Insemination
-                              </Label>
-                              {spermSamplesLoading ? (
-                                <div className="text-xs text-gray-500">Loading samples...</div>
-                              ) : spermSamplesData?.data && spermSamplesData.data.length > 0 ? (
-                                <div className="space-y-2">
-                                  {spermSamplesData.data.map((sample) => (
-                                    <div
-                                      key={sample.id}
-                                      onClick={() => setSelectedSpermSampleId(sample.id)}
-                                      className={cn(
-                                        "cursor-pointer rounded-lg border-2 p-3 transition-all hover:shadow-md",
-                                        selectedSpermSampleId === sample.id
-                                          ? "border-purple-500 bg-purple-50"
-                                          : "border-gray-200 bg-white hover:border-purple-300"
-                                      )}
-                                    >
-                                      <div className="flex items-start justify-between">
-                                        <div className="flex-1">
-                                          <div className="flex items-center gap-2 mb-2">
-                                            <FlaskConical className="h-4 w-4 text-blue-500" />
-                                            <span className="font-mono text-sm font-semibold">
-                                              {sample.sampleCode || getLast4Chars(sample.id)}
-                                            </span>
-                                            <Badge
-                                              className={cn(
-                                                "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border",
-                                                getStatusBadgeClass(sample.status)
-                                              )}
-                                            >
-                                              {sample.status}
-                                            </Badge>
-                                          </div>
-                                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
-                                            <div>
-                                              <span className="text-gray-500">Collection Date:</span>
-                                              <span className="ml-1 font-medium">
-                                                {sample.collectionDate
-                                                  ? new Date(sample.collectionDate).toLocaleDateString("en-US")
-                                                  : "N/A"}
-                                              </span>
-                                            </div>
-                                            {sample.sperm?.volume !== undefined && sample.sperm.volume !== null && (
-                                              <div>
-                                                <span className="text-gray-500">Volume:</span>
-                                                <span className="ml-1 font-medium">{sample.sperm.volume} mL</span>
-                                              </div>
-                                            )}
-                                            {sample.sperm?.concentration !== undefined && sample.sperm.concentration !== null && (
-                                              <div>
-                                                <span className="text-gray-500">Concentration:</span>
-                                                <span className="ml-1 font-medium">
-                                                  {sample.sperm.concentration} million/mL
-                                                </span>
-                                              </div>
-                                            )}
-                                            {sample.sperm?.motility !== undefined && sample.sperm.motility !== null && (
-                                              <div>
-                                                <span className="text-gray-500">Motility:</span>
-                                                <span className="ml-1 font-medium">{sample.sperm.motility}%</span>
-                                              </div>
-                                            )}
-                                            {sample.sperm?.progressiveMotility !== undefined && sample.sperm.progressiveMotility !== null && (
-                                              <div>
-                                                <span className="text-gray-500">Progressive Motility:</span>
-                                                <span className="ml-1 font-medium">
-                                                  {sample.sperm.progressiveMotility}%
-                                                </span>
-                                              </div>
-                                            )}
-                                            {sample.sperm?.morphology !== undefined && sample.sperm.morphology !== null && (
-                                              <div>
-                                                <span className="text-gray-500">Morphology:</span>
-                                                <span className="ml-1 font-medium">{sample.sperm.morphology}%</span>
-                                              </div>
-                                            )}
-                                            {sample.sperm?.quality && (
-                                              <div>
-                                                <span className="text-gray-500">Quality:</span>
-                                                <span className="ml-1 font-medium">{sample.sperm.quality}</span>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <div className="flex-shrink-0 ml-2">
-                                          {selectedSpermSampleId === sample.id && (
-                                            <div className="rounded-full bg-purple-500 p-1">
-                                              <CheckCircle className="h-4 w-4 text-white" />
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                                  No quality-checked sperm samples available. Please wait for the lab to complete quality checks before proceeding.
-                                </div>
-                              )}
+                        <div className="relative p-4">
+                          <div className="flex items-start gap-3">
+                            {/* Icon */}
+                            <div className="flex-shrink-0 rounded-lg bg-purple-100 p-2.5">
+                              <Syringe className="h-5 w-5 text-purple-600" />
                             </div>
 
-                            {/* Button */}
-                            <Button
-                              onClick={handleConfirmIUIClick}
-                              className="gap-2 bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-all duration-200 hover:shadow-md"
-                              size="sm"
-                              disabled={confirmIUIProcedureMutation.isPending || (!selectedSpermSampleId && spermSamplesData?.data && spermSamplesData.data.length > 0)}
-                            >
-                              <Syringe className="h-3.5 w-3.5" />
-                              {confirmIUIProcedureMutation.isPending
-                                ? "Processing..."
-                                : "Confirm IUI Procedure"}
-                            </Button>
-                            {!selectedSpermSampleId && spermSamplesData?.data && spermSamplesData.data.length > 0 && (
-                              <p className="text-xs text-amber-600 mt-2">
-                                Please select a sperm sample before confirming
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-sm font-semibold text-gray-900 mb-1.5">
+                                Confirm IUI Procedure
+                              </h3>
+                              <p className="text-xs leading-relaxed text-gray-600 mb-3">
+                                Select the sperm sample used for insemination
+                                and confirm that the intrauterine insemination
+                                (IUI) procedure has been performed. This will
+                                automatically move the treatment cycle to the
+                                post-IUI monitoring step.
                               </p>
-                            )}
+
+                              {/* Sperm Sample Selection */}
+                              <div className="mb-3 space-y-2">
+                                <Label className="text-xs font-medium text-gray-700">
+                                  Sperm Sample Used for Insemination
+                                </Label>
+                                {spermSamplesLoading ? (
+                                  <div className="text-xs text-gray-500">
+                                    Loading samples...
+                                  </div>
+                                ) : spermSamplesData?.data &&
+                                  spermSamplesData.data.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {spermSamplesData.data.map((sample) => (
+                                      <div
+                                        key={sample.id}
+                                        onClick={() =>
+                                          setSelectedSpermSampleId(sample.id)
+                                        }
+                                        className={cn(
+                                          "cursor-pointer rounded-lg border-2 p-3 transition-all hover:shadow-md",
+                                          selectedSpermSampleId === sample.id
+                                            ? "border-purple-500 bg-purple-50"
+                                            : "border-gray-200 bg-white hover:border-purple-300"
+                                        )}
+                                      >
+                                        <div className="flex items-start justify-between">
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <FlaskConical className="h-4 w-4 text-blue-500" />
+                                              <span className="font-mono text-sm font-semibold">
+                                                {sample.sampleCode ||
+                                                  getLast4Chars(sample.id)}
+                                              </span>
+                                              <Badge
+                                                className={cn(
+                                                  "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border",
+                                                  getStatusBadgeClass(
+                                                    sample.status
+                                                  )
+                                                )}
+                                              >
+                                                {sample.status}
+                                              </Badge>
+                                            </div>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                                              <div>
+                                                <span className="text-gray-500">
+                                                  Collection Date:
+                                                </span>
+                                                <span className="ml-1 font-medium">
+                                                  {sample.collectionDate
+                                                    ? new Date(
+                                                        sample.collectionDate
+                                                      ).toLocaleDateString(
+                                                        "en-US"
+                                                      )
+                                                    : "N/A"}
+                                                </span>
+                                              </div>
+                                              {sample.sperm?.volume !==
+                                                undefined &&
+                                                sample.sperm.volume !==
+                                                  null && (
+                                                  <div>
+                                                    <span className="text-gray-500">
+                                                      Volume:
+                                                    </span>
+                                                    <span className="ml-1 font-medium">
+                                                      {sample.sperm.volume} mL
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              {sample.sperm?.concentration !==
+                                                undefined &&
+                                                sample.sperm.concentration !==
+                                                  null && (
+                                                  <div>
+                                                    <span className="text-gray-500">
+                                                      Concentration:
+                                                    </span>
+                                                    <span className="ml-1 font-medium">
+                                                      {
+                                                        sample.sperm
+                                                          .concentration
+                                                      }{" "}
+                                                      million/mL
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              {sample.sperm?.motility !==
+                                                undefined &&
+                                                sample.sperm.motility !==
+                                                  null && (
+                                                  <div>
+                                                    <span className="text-gray-500">
+                                                      Motility:
+                                                    </span>
+                                                    <span className="ml-1 font-medium">
+                                                      {sample.sperm.motility}%
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              {sample.sperm
+                                                ?.progressiveMotility !==
+                                                undefined &&
+                                                sample.sperm
+                                                  .progressiveMotility !==
+                                                  null && (
+                                                  <div>
+                                                    <span className="text-gray-500">
+                                                      Progressive Motility:
+                                                    </span>
+                                                    <span className="ml-1 font-medium">
+                                                      {
+                                                        sample.sperm
+                                                          .progressiveMotility
+                                                      }
+                                                      %
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              {sample.sperm?.morphology !==
+                                                undefined &&
+                                                sample.sperm.morphology !==
+                                                  null && (
+                                                  <div>
+                                                    <span className="text-gray-500">
+                                                      Morphology:
+                                                    </span>
+                                                    <span className="ml-1 font-medium">
+                                                      {sample.sperm.morphology}%
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              {sample.sperm?.quality && (
+                                                <div>
+                                                  <span className="text-gray-500">
+                                                    Quality:
+                                                  </span>
+                                                  <span className="ml-1 font-medium">
+                                                    {sample.sperm.quality}
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="flex-shrink-0 ml-2">
+                                            {selectedSpermSampleId ===
+                                              sample.id && (
+                                              <div className="rounded-full bg-purple-500 p-1">
+                                                <CheckCircle className="h-4 w-4 text-white" />
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                                    No quality-checked sperm samples available.
+                                    Please wait for the lab to complete quality
+                                    checks before proceeding.
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Button */}
+                              <Button
+                                onClick={handleConfirmIUIClick}
+                                className="gap-2 bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-all duration-200 hover:shadow-md"
+                                size="sm"
+                                disabled={
+                                  confirmIUIProcedureMutation.isPending ||
+                                  (!selectedSpermSampleId &&
+                                    spermSamplesData?.data &&
+                                    spermSamplesData.data.length > 0)
+                                }
+                              >
+                                <Syringe className="h-3.5 w-3.5" />
+                                {confirmIUIProcedureMutation.isPending
+                                  ? "Processing..."
+                                  : "Confirm IUI Procedure"}
+                              </Button>
+                              {!selectedSpermSampleId &&
+                                spermSamplesData?.data &&
+                                spermSamplesData.data.length > 0 && (
+                                  <p className="text-xs text-amber-600 mt-2">
+                                    Please select a sperm sample before
+                                    confirming
+                                  </p>
+                                )}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
             {/* Sperm Samples Tab */}
             {activeTab === "sperm" && (
@@ -2661,10 +3033,10 @@ export function CycleUpdateModal({
                     <div className="py-12 text-center text-gray-500">
                       Loading sperm samples...
                     </div>
-                   ) : cycleSpermSamples.length === 0 ? (
-                     <div className="py-12 text-center text-gray-500">
-                       <p>No sperm samples found for this treatment cycle.</p>
-                     </div>
+                  ) : cycleSpermSamples.length === 0 ? (
+                    <div className="py-12 text-center text-gray-500">
+                      <p>No sperm samples found for this treatment cycle.</p>
+                    </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full">
@@ -2684,9 +3056,9 @@ export function CycleUpdateModal({
                             <th className="text-left p-3">Notes</th>
                           </tr>
                         </thead>
-                         <tbody>
-                           {cycleSpermSamples.map(
-                             (sample: LabSampleDetailResponse) => (
+                        <tbody>
+                          {cycleSpermSamples.map(
+                            (sample: LabSampleDetailResponse) => (
                               <tr
                                 key={sample.id}
                                 className="border-b hover:bg-gray-50"
@@ -2707,7 +3079,7 @@ export function CycleUpdateModal({
                                   <Badge
                                     className={cn(
                                       "inline-flex rounded-full px-2 py-1 text-xs font-semibold border",
-                                      getStatusBadgeClass(sample.status)
+                                      getSampleStatusBadgeClass(sample.status)
                                     )}
                                   >
                                     {sample.status}
@@ -2745,7 +3117,9 @@ export function CycleUpdateModal({
                                     : "—"}
                                 </td>
                                 <td className="p-3 text-sm">
-                                  {sample.sperm?.quality || sample.quality || "—"}
+                                  {sample.sperm?.quality ||
+                                    sample.quality ||
+                                    "—"}
                                 </td>
                                 <td className="p-3 text-sm text-gray-600 max-w-xs truncate">
                                   {sample.notes || "—"}
@@ -2772,10 +3146,10 @@ export function CycleUpdateModal({
                     <div className="py-12 text-center text-gray-500">
                       Loading oocyte samples...
                     </div>
-                   ) : cycleOocyteSamples.length === 0 ? (
-                     <div className="py-12 text-center text-gray-500">
-                       <p>No oocyte samples found for this treatment cycle.</p>
-                     </div>
+                  ) : cycleOocyteSamples.length === 0 ? (
+                    <div className="py-12 text-center text-gray-500">
+                      <p>No oocyte samples found for this treatment cycle.</p>
+                    </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full">
@@ -2792,9 +3166,9 @@ export function CycleUpdateModal({
                             <th className="text-left p-3">Notes</th>
                           </tr>
                         </thead>
-                         <tbody>
-                           {cycleOocyteSamples.map(
-                             (sample: LabSampleDetailResponse) => (
+                        <tbody>
+                          {cycleOocyteSamples.map(
+                            (sample: LabSampleDetailResponse) => (
                               <tr
                                 key={sample.id}
                                 className="border-b hover:bg-gray-50"
@@ -2815,7 +3189,7 @@ export function CycleUpdateModal({
                                   <Badge
                                     className={cn(
                                       "inline-flex rounded-full px-2 py-1 text-xs font-semibold border",
-                                      getStatusBadgeClass(sample.status)
+                                      getSampleStatusBadgeClass(sample.status)
                                     )}
                                   >
                                     {sample.status}
@@ -3389,6 +3763,59 @@ export function CycleUpdateModal({
         </Modal>
       )}
 
+      {/* Fertilization Modal */}
+      {showFertilizationModal && currentCycle.patientId && (
+        <FertilizationModal
+          cycleId={currentCycle.id}
+          patientId={currentCycle.patientId}
+          isOpen={showFertilizationModal}
+          onClose={() => setShowFertilizationModal(false)}
+          onSuccess={() => {
+            // Invalidate all related queries to refresh data
+            queryClient.invalidateQueries({
+              queryKey: ["sperm-samples"],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["oocyte-samples"],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["doctor", "treatment-cycle", currentCycle.id],
+            });
+            // Also invalidate quality-checked samples queries
+            queryClient.invalidateQueries({
+              queryKey: [
+                "sperm-samples",
+                "patient",
+                currentCycle.patientId,
+                "quality-checked",
+              ],
+            });
+            queryClient.invalidateQueries({
+              queryKey: [
+                "oocyte-samples",
+                "patient",
+                currentCycle.patientId,
+                "quality-checked",
+              ],
+            });
+            // Invalidate partner samples if IVF
+            if (isIVFCycle && partnerPatientId) {
+              queryClient.invalidateQueries({
+                queryKey: [
+                  "sperm-samples",
+                  "partner",
+                  partnerPatientId,
+                  "quality-checked",
+                ],
+              });
+            }
+            console.log(
+              "[CycleUpdateModal] Invalidated queries after fertilization"
+            );
+          }}
+        />
+      )}
+
       {/* Create Medical Record Modal */}
       <CreateMedicalRecordForm
         isOpen={showCreateMedicalRecordModal}
@@ -3428,7 +3855,11 @@ export function CycleUpdateModal({
         isOpen={showIUIConfirm}
         onClose={() => setShowIUIConfirm(false)}
         onConfirm={() => {
-          if (!selectedSpermSampleId && spermSamplesData?.data && spermSamplesData.data.length > 0) {
+          if (
+            !selectedSpermSampleId &&
+            spermSamplesData?.data &&
+            spermSamplesData.data.length > 0
+          ) {
             toast.error("Please select a sperm sample before confirming");
             return;
           }
@@ -3439,8 +3870,8 @@ export function CycleUpdateModal({
           selectedSpermSampleId
             ? `Are you sure you want to confirm that the intrauterine insemination (IUI) procedure has been performed?\n\nSelected sperm sample: ${spermSamplesData?.data?.find((s) => s.id === selectedSpermSampleId)?.sampleCode || getLast4Chars(selectedSpermSampleId)}\n\nThis action will move the treatment cycle to the post-IUI monitoring step.`
             : spermSamplesData?.data && spermSamplesData.data.length > 0
-            ? "Please select a sperm sample before confirming."
-            : "Are you sure you want to confirm that the intrauterine insemination (IUI) procedure has been performed? This action will move the treatment cycle to the post-IUI monitoring step."
+              ? "Please select a sperm sample before confirming."
+              : "Are you sure you want to confirm that the intrauterine insemination (IUI) procedure has been performed? This action will move the treatment cycle to the post-IUI monitoring step."
         }
         confirmText="Confirm"
         cancelText="Cancel"

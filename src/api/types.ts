@@ -1491,6 +1491,7 @@ export interface LabSample {
   expiryDate?: string | null;
   quality?: string | null;
   canFrozen?: boolean;
+  canFertilize?: boolean;
 }
 
 export interface LabSampleSperm extends LabSample {
@@ -1719,6 +1720,7 @@ export interface LabSampleEmbryoDetail {
   stage?: string | null;
   quality?: string | null;
   creationDate?: string | null;
+  fertilizationDate?: string | null;
   dayOfDevelopment?: number | null;
   grade?: string | null;
   cellCount?: number | null;
@@ -1758,6 +1760,7 @@ export interface LabSampleDetailResponse {
   quality?: string | null;
   notes?: string | null;
   canFrozen?: boolean;
+  canFertilize?: boolean;
   treatmentCycleId?: string;
   sperm?: LabSampleSpermDetail | null;
   oocyte?: LabSampleOocyteDetail | null;

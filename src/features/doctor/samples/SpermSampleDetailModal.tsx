@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getSampleStatusBadgeClass } from "@/utils/status-colors";
 
 interface SpermSampleDetailModalProps {
   sampleId: string;
@@ -38,15 +39,7 @@ const formatNumber = (value?: number | null, unit?: string) => {
 };
 
 const getStatusBadgeClass = (status: string) => {
-  const statusClasses: Record<string, string> = {
-    Collected: "bg-blue-100 text-blue-800 border-blue-200",
-    Processing: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    Stored: "bg-green-100 text-green-800 border-green-200",
-    Used: "bg-purple-100 text-purple-800 border-purple-200",
-    Discarded: "bg-red-100 text-red-800 border-red-200",
-    QualityChecked: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  };
-  return statusClasses[status] || "bg-gray-100 text-gray-800 border-gray-200";
+  return getSampleStatusBadgeClass(status);
 };
 
 export function SpermSampleDetailModal({

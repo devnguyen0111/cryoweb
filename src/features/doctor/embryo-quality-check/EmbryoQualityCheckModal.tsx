@@ -68,11 +68,11 @@ export function EmbryoQualityCheckModal({
   useEffect(() => {
     if (embryo && embryo.embryo) {
       setQualityData({
-        quantity: embryo.embryo.quantity?.toString() || "",
-        stage: embryo.embryo.stage || "",
-        quality: embryo.embryo.quality || "",
+        quantity: embryo.embryo.cellCount?.toString() || embryo.embryo.quantity?.toString() || "",
+        stage: embryo.embryo.dayOfDevelopment ? `Day ${embryo.embryo.dayOfDevelopment}` : embryo.embryo.stage || "",
+        quality: embryo.embryo.grade || embryo.quality || "",
       });
-      setNotes(embryo.notes || "");
+      setNotes(embryo.embryo.notes || embryo.notes || "");
     }
   }, [embryo]);
 
@@ -84,6 +84,7 @@ export function EmbryoQualityCheckModal({
       stage,
       quality,
       notes,
+      dayOfDevelopment,
     }: {
       embryoId: string;
       status: SpecimenStatus;
@@ -91,17 +92,18 @@ export function EmbryoQualityCheckModal({
       stage?: string;
       quality?: string;
       notes?: string;
+      dayOfDevelopment?: number;
     }) => {
       return api.sample.updateEmbryoSample(embryoId, {
         status,
         notes,
         quality,
-        dayOfDevelopment: qualityData.stage ? parseInt(qualityData.stage.replace(/\D/g, ""), 10) : undefined,
-        grade: qualityData.quality || quality,
+        dayOfDevelopment,
+        grade: quality,
         cellCount: quantity,
         // Legacy support
         quantity,
-        stage: qualityData.stage,
+        stage,
       });
     },
     onSuccess: () => {
@@ -138,6 +140,10 @@ export function EmbryoQualityCheckModal({
       ? parseInt(qualityData.quantity, 10)
       : undefined;
 
+    // Extract day of development from stage (e.g., "Day 5" -> 5)
+    const dayMatch = qualityData.stage?.match(/Day\s*(\d+)/i);
+    const dayOfDevelopment = dayMatch ? parseInt(dayMatch[1], 10) : undefined;
+
     updateEmbryoMutation.mutate({
       embryoId,
       status,
@@ -145,6 +151,7 @@ export function EmbryoQualityCheckModal({
       stage: qualityData.stage || undefined,
       quality: qualityData.quality || undefined,
       notes: notes || undefined,
+      dayOfDevelopment: dayOfDevelopment && !isNaN(dayOfDevelopment) ? dayOfDevelopment : undefined,
     });
   };
 
@@ -200,11 +207,11 @@ export function EmbryoQualityCheckModal({
                 </div>
                 <div>
                   <Label className="text-xs font-semibold text-gray-500">
-                    Creation Date
+                    Fertilization Date
                   </Label>
                   <p className="mt-1 text-sm">
                     {formatDate(
-                      embryo.embryo?.creationDate || embryo.collectionDate
+                      embryo.embryo?.fertilizationDate || embryo.collectionDate
                     )}
                   </p>
                 </div>
@@ -218,11 +225,17 @@ export function EmbryoQualityCheckModal({
                   <Label className="text-xs font-semibold text-gray-500">
                     Treatment Cycle
                   </Label>
-                  <p className="mt-1 text-sm font-mono">
-                    {embryo.treatmentCycleId
-                      ? getLast4Chars(embryo.treatmentCycleId)
-                      : "—"}
-                  </p>
+                  <div className="mt-1">
+                    {embryo.treatmentCycleId ? (
+                      <p className="text-sm font-mono">
+                        {getLast4Chars(embryo.treatmentCycleId)}
+                      </p>
+                    ) : (
+                      <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-300">
+                        Not Available
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardContent>

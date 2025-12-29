@@ -6,7 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useQueries,
+} from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { toast } from "sonner";
 import { isAxiosError } from "axios";
@@ -16,11 +21,13 @@ import type {
   Patient,
   PatientDetailResponse,
 } from "@/api/types";
-import { RefreshCw, FlaskConical, Eye, Filter, X } from "lucide-react";
+import { RefreshCw, FlaskConical, Eye, Filter, X, Trash2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullName } from "@/utils/name-helpers";
 import { QualityCheckModal } from "@/features/doctor/quality-check/QualityCheckModal";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
+import { getSampleStatusBadgeClass } from "@/utils/status-colors";
 
 export const Route = createFileRoute("/doctor/quality-check")({
   component: QualityCheckComponent,
@@ -29,6 +36,7 @@ export const Route = createFileRoute("/doctor/quality-check")({
 function QualityCheckComponent() {
   const queryClient = useQueryClient();
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
+  const [sampleToCancel, setSampleToCancel] = useState<string | null>(null);
   const [sampleTypeFilter, setSampleTypeFilter] = useState<
     "Sperm" | "Oocyte" | ""
   >("");
@@ -178,8 +186,7 @@ function QualityCheckComponent() {
     });
   }, [qualityCheckedSamples, patientCodeFilter, patientsMap]);
 
-  const hasActiveFilters =
-    canFrozenFilter || searchTerm || patientCodeFilter;
+  const hasActiveFilters = canFrozenFilter || searchTerm || patientCodeFilter;
 
   const updateSampleMutation = useMutation({
     mutationFn: async ({
@@ -225,6 +232,48 @@ function QualityCheckComponent() {
     },
   });
 
+  const cancelSampleMutation = useMutation({
+    mutationFn: async ({
+      sampleId,
+      notes,
+    }: {
+      sampleId: string;
+      notes?: string;
+    }) => {
+      // Get sample to determine type
+      const allSamples = [
+        ...(spermData?.data ?? []),
+        ...(oocyteData?.data ?? []),
+      ];
+      const sample = allSamples.find((s) => s.id === sampleId);
+
+      if (!sample) throw new Error("Sample not found");
+
+      const updateData: any = {
+        status: "Disposed" as SpecimenStatus,
+        notes: notes || "Cancelled by doctor",
+      };
+
+      // Use specific update methods based on sample type
+      if (sample.sampleType === "Sperm") {
+        return api.sample.updateSpermSample(sampleId, updateData);
+      } else if (sample.sampleType === "Oocyte") {
+        return api.sample.updateOocyteSample(sampleId, updateData);
+      }
+
+      // Fallback to generic update
+      return api.sample.updateSample(sampleId, updateData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quality-check-samples"] });
+      toast.success("Sample cancelled successfully");
+      setSampleToCancel(null);
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Failed to cancel sample");
+    },
+  });
+
   const resetFilters = () => {
     setCanFrozenFilter("");
     setSearchTerm("");
@@ -249,15 +298,7 @@ function QualityCheckComponent() {
   };
 
   const getStatusBadgeClass = (status: string) => {
-    const statusClasses: Record<string, string> = {
-      Collected: "bg-blue-100 text-blue-800 border-blue-200",
-      Processing: "bg-yellow-100 text-yellow-800 border-yellow-200",
-      Stored: "bg-green-100 text-green-800 border-green-200",
-      Used: "bg-purple-100 text-purple-800 border-purple-200",
-      Discarded: "bg-red-100 text-red-800 border-red-200",
-      QualityChecked: "bg-emerald-100 text-emerald-800 border-emerald-200",
-    };
-    return statusClasses[status] || "bg-gray-100 text-gray-800 border-gray-200";
+    return getSampleStatusBadgeClass(status);
   };
 
   const isLoading = spermLoading || oocyteLoading;
@@ -270,7 +311,8 @@ function QualityCheckComponent() {
             <div>
               <h1 className="text-3xl font-bold">Quality Check</h1>
               <p className="text-gray-600 mt-2">
-                Review quality-checked samples (Oocyte and Sperm). Confirm to use in treatment or store for freezing.
+                Review quality-checked samples (Oocyte and Sperm). Confirm to
+                use in treatment or store for freezing.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -294,11 +336,9 @@ function QualityCheckComponent() {
                 {hasActiveFilters && (
                   <Badge className="ml-1 bg-red-500 text-white">
                     {
-                      [
-                        canFrozenFilter,
-                        searchTerm,
-                        patientCodeFilter,
-                      ].filter(Boolean).length
+                      [canFrozenFilter, searchTerm, patientCodeFilter].filter(
+                        Boolean
+                      ).length
                     }
                   </Badge>
                 )}
@@ -414,7 +454,8 @@ function QualityCheckComponent() {
                             <th className="text-left p-3">Patient</th>
                             <th className="text-left p-3">Collection Date</th>
                             <th className="text-left p-3">Status</th>
-                            {(sampleTypeFilter === "" || sampleTypeFilter === "Sperm") && (
+                            {(sampleTypeFilter === "" ||
+                              sampleTypeFilter === "Sperm") && (
                               <>
                                 <th className="text-left p-3">Volume</th>
                                 <th className="text-left p-3">Concentration</th>
@@ -422,7 +463,8 @@ function QualityCheckComponent() {
                                 <th className="text-left p-3">Morphology</th>
                               </>
                             )}
-                            {(sampleTypeFilter === "" || sampleTypeFilter === "Oocyte") && (
+                            {(sampleTypeFilter === "" ||
+                              sampleTypeFilter === "Oocyte") && (
                               <>
                                 <th className="text-left p-3">Quantity</th>
                                 <th className="text-left p-3">Maturity</th>
@@ -448,7 +490,8 @@ function QualityCheckComponent() {
                                       fetchedPatient as any;
                                     if (patientWithAccount.accountInfo) {
                                       return getFullName(
-                                        patientWithAccount.accountInfo.firstName,
+                                        patientWithAccount.accountInfo
+                                          .firstName,
                                         patientWithAccount.accountInfo.lastName
                                       );
                                     }
@@ -536,7 +579,8 @@ function QualityCheckComponent() {
                                     {sample.status}
                                   </Badge>
                                 </td>
-                                {(sampleTypeFilter === "" || sampleTypeFilter === "Sperm") && (
+                                {(sampleTypeFilter === "" ||
+                                  sampleTypeFilter === "Sperm") && (
                                   <>
                                     {isSperm ? (
                                       <>
@@ -554,13 +598,15 @@ function QualityCheckComponent() {
                                             : "—"}
                                         </td>
                                         <td className="p-3 text-sm">
-                                          {sample.sperm?.motility !== undefined &&
+                                          {sample.sperm?.motility !==
+                                            undefined &&
                                           sample.sperm.motility !== null
                                             ? `${sample.sperm.motility}%`
                                             : "—"}
                                         </td>
                                         <td className="p-3 text-sm">
-                                          {sample.sperm?.morphology !== undefined &&
+                                          {sample.sperm?.morphology !==
+                                            undefined &&
                                           sample.sperm.morphology !== null
                                             ? `${sample.sperm.morphology}%`
                                             : "—"}
@@ -576,12 +622,14 @@ function QualityCheckComponent() {
                                     )}
                                   </>
                                 )}
-                                {(sampleTypeFilter === "" || sampleTypeFilter === "Oocyte") && (
+                                {(sampleTypeFilter === "" ||
+                                  sampleTypeFilter === "Oocyte") && (
                                   <>
                                     {isOocyte ? (
                                       <>
                                         <td className="p-3 text-sm">
-                                          {sample.oocyte?.quantity !== undefined &&
+                                          {sample.oocyte?.quantity !==
+                                            undefined &&
                                           sample.oocyte.quantity !== null
                                             ? `${sample.oocyte.quantity}`
                                             : "—"}
@@ -603,15 +651,30 @@ function QualityCheckComponent() {
                                   </>
                                 )}
                                 <td className="p-3">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setSelectedSampleId(sample.id)}
-                                    className="flex items-center gap-1"
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                    Confirm
-                                  </Button>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        setSelectedSampleId(sample.id)
+                                      }
+                                      className="flex items-center gap-1"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                      Confirm
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        setSampleToCancel(sample.id)
+                                      }
+                                      className="flex items-center gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      Cancel Sample
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -643,6 +706,24 @@ function QualityCheckComponent() {
               });
             }}
             isLoading={updateSampleMutation.isPending}
+          />
+        )}
+
+        {sampleToCancel && (
+          <ConfirmationDialog
+            isOpen={!!sampleToCancel}
+            onClose={() => setSampleToCancel(null)}
+            onConfirm={() => {
+              cancelSampleMutation.mutate({
+                sampleId: sampleToCancel,
+              });
+            }}
+            title="Cancel Sample"
+            message="Are you sure you want to cancel this sample? This action cannot be undone."
+            confirmText="Cancel Sample"
+            cancelText="Cancel"
+            variant="destructive"
+            isLoading={cancelSampleMutation.isPending}
           />
         )}
       </DashboardLayout>

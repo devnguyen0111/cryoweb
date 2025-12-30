@@ -5,6 +5,7 @@ import { LogOut, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/utils/cn";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 // Icon mapping
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -345,12 +346,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="p-4 border-t border-gray-200">
             <div className="mb-3 px-4 py-2">
               <p className="text-sm font-medium text-gray-900">
-{(() => {
-                const fullName = user?.firstName && user?.lastName 
-                  ? `${user.firstName} ${user.lastName}`.trim()
-                  : user?.firstName || user?.lastName || user?.email;
-                return fullName;
-              })()}
+                {(() => {
+                  const fullName =
+                    user?.firstName && user?.lastName
+                      ? `${user.firstName} ${user.lastName}`.trim()
+                      : user?.firstName || user?.lastName || user?.email;
+                  return fullName;
+                })()}
               </p>
               <p className="text-xs text-gray-500">{userRole}</p>
             </div>
@@ -378,7 +380,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </button>
           <div className="ml-auto flex items-center gap-4">
             <span className="text-sm text-gray-600">
-              {user?.fullName || user?.email}
+              {getFullNameFromObject(user) || user?.email}
             </span>
           </div>
         </header>

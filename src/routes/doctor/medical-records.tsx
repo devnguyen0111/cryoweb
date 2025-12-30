@@ -20,6 +20,8 @@ import { CreateMedicalRecordForm } from "@/features/doctor/medical-records/Creat
 import { DoctorAppointmentDetailModal } from "@/features/doctor/appointments/DoctorAppointmentDetailModal";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { createEmptyPaginatedResponse } from "@/utils/api-helpers";
 import { FileText, Download, ExternalLink } from "lucide-react";
 import type {
   PaginatedResponse,
@@ -35,19 +37,6 @@ export const Route = createFileRoute("/doctor/medical-records")({
     search,
 });
 
-const createEmptyResponse = <T,>(): PaginatedResponse<T> => ({
-  code: 200,
-  message: "",
-  data: [],
-  metaData: {
-    pageNumber: 1,
-    pageSize: 10,
-    totalCount: 0,
-    totalPages: 0,
-    hasPrevious: false,
-    hasNext: false,
-  },
-});
 
 function DoctorMedicalRecordsComponent() {
   const navigate = useNavigate();
@@ -98,12 +87,12 @@ function DoctorMedicalRecordsComponent() {
         return await api.medicalRecord.getMedicalRecords(filters);
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
-          return createEmptyResponse<MedicalRecord>();
+          return createEmptyPaginatedResponse<MedicalRecord>();
         }
         const message =
           error?.response?.data?.message || "Unable to load medical records.";
         toast.error(message);
-        return createEmptyResponse<MedicalRecord>();
+        return createEmptyPaginatedResponse<MedicalRecord>();
       }
     },
   });
@@ -222,30 +211,10 @@ function DoctorMedicalRecordsComponent() {
   }, [selectedRecord, appointmentDetails]);
 
   // Fetch patient details if not included in response
-  const { data: patientDetails } = useQuery({
-    queryKey: ["patient-details", patientId, "medical-record"],
-    enabled: !!patientId && !selectedRecord?.patient,
-    queryFn: async () => {
-      if (!patientId) return null;
-      try {
-        const response = await api.patient.getPatientDetails(patientId);
-        return response.data;
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 403) {
-          try {
-            const fallback = await api.patient.getPatientById(patientId);
-            return fallback.data;
-          } catch {
-            return null;
-          }
-        }
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
-        }
-        return null;
-      }
-    },
-  });
+  const { data: patientDetails } = usePatientDetails(
+    patientId,
+    !!patientId && !selectedRecord?.patient
+  );
 
   // Fetch user details for patient name
   const { data: userDetails } = useQuery({

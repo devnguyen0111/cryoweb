@@ -29,6 +29,8 @@ import { FlaskConical } from "lucide-react";
 import { TreatmentTimeline } from "./TreatmentTimeline";
 import { CycleUpdateForm } from "./CycleUpdateForm";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 interface TreatmentCycleDetailModalProps {
   cycle: TreatmentCycle;
@@ -54,7 +56,7 @@ export function TreatmentCycleDetailModal({
       return response.data;
     },
     enabled: isOpen && !!cycle.id,
-    staleTime: 0,
+    staleTime: 30000, // Cache for 30 seconds to reduce unnecessary refetches
   });
 
   const currentCycle = cycleDetails || cycle;
@@ -77,21 +79,10 @@ export function TreatmentCycleDetailModal({
   });
 
   // Fetch patient details
-  const { data: patientDetails } = useQuery({
-    queryKey: ["patient-details", currentCycle.patientId],
-    queryFn: async () => {
-      if (!currentCycle.patientId) return null;
-      try {
-        const response = await api.patient.getPatientDetails(
-          currentCycle.patientId
-        );
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!currentCycle.patientId && isOpen,
-  });
+  const { data: patientDetails } = usePatientDetails(
+    currentCycle.patientId,
+    !!currentCycle.patientId && isOpen
+  );
 
   // Fetch user details for patient name
   const { data: userDetails } = useQuery({
@@ -113,7 +104,9 @@ export function TreatmentCycleDetailModal({
     getFullNameFromObject(userDetails) ||
     getFullNameFromObject(patientDetails) ||
     userDetails?.userName ||
-    patientDetails?.accountInfo?.username ||
+    (isPatientDetailResponse(patientDetails)
+      ? patientDetails.accountInfo?.username
+      : null) ||
     "Unknown";
   const patientCode = patientDetails?.patientCode;
 
@@ -229,31 +222,23 @@ export function TreatmentCycleDetailModal({
 
   // Fetch sperm samples for this patient and cycle
   const { data: spermSamplesData, isLoading: spermSamplesLoading } = useQuery({
-    queryKey: ["sperm-samples", "cycle", cycle.id, currentCycle.patientId],
+    queryKey: ["cycle-samples", "sperm", cycle.id],
     queryFn: async () => {
-      if (!currentCycle.patientId) return { data: [] };
+      if (!cycle.id) return { data: [] };
       try {
-        const response = await api.sample.getAllDetailSamples({
-          SampleType: "Sperm",
-          PatientId: currentCycle.patientId,
-          Page: 1,
-          Size: 100,
-          Sort: "collectionDate",
-          Order: "desc",
-        });
-        const samples = response.data || [];
-        return {
-          data: samples.filter(
-            (sample) =>
-              !sample.treatmentCycleId || sample.treatmentCycleId === cycle.id
-          ),
-        };
+        const response = await api.treatmentCycle.getCycleSamples(cycle.id);
+        const allSamples = response.data || [];
+        // Filter to only sperm samples
+        const spermSamples = allSamples.filter(
+          (sample) => sample.sampleType === "Sperm"
+        );
+        return { data: spermSamples };
       } catch (error) {
         console.error("Error fetching sperm samples:", error);
         return { data: [] };
       }
     },
-    enabled: !!currentCycle.patientId && activeTab === "sperm" && isOpen,
+    enabled: !!cycle.id && activeTab === "sperm" && isOpen,
   });
 
   const oocyteSamples = oocyteSamplesData?.data || [];

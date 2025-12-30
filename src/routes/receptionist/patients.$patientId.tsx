@@ -40,8 +40,12 @@ function ReceptionistPatientDetail() {
   const { data: patientResponse, isLoading } = useQuery({
     queryKey: ["receptionist", "patient", patientId],
     queryFn: async () => {
+      if (!patientId) return null;
+      // usePatientDetails returns data directly, but we need the full response here
+      // So we keep the query but use the same pattern
       try {
-        return await api.patient.getPatientDetails(patientId);
+        const response = await api.patient.getPatientDetails(patientId);
+        return response;
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 403) {
           const fallbackResponse = await api.patient.getPatientById(patientId);
@@ -50,6 +54,7 @@ function ReceptionistPatientDetail() {
         throw error;
       }
     },
+    enabled: !!patientId,
   });
 
   const { data: patientServiceRequests } = useQuery({
@@ -166,7 +171,6 @@ function ReceptionistPatientDetail() {
     paymentGateway: "PayOS" as "VnPay" | "PayOS",
   });
   const [showQRCode, setShowQRCode] = useState(false);
-  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [createdTransactionId, setCreatedTransactionId] = useState<
@@ -244,18 +248,20 @@ function ReceptionistPatientDetail() {
         // For PayOS, check for qrCodeData or qrCodeUrl
         // For VnPay, use paymentUrl
         const qrCodeData = (response.data as any).qrCodeData;
-        const qrCodeUrl = (response.data as any).qrCodeUrl || response.data.paymentUrl || response.data.vnPayUrl;
-        
+        const qrCodeUrl =
+          (response.data as any).qrCodeUrl ||
+          response.data.paymentUrl ||
+          response.data.vnPayUrl;
+
         if (qrCodeData) {
           setQrCodeData(qrCodeData);
         }
         if (qrCodeUrl) {
           setPaymentUrl(qrCodeUrl);
         }
-        
+
         setCreatedTransactionId(response.data.id);
         setShowCreateTransactionModal(false);
-        setShowPaymentMethodModal(false);
         setShowQRCode(true);
         toast.success("Transaction created successfully");
         queryClient.invalidateQueries({
@@ -865,7 +871,11 @@ function ReceptionistPatientDetail() {
             setCreatedTransactionId(null);
           }}
           title="Payment Transaction Created"
-          description={qrCodeData ? "Scan the QR code to complete payment" : "Click the link below to complete payment"}
+          description={
+            qrCodeData
+              ? "Scan the QR code to complete payment"
+              : "Click the link below to complete payment"
+          }
           size="md"
         >
           <div className="space-y-4">

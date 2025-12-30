@@ -16,6 +16,8 @@ import {
 } from "@/utils/patient-helpers";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getStatusBadgeClass } from "@/utils/status-colors";
+import { getFullNameFromObject } from "@/utils/name-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
 
 export const Route = createFileRoute("/receptionist/patients")({
   validateSearch: z.object({
@@ -78,23 +80,7 @@ function ReceptionistPatientsComponent() {
     data: patientDetail,
     isLoading: isDetailLoading,
     error: detailError,
-  } = useQuery({
-    queryKey: ["receptionist", "patient", "detail", viewId],
-    enabled: isDetailOpen,
-    queryFn: async () => {
-      if (!viewId) return null;
-      try {
-        const response = await api.patient.getPatientDetails(viewId);
-        return response.data ?? null;
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 403) {
-          const fallback = await api.patient.getPatientById(viewId);
-          return fallback.data ?? null;
-        }
-        throw error;
-      }
-    },
-  });
+  } = usePatientDetails(viewId, isDetailOpen && !!viewId);
 
   const { data: patientServiceRequests, isLoading: isServiceRequestsLoading } =
     useQuery({
@@ -180,7 +166,7 @@ function ReceptionistPatientsComponent() {
       (isPatientDetailResponse(patientDetail)
         ? patientDetail.accountInfo?.username
         : null) ||
-      patientDetail.fullName ||
+      getFullNameFromObject(patientDetail) ||
       patientDetail.patientCode ||
       "Patient detail";
     return {
@@ -283,7 +269,7 @@ function ReceptionistPatientsComponent() {
                                 (isDetail
                                   ? (patient as any).accountInfo?.username
                                   : null) ||
-                                patient.fullName ||
+                                getFullNameFromObject(patient) ||
                                 patient.patientCode ||
                                 "Unknown";
                               return (
@@ -406,8 +392,8 @@ function ReceptionistPatientsComponent() {
                     <span
                       className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
                         patientDetail.isActive
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-gray-200 text-gray-700"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : "bg-slate-100 text-slate-700 border border-slate-200"
                       }`}
                     >
                       {patientDetail.isActive ? "Active" : "Inactive"}

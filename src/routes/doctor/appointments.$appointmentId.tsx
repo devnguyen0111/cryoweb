@@ -17,6 +17,7 @@ import {
 } from "@/utils/appointments";
 import type { AppointmentStatus } from "@/api/types";
 import { getAppointmentStatusBadgeClass } from "@/utils/status-colors";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 export const Route = createFileRoute("/doctor/appointments/$appointmentId")({
   component: DoctorAppointmentDetailsComponent,
@@ -56,13 +57,15 @@ function DoctorAppointmentDetailsComponent() {
     enabled: Boolean(patientId),
     queryFn: async () => {
       if (!patientId) return null;
+      // usePatientDetails hook handles the fallback logic
+      // But we need the query structure here, so we use the same pattern
       try {
-        const response = await api.patient.getPatientDetails(patientId);
-        return response.data;
+        const response = await api.patient.getPatientById(patientId);
+        return response.data ?? null;
       } catch {
         try {
-          const response = await api.patient.getPatientById(patientId);
-          return response.data;
+          const fallback = await api.patient.getPatientDetails(patientId);
+          return fallback.data ?? null;
         } catch {
           return null;
         }
@@ -226,7 +229,7 @@ function DoctorAppointmentDetailsComponent() {
     if (!patient) {
       const raw = appointment as unknown as Record<string, any> | undefined;
       return (
-        raw?.patient?.fullName ??
+        getFullNameFromObject(raw?.patient) ??
         raw?.patientName ??
         raw?.patientFullName ??
         patientId ??
@@ -235,8 +238,7 @@ function DoctorAppointmentDetailsComponent() {
     }
     const raw = patient as unknown as Record<string, any>;
     return (
-      patient.fullName ??
-      raw.accountInfo?.fullName ??
+      getFullNameFromObject(patient) ??
       raw.accountInfo?.username ??
       patient.patientCode ??
       patientId ??

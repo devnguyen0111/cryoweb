@@ -28,6 +28,9 @@ import {
 } from "@/api/types";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
+import { createEmptyPaginatedResponse } from "@/utils/api-helpers";
 
 export const Route = createFileRoute("/doctor/treatment-cycles")({
   component: DoctorTreatmentCyclesComponent,
@@ -111,19 +114,7 @@ function DoctorTreatmentCyclesComponent() {
         };
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
-          return {
-            code: 200,
-            message: "",
-            data: [],
-            metaData: {
-              pageNumber: 1,
-              pageSize: 0,
-              totalCount: 0,
-              totalPages: 0,
-              hasPrevious: false,
-              hasNext: false,
-            },
-          };
+          return createEmptyPaginatedResponse<TreatmentCycle>(0);
         }
         const message =
           error?.response?.data?.message || "Unable to load treatment cycles.";
@@ -348,20 +339,7 @@ function DoctorTreatmentCyclesComponent() {
       return activeCycle;
     }, [activeCycle, cycleTreatment]);
 
-    const { data: patientDetails } = useQuery({
-      queryKey: ["patient-details", patient.patientId],
-      queryFn: async () => {
-        try {
-          const response = await api.patient.getPatientDetails(
-            patient.patientId
-          );
-          return response.data;
-        } catch {
-          return null;
-        }
-      },
-      enabled: !!patient.patientId,
-    });
+    const { data: patientDetails } = usePatientDetails(patient.patientId);
 
     const { data: userDetails } = useQuery({
       queryKey: ["user-details", patient.patientId],
@@ -497,10 +475,11 @@ function DoctorTreatmentCyclesComponent() {
 
     const patientName =
       getFullNameFromObject(userDetails) ||
-      getFullNameFromObject(patientDetails?.accountInfo) ||
       getFullNameFromObject(patientDetails) ||
       userDetails?.userName ||
-      patientDetails?.accountInfo?.username ||
+      (isPatientDetailResponse(patientDetails)
+        ? patientDetails.accountInfo?.username
+        : null) ||
       patient.patientName ||
       "Unknown";
     const patientCode = patientDetails?.patientCode || patient.patientCode;
@@ -511,7 +490,9 @@ function DoctorTreatmentCyclesComponent() {
 
     // Get phone number
     const phone =
-      patientDetails?.accountInfo?.phone ||
+      (isPatientDetailResponse(patientDetails)
+        ? patientDetails.accountInfo?.phone
+        : null) ||
       userDetails?.phone ||
       userDetails?.phoneNumber ||
       patientDetails?.phoneNumber ||
@@ -584,8 +565,9 @@ function DoctorTreatmentCyclesComponent() {
               <div className="flex items-center gap-4">
                 {/* Avatar */}
                 <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 text-2xl font-bold text-blue-600">
-                  {patientDetails?.accountInfo?.username?.charAt(0) ||
-                    patientName.charAt(0).toUpperCase()}
+                  {(isPatientDetailResponse(patientDetails)
+                    ? patientDetails.accountInfo?.username?.charAt(0)
+                    : null) || patientName.charAt(0).toUpperCase()}
                 </div>
 
                 {/* Patient Info */}

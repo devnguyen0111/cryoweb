@@ -14,6 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/api/client";
+import { getFullNameFromObject } from "@/utils/name-helpers";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 type EncounterFormValues = {
   visitDate: string;
@@ -54,13 +56,22 @@ function EncounterDetailPage() {
     queryKey: ["patient-details", encounterData?.patientId],
     queryFn: async () => {
       if (!encounterData?.patientId) return null;
+      // usePatientDetails hook handles the fallback logic
+      // But we need the query structure here, so we use the same pattern
       try {
         const response = await api.patient.getPatientDetails(
           encounterData.patientId
         );
         return response.data;
       } catch {
-        return null;
+        try {
+          const fallback = await api.patient.getPatientById(
+            encounterData.patientId
+          );
+          return fallback.data ?? null;
+        } catch {
+          return null;
+        }
       }
     },
     enabled: !!encounterData?.patientId,
@@ -85,9 +96,10 @@ function EncounterDetailPage() {
   const patientInfo = useMemo(() => {
     if (!patientDetails && !userDetails) return null;
 
+    const isDetail = isPatientDetailResponse(patientDetails);
     const name =
-      patientDetails?.accountInfo?.username ||
-      userDetails?.fullName ||
+      (isDetail ? patientDetails.accountInfo?.username : null) ||
+      getFullNameFromObject(userDetails) ||
       userDetails?.userName ||
       "Unknown";
 
@@ -103,25 +115,28 @@ function EncounterDetailPage() {
     const dob = userDetails?.dob
       ? new Date(userDetails.dob).toLocaleDateString("vi-VN")
       : null;
-    const email = patientDetails?.accountInfo?.email || userDetails?.email;
+    const email =
+      (isDetail ? patientDetails.accountInfo?.email : null) ||
+      userDetails?.email;
     const phone =
-      patientDetails?.accountInfo?.phone ||
+      (isDetail ? patientDetails.accountInfo?.phone : null) ||
       userDetails?.phone ||
       userDetails?.phoneNumber;
     const address =
-      patientDetails?.accountInfo?.address || userDetails?.location;
+      (isDetail ? patientDetails.accountInfo?.address : null) ||
+      userDetails?.location;
     const bloodType = patientDetails?.bloodType;
-    const emergencyContact = patientDetails?.emergencyContact;
-    const emergencyPhone = patientDetails?.emergencyPhone;
-    const insurance = patientDetails?.insurance;
-    const occupation = patientDetails?.occupation;
-    const medicalHistory = patientDetails?.medicalHistory;
-    const allergies = patientDetails?.allergies;
-    const height = patientDetails?.height;
-    const weight = patientDetails?.weight;
-    const bmi = patientDetails?.bmi;
-    const treatmentCount = patientDetails?.treatmentCount;
-    const labSampleCount = patientDetails?.labSampleCount;
+    const emergencyContact = isDetail ? patientDetails.emergencyContact : null;
+    const emergencyPhone = isDetail ? patientDetails.emergencyPhone : null;
+    const insurance = isDetail ? patientDetails.insurance : null;
+    const occupation = isDetail ? patientDetails.occupation : null;
+    const medicalHistory = isDetail ? patientDetails.medicalHistory : null;
+    const allergies = isDetail ? patientDetails.allergies : null;
+    const height = isDetail ? patientDetails.height : null;
+    const weight = isDetail ? patientDetails.weight : null;
+    const bmi = isDetail ? patientDetails.bmi : null;
+    const treatmentCount = isDetail ? patientDetails.treatmentCount : null;
+    const labSampleCount = isDetail ? patientDetails.labSampleCount : null;
 
     return {
       name,

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
 import { isPatientDetailResponse } from "@/utils/patient-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 type DecisionMode = "reject" | "cancel" | null;
 
@@ -58,13 +59,19 @@ function ReceptionistServiceRequestDetailRoute() {
     enabled: Boolean(patientId),
     queryFn: async () => {
       if (!patientId) return null;
+      // usePatientDetails hook handles the fallback logic
+      // But we need the query structure here, so we use the same pattern
       try {
         const response = await api.patient.getPatientDetails(patientId);
         return response.data;
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 403) {
-          const fallback = await api.patient.getPatientById(patientId);
-          return fallback.data;
+          try {
+            const fallback = await api.patient.getPatientById(patientId);
+            return fallback.data;
+          } catch {
+            return null;
+          }
         }
         throw error;
       }
@@ -418,10 +425,10 @@ function ReceptionistServiceRequestDetailRoute() {
                     <>
                       <p>
                         <span className="font-medium text-gray-900">Name:</span>{" "}
-                        {(isPatientDetailResponse(patient)
+                        {                          (isPatientDetailResponse(patient)
                           ? patient.accountInfo?.username
                           : null) ||
-                          patient?.fullName ||
+                          getFullNameFromObject(patient) ||
                           patient?.patientCode ||
                           "—"}
                       </p>

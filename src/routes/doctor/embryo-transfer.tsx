@@ -6,11 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import { toast } from "sonner";
 import { isAxiosError } from "axios";
-import type { LabSampleDetailResponse, TreatmentCycle, Patient, PatientDetailResponse } from "@/api/types";
+import type { LabSampleDetailResponse, Patient, PatientDetailResponse } from "@/api/types";
 import { RefreshCw, CheckCircle2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
@@ -382,7 +381,7 @@ function EmbryoTransferComponent() {
                             >
                               <td className="p-3">
                                 <span className="font-mono text-sm">
-                                  {cycle.cycleCode || getLast4Chars(cycle.id)}
+                                  {cycle.cycleName || `Cycle ${cycle.cycleNumber}` || getLast4Chars(cycle.id)}
                                 </span>
                               </td>
                               <td className="p-3 text-sm">

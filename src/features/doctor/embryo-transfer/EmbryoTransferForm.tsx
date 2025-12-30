@@ -13,10 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/utils/cn";
-import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
 
 interface EmbryoRow {
   id: string;
@@ -83,23 +81,25 @@ export function EmbryoTransferForm({
   const [embryoCounter, setEmbryoCounter] = useState(1);
 
   // Fetch treatment cycle
-  const { data: cycle, isLoading: cycleLoading } = useQuery<TreatmentCycle | null>({
-    enabled: Boolean(cycleId),
-    queryKey: ["treatment-cycle", cycleId, "transfer-form"],
-    retry: false,
-    queryFn: async () => {
-      if (!cycleId) return null;
-      try {
-        const response = await api.treatmentCycle.getTreatmentCycleById(cycleId);
-        return response.data ?? null;
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
+  const { data: cycle, isLoading: cycleLoading } =
+    useQuery<TreatmentCycle | null>({
+      enabled: Boolean(cycleId),
+      queryKey: ["treatment-cycle", cycleId, "transfer-form"],
+      retry: false,
+      queryFn: async () => {
+        if (!cycleId) return null;
+        try {
+          const response =
+            await api.treatmentCycle.getTreatmentCycleById(cycleId);
+          return response.data ?? null;
+        } catch (error) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            return null;
+          }
+          throw error;
         }
-        throw error;
-      }
-    },
-  });
+      },
+    });
 
   // Fetch embryos ready for transfer
   const { data: embryos, isLoading: embryosLoading } = useQuery<
@@ -128,27 +128,7 @@ export function EmbryoTransferForm({
   });
 
   // Fetch patient details
-  const { data: patientDetails } = useQuery({
-    enabled: Boolean(cycle?.patientId),
-    queryKey: ["patient-details", cycle?.patientId, "transfer-form"],
-    queryFn: async () => {
-      if (!cycle?.patientId) return null;
-      try {
-        const response = await api.patient.getPatientDetails(cycle.patientId);
-        return response.data ?? null;
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 403) {
-          try {
-            const fallback = await api.patient.getPatientById(cycle.patientId);
-            return fallback.data ?? null;
-          } catch {
-            return null;
-          }
-        }
-        return null;
-      }
-    },
-  });
+  const { data: patientDetails } = usePatientDetails(cycle?.patientId);
 
   // Fetch user details for patient name
   const { data: userDetails } = useQuery({
@@ -176,10 +156,9 @@ export function EmbryoTransferForm({
     if (cycle && patientDetails) {
       const patientName =
         getFullNameFromObject(userDetails) ||
-        getFullNameFromObject(patientDetails?.accountInfo) ||
         getFullNameFromObject(patientDetails) ||
         userDetails?.userName ||
-        patientDetails?.accountInfo?.username ||
+        (patientDetails as any)?.accountInfo?.username ||
         "";
 
       const patientMrn = (patientDetails as any)?.patientCode || "";
@@ -206,7 +185,10 @@ export function EmbryoTransferForm({
       setFormData((prev) => ({
         ...prev,
         embryos: initialEmbryos,
-        transferredCount: initialEmbryos.reduce((sum, e) => sum + e.quantity, 0),
+        transferredCount: initialEmbryos.reduce(
+          (sum, e) => sum + e.quantity,
+          0
+        ),
       }));
       setEmbryoCounter(embryos.length + 1);
     }
@@ -338,21 +320,6 @@ export function EmbryoTransferForm({
     }
   };
 
-  const formatDate = (dateString?: string | null) => {
-    if (!dateString) return "—";
-    try {
-      const date = new Date(dateString);
-      if (Number.isNaN(date.getTime())) return "—";
-      return date.toLocaleDateString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
-    } catch {
-      return "—";
-    }
-  };
-
   const isLoading = cycleLoading || embryosLoading;
 
   if (isLoading) {
@@ -388,7 +355,9 @@ export function EmbryoTransferForm({
                 <Input
                   id="patient-name"
                   value={formData.patientName}
-                  onChange={(e) => updateFormField("patientName", e.target.value)}
+                  onChange={(e) =>
+                    updateFormField("patientName", e.target.value)
+                  }
                   placeholder="Patient Name"
                 />
               </div>
@@ -397,7 +366,9 @@ export function EmbryoTransferForm({
                 <Input
                   id="patient-mrn"
                   value={formData.patientMrn}
-                  onChange={(e) => updateFormField("patientMrn", e.target.value)}
+                  onChange={(e) =>
+                    updateFormField("patientMrn", e.target.value)
+                  }
                   placeholder="MRN-2025-0001"
                 />
               </div>
@@ -409,7 +380,9 @@ export function EmbryoTransferForm({
                   id="transfer-date"
                   type="date"
                   value={formData.transferDate}
-                  onChange={(e) => updateFormField("transferDate", e.target.value)}
+                  onChange={(e) =>
+                    updateFormField("transferDate", e.target.value)
+                  }
                 />
               </div>
               <div>
@@ -435,7 +408,9 @@ export function EmbryoTransferForm({
 
           {/* Section 2: Embryo Information */}
           <div className="space-y-4">
-            <h4 className="text-lg font-semibold">1. Embryo Transfer Information</h4>
+            <h4 className="text-lg font-semibold">
+              1. Embryo Transfer Information
+            </h4>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
@@ -568,7 +543,9 @@ export function EmbryoTransferForm({
                 <Input
                   id="uterine-route"
                   value={formData.uterineRoute}
-                  onChange={(e) => updateFormField("uterineRoute", e.target.value)}
+                  onChange={(e) =>
+                    updateFormField("uterineRoute", e.target.value)
+                  }
                   placeholder="e.g., Cervix, vagina..."
                 />
               </div>
@@ -604,17 +581,23 @@ export function EmbryoTransferForm({
                 <Textarea
                   id="medical-notes"
                   value={formData.medicalNotes}
-                  onChange={(e) => updateFormField("medicalNotes", e.target.value)}
+                  onChange={(e) =>
+                    updateFormField("medicalNotes", e.target.value)
+                  }
                   placeholder="Notes about patient condition, contraindications..."
                   rows={4}
                 />
               </div>
               <div>
-                <Label htmlFor="medication">Supporting Medication Before/After Transfer</Label>
+                <Label htmlFor="medication">
+                  Supporting Medication Before/After Transfer
+                </Label>
                 <Textarea
                   id="medication"
                   value={formData.medication}
-                  onChange={(e) => updateFormField("medication", e.target.value)}
+                  onChange={(e) =>
+                    updateFormField("medication", e.target.value)
+                  }
                   placeholder="Medication list, dosage, timing..."
                   rows={4}
                 />
@@ -629,7 +612,9 @@ export function EmbryoTransferForm({
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="transferred-count">Number of Embryos Transferred</Label>
+                <Label htmlFor="transferred-count">
+                  Number of Embryos Transferred
+                </Label>
                 <Input
                   id="transferred-count"
                   type="number"
@@ -643,11 +628,15 @@ export function EmbryoTransferForm({
                 />
               </div>
               <div>
-                <Label htmlFor="embryo-condition">Embryo Condition at Transfer</Label>
+                <Label htmlFor="embryo-condition">
+                  Embryo Condition at Transfer
+                </Label>
                 <select
                   id="embryo-condition"
                   value={formData.embryoCondition}
-                  onChange={(e) => updateFormField("embryoCondition", e.target.value)}
+                  onChange={(e) =>
+                    updateFormField("embryoCondition", e.target.value)
+                  }
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
                   <option value="">Select condition</option>
@@ -664,7 +653,9 @@ export function EmbryoTransferForm({
               <Textarea
                 id="procedure-notes"
                 value={formData.procedureNotes}
-                onChange={(e) => updateFormField("procedureNotes", e.target.value)}
+                onChange={(e) =>
+                  updateFormField("procedureNotes", e.target.value)
+                }
                 placeholder="Detailed description of procedure, patient response..."
                 rows={4}
               />
@@ -679,7 +670,9 @@ export function EmbryoTransferForm({
                 <Label>Performing Doctor</Label>
                 <Input
                   value={formData.doctorName}
-                  onChange={(e) => updateFormField("doctorName", e.target.value)}
+                  onChange={(e) =>
+                    updateFormField("doctorName", e.target.value)
+                  }
                   placeholder="Doctor Name"
                   className="text-center border-0 border-b rounded-none"
                 />
@@ -696,7 +689,9 @@ export function EmbryoTransferForm({
                 <Label>Lab Tech Confirming Embryo Transfer</Label>
                 <Input
                   value={formData.labTechName}
-                  onChange={(e) => updateFormField("labTechName", e.target.value)}
+                  onChange={(e) =>
+                    updateFormField("labTechName", e.target.value)
+                  }
                   placeholder="Lab Tech Name"
                   className="text-center border-0 border-b rounded-none"
                 />
@@ -744,4 +739,3 @@ export function EmbryoTransferForm({
     </div>
   );
 }
-

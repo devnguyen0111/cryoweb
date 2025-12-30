@@ -23,6 +23,7 @@ import type {
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { PrescriptionDetailModal } from "@/features/doctor/prescriptions/PrescriptionDetailModal";
+import { createEmptyPaginatedResponse } from "@/utils/api-helpers";
 
 type PrescriptionMedication = {
   medicineId: string;
@@ -46,19 +47,6 @@ type PrescriptionSearchState = {
   medicalRecordId?: string;
 };
 
-const createEmptyResponse = <T,>(): PaginatedResponse<T> => ({
-  code: 200,
-  message: "Success",
-  data: [],
-  metaData: {
-    totalCount: 0,
-    pageNumber: 1,
-    pageSize: 0,
-    totalPages: 0,
-    hasPrevious: false,
-    hasNext: false,
-  },
-});
 
 export const Route = createFileRoute("/doctor/prescriptions")({
   component: DoctorPrescriptionComponent,
@@ -129,12 +117,12 @@ function DoctorPrescriptionComponent() {
         return response;
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
-          return createEmptyResponse<Medicine>();
+          return createEmptyPaginatedResponse<Medicine>();
         }
         const message =
           error?.response?.data?.message || "Unable to load medicines.";
         toast.error(message);
-        return createEmptyResponse<Medicine>();
+        return createEmptyPaginatedResponse<Medicine>();
       }
     },
   });
@@ -200,12 +188,12 @@ function DoctorPrescriptionComponent() {
         return response;
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
-          return createEmptyResponse<Prescription>();
+          return createEmptyPaginatedResponse<Prescription>();
         }
         const message =
           error?.response?.data?.message || "Unable to load prescriptions.";
         toast.error(message);
-        return createEmptyResponse<Prescription>();
+        return createEmptyPaginatedResponse<Prescription>();
       }
     },
   });

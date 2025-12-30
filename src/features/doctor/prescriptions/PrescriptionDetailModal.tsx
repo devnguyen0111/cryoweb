@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 import { getLast4Chars } from "@/utils/id-helpers";
-import type { PrescriptionDetailResponseFull } from "@/api/types";
 
 interface PrescriptionDetailModalProps {
   prescriptionId: string | null;

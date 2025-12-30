@@ -37,7 +37,7 @@ export function FertilizationModal({
       return response.data;
     },
     enabled: isOpen && !!cycleId,
-    staleTime: 0,
+    staleTime: 30000, // Cache for 30 seconds to reduce unnecessary refetches
   });
 
   // Fetch all cycles in the same treatment to get related cycles
@@ -117,8 +117,7 @@ export function FertilizationModal({
       partnerPatientId,
       "cycle",
       cycleId,
-      "quality-checked",
-      "fertilization",
+      "fertilize",
     ],
     queryFn: async () => {
       // If no partner, return empty array
@@ -128,12 +127,10 @@ export function FertilizationModal({
       }
 
       try {
-        // Fetch all samples of PARTNER patient (not the main patient)
-        // Don't filter Status at API level - filter client-side instead
-        const response = await api.sample.getAllDetailSamples({
-          SampleType: "Sperm",
+        // Use new fertilize API endpoint to get samples available for fertilization
+        const response = await api.sample.getFertilizeSamples({
           PatientId: partnerPatientId, // Use partner patient ID, not main patient ID
-          // Don't filter Status here - API might not support PatientId + Status together
+          SampleType: "Sperm",
           Page: 1,
           Size: 100,
           Sort: "collectionDate",
@@ -141,33 +138,14 @@ export function FertilizationModal({
         });
         const samples = response.data || [];
 
-        // Filter for quality-checked samples (like CycleUpdateModal)
-        // Statuses considered as quality checked: QualityChecked, Fertilized, CulturedEmbryo, Stored, Used, Frozen
-        const qualityCheckedStatuses = [
-          "QualityChecked",
-          "Fertilized",
-          "CulturedEmbryo",
-          "Stored",
-          "Used",
-          "Frozen",
-        ];
-
         // Get cycle IDs from the same treatment (including current cycle and previous cycles)
         const relatedCycleIds = allCyclesInTreatment
           ? allCyclesInTreatment.map((c) => c.id)
           : [cycleId];
 
-        // Additional client-side filtering for availability and fertilization status
+        // Additional client-side filtering for treatment cycle relationship
+        // The API already filters for quality-checked, available, and canFertilize samples
         const filtered = samples.filter((sample) => {
-          // Must be quality-checked
-          if (!qualityCheckedStatuses.includes(sample.status)) return false;
-
-          // Must be available (allow if undefined, reject only if explicitly false)
-          if (sample.isAvailable === false) return false;
-
-          // Must not already be marked for fertilization
-          if (sample.canFertilize === true) return false;
-
           // Filter by treatment cycle relationship:
           // - If sample has treatmentCycleId, it must belong to a cycle in the same treatment
           // - If sample has no treatmentCycleId, allow it (might be from previous treatment or not assigned yet)
@@ -187,9 +165,6 @@ export function FertilizationModal({
           treatmentId: cycleDetails?.treatmentId,
           relatedCycleIds,
           total: samples.length,
-          qualityChecked: samples.filter((s) =>
-            qualityCheckedStatuses.includes(s.status)
-          ).length,
           filtered: filtered.length,
           samples: samples.map((s) => ({
             id: s.id,
@@ -221,7 +196,7 @@ export function FertilizationModal({
     enabled: isOpen && !!partnerPatientId && !!cycleId,
   });
 
-  // Fetch quality-checked oocyte samples - fetch all patient samples then filter client-side
+  // Fetch quality-checked oocyte samples - use new fertilize API endpoint
   const { data: oocyteSamplesData, isLoading: oocyteLoading } = useQuery({
     queryKey: [
       "oocyte-samples",
@@ -229,17 +204,14 @@ export function FertilizationModal({
       patientId,
       "cycle",
       cycleId,
-      "quality-checked",
-      "fertilization",
+      "fertilize",
     ],
     queryFn: async () => {
       try {
-        // Fetch all samples of patient (like CycleUpdateModal does)
-        // Don't filter Status at API level - filter client-side instead
-        const response = await api.sample.getAllDetailSamples({
-          SampleType: "Oocyte",
+        // Use new fertilize API endpoint to get samples available for fertilization
+        const response = await api.sample.getFertilizeSamples({
           PatientId: patientId,
-          // Don't filter Status here - API might not support PatientId + Status together
+          SampleType: "Oocyte",
           Page: 1,
           Size: 100,
           Sort: "collectionDate",
@@ -247,96 +219,15 @@ export function FertilizationModal({
         });
         const samples = response.data || [];
 
-        // Filter for quality-checked samples (like CycleUpdateModal)
-        // Statuses considered as quality checked: QualityChecked, Fertilized, CulturedEmbryo, Stored, Used, Frozen
-        const qualityCheckedStatuses = [
-          "QualityChecked",
-          "Fertilized",
-          "CulturedEmbryo",
-          "Stored",
-          "Used",
-          "Frozen",
-        ];
-
         // Get cycle IDs from the same treatment (including current cycle and previous cycles)
         const relatedCycleIds = allCyclesInTreatment
           ? allCyclesInTreatment.map((c) => c.id)
           : [cycleId];
 
-        // Additional client-side filtering for availability, maturity, and fertilization status
+        // Additional client-side filtering for treatment cycle relationship
+        // The API already filters for quality-checked, available, and canFertilize samples
+        // For oocytes, the API should also filter by maturity (MII stage)
         const filtered = samples.filter((sample) => {
-          // Must be quality-checked
-          if (!qualityCheckedStatuses.includes(sample.status)) {
-            console.log(
-              `[FertilizationModal] Sample ${sample.id} rejected: not quality-checked (status: ${sample.status})`
-            );
-            return false;
-          }
-
-          // Must be available (allow if undefined, reject only if explicitly false)
-          if (sample.isAvailable === false) {
-            console.log(
-              `[FertilizationModal] Sample ${sample.id} rejected: not available`
-            );
-            return false;
-          }
-
-          // For oocytes, check maturityStage - prefer MII but be flexible
-          // MII (Metaphase II) is the mature stage suitable for fertilization
-          const maturityStage = sample.oocyte?.maturityStage;
-          const isMature = sample.oocyte?.isMature;
-
-          // If maturityStage is set, prefer MII but allow if isMature is true
-          if (maturityStage) {
-            const trimmedStage = String(maturityStage).trim().toUpperCase();
-            // Accept MII (mature) oocytes
-            if (trimmedStage === "MII") {
-              // Good, continue
-            } else {
-              // If maturityStage is not MII, check isMature as fallback
-              if (isMature === true) {
-                // Allow if isMature is true even if maturityStage is not MII
-                console.log(
-                  `[FertilizationModal] Sample ${sample.id} allowed: maturityStage is ${trimmedStage} but isMature is true`
-                );
-              } else if (isMature === false) {
-                // Reject if explicitly not mature
-                console.log(
-                  `[FertilizationModal] Sample ${sample.id} rejected: maturityStage is ${trimmedStage} and isMature is false`
-                );
-                return false;
-              } else {
-                // If isMature is undefined, reject non-MII stages
-                console.log(
-                  `[FertilizationModal] Sample ${sample.id} rejected: maturityStage is ${trimmedStage}, not MII, and isMature is undefined`
-                );
-                return false;
-              }
-            }
-          } else {
-            // If maturityStage is not set, check isMature as fallback
-            if (isMature !== undefined) {
-              if (!isMature) {
-                console.log(
-                  `[FertilizationModal] Sample ${sample.id} rejected: isMature is false`
-                );
-                return false;
-              }
-            }
-            // If neither maturityStage nor isMature is set, allow it (for backward compatibility)
-            console.log(
-              `[FertilizationModal] Sample ${sample.id} allowed: no maturityStage/isMature info (backward compatibility)`
-            );
-          }
-
-          // Must not already be marked for fertilization
-          if (sample.canFertilize === true) {
-            console.log(
-              `[FertilizationModal] Sample ${sample.id} rejected: already marked for fertilization`
-            );
-            return false;
-          }
-
           // Filter by treatment cycle relationship:
           // - If sample has treatmentCycleId, it should belong to a cycle in the same treatment
           // - But be flexible: if no treatmentCycleId, allow it (might be from previous treatment or not assigned yet)
@@ -360,9 +251,6 @@ export function FertilizationModal({
           treatmentId: cycleDetails?.treatmentId,
           relatedCycleIds,
           total: samples.length,
-          qualityChecked: samples.filter((s) =>
-            qualityCheckedStatuses.includes(s.status)
-          ).length,
           filtered: filtered.length,
           samples: samples.map((s) => ({
             id: s.id,

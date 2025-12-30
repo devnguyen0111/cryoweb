@@ -8,7 +8,6 @@ import {
 } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { isAxiosError } from "axios";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -135,28 +134,23 @@ function DoctorAppointmentsComponent() {
   }, [data?.data]);
 
   // Fetch patient data for all appointments
+  // Note: useQueries doesn't work well with custom hooks, so we keep the query here
+  // but use the same pattern as usePatientDetails
   const patientQueries = useQueries({
     queries: patientIds.map((patientId) => ({
       queryKey: ["doctor", "patient", patientId, "appointment-list"],
       queryFn: async (): Promise<Patient | PatientDetailResponse | null> => {
+        if (!patientId) return null;
         try {
           const response = await api.patient.getPatientById(patientId);
           return response.data ?? null;
         } catch (error) {
-          if (isAxiosError(error)) {
-            if (error.response?.status === 403) {
-              try {
-                const fallback = await api.patient.getPatientDetails(patientId);
-                return fallback.data ?? null;
-              } catch {
-                return null;
-              }
-            }
-            if (error.response?.status === 404) {
-              return null;
-            }
+          try {
+            const fallback = await api.patient.getPatientDetails(patientId);
+            return fallback.data ?? null;
+          } catch {
+            return null;
           }
-          return null;
         }
       },
       retry: false,

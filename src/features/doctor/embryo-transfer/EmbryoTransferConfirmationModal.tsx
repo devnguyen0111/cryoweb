@@ -17,6 +17,8 @@ import { Badge } from "@/components/ui/badge";
 // Checkbox component not available, using custom implementation
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { cn } from "@/utils/cn";
+import { formatDateForInput } from "@/utils/date-helpers";
 
 interface EmbryoTransferConfirmationModalProps {
   cycleId: string;
@@ -35,27 +37,29 @@ export function EmbryoTransferConfirmationModal({
     new Set()
   );
   const [transferDate, setTransferDate] = useState(
-    new Date().toISOString().split("T")[0]
+    formatDateForInput(new Date())
   );
   const [notes, setNotes] = useState("");
 
-  const { data: cycle, isLoading: cycleLoading } = useQuery<TreatmentCycle | null>({
-    enabled: isOpen && Boolean(cycleId),
-    queryKey: ["treatment-cycle", cycleId],
-    retry: false,
-    queryFn: async () => {
-      if (!cycleId) return null;
-      try {
-        const response = await api.treatmentCycle.getTreatmentCycleById(cycleId);
-        return response.data ?? null;
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
+  const { data: cycle, isLoading: cycleLoading } =
+    useQuery<TreatmentCycle | null>({
+      enabled: isOpen && Boolean(cycleId),
+      queryKey: ["treatment-cycle", cycleId],
+      retry: false,
+      queryFn: async () => {
+        if (!cycleId) return null;
+        try {
+          const response =
+            await api.treatmentCycle.getTreatmentCycleById(cycleId);
+          return response.data ?? null;
+        } catch (error) {
+          if (isAxiosError(error) && error.response?.status === 404) {
+            return null;
+          }
+          throw error;
         }
-        throw error;
-      }
-    },
-  });
+      },
+    });
 
   // Fetch embryos ready for transfer
   const { data: embryos, isLoading: embryosLoading } = useQuery<
@@ -216,9 +220,7 @@ export function EmbryoTransferConfirmationModal({
   };
 
   const isLoading =
-    cycleLoading ||
-    embryosLoading ||
-    updateEmbryoMutation.isPending;
+    cycleLoading || embryosLoading || updateEmbryoMutation.isPending;
 
   return (
     <Modal
@@ -241,7 +243,9 @@ export function EmbryoTransferConfirmationModal({
           {/* Cycle Information */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Treatment Cycle Information</CardTitle>
+              <CardTitle className="text-lg">
+                Treatment Cycle Information
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -250,7 +254,9 @@ export function EmbryoTransferConfirmationModal({
                     Cycle Code
                   </Label>
                   <p className="mt-1 text-sm font-mono">
-                    {cycle.cycleCode || getLast4Chars(cycle.id)}
+                    {cycle.cycleName ||
+                      `Cycle ${cycle.cycleNumber}` ||
+                      getLast4Chars(cycle.id)}
                   </p>
                 </div>
                 <div>
@@ -265,13 +271,10 @@ export function EmbryoTransferConfirmationModal({
                   </Label>
                   <p className="mt-1 text-sm">
                     {getFullNameFromObject(userDetails) ||
-                      getFullNameFromObject(patientDetails?.accountInfo) ||
                       getFullNameFromObject(patientDetails) ||
                       userDetails?.userName ||
-                      patientDetails?.accountInfo?.username ||
-                      (cycle.patientId
-                        ? getLast4Chars(cycle.patientId)
-                        : "—")}
+                      (patientDetails as any)?.accountInfo?.username ||
+                      (cycle.patientId ? getLast4Chars(cycle.patientId) : "—")}
                   </p>
                 </div>
                 <div>
@@ -288,14 +291,11 @@ export function EmbryoTransferConfirmationModal({
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Select Embryos to Transfer</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSelectAll}
-                >
-                  {embryos &&
-                  selectedEmbryoIds.size === embryos.length
+                <CardTitle className="text-lg">
+                  Select Embryos to Transfer
+                </CardTitle>
+                <Button variant="outline" size="sm" onClick={handleSelectAll}>
+                  {embryos && selectedEmbryoIds.size === embryos.length
                     ? "Deselect All"
                     : "Select All"}
                 </Button>
@@ -403,4 +403,3 @@ export function EmbryoTransferConfirmationModal({
     </Modal>
   );
 }
-

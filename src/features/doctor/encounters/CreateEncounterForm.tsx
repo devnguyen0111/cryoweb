@@ -15,6 +15,8 @@ import { TreatmentPlanForm } from "@/features/doctor/treatment-cycles/TreatmentP
 import { TreatmentPlanSignature } from "@/features/doctor/treatment-cycles/TreatmentPlanSignature";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import type { TreatmentType } from "@/api/types";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 // Type for pending treatment data (simplified - only treatmentType is actually used)
 type PendingTreatmentValues = {
@@ -75,19 +77,10 @@ export function CreateEncounterForm({
     selectedPatientId ||
     defaultPatientId ||
     "";
-  const { data: planPatientDetails } = useQuery({
-    queryKey: ["patient-details", planPatientId],
-    queryFn: async () => {
-      if (!planPatientId) return null;
-      try {
-        const response = await api.patient.getPatientDetails(planPatientId);
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!planPatientId && currentStep === "plan",
-  });
+  const { data: planPatientDetails } = usePatientDetails(
+    planPatientId,
+    !!planPatientId && currentStep === "plan"
+  );
 
   const { data: planUserDetails } = useQuery({
     queryKey: ["user-details", planPatientId],
@@ -182,20 +175,10 @@ export function CreateEncounterForm({
   });
 
   // Fetch patient details for step 3
-  const { data: encounterPatientDetails } = useQuery({
-    queryKey: ["patient-details", encounterPatientId],
-    queryFn: async () => {
-      if (!encounterPatientId) return null;
-      try {
-        const response =
-          await api.patient.getPatientDetails(encounterPatientId);
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!encounterPatientId && !!showSummaryStepIndicator,
-  });
+  const { data: encounterPatientDetails } = usePatientDetails(
+    encounterPatientId,
+    !!encounterPatientId && !!showSummaryStepIndicator
+  );
 
   // Fetch user details for step 3
   const { data: encounterUserDetails } = useQuery({
@@ -505,14 +488,11 @@ export function CreateEncounterForm({
                     {(() => {
                       const encounterPatientName =
                         getFullNameFromObject(encounterUserDetails) ||
-                        getFullNameFromObject(
-                          encounterPatientDetails?.accountInfo
-                        ) ||
                         getFullNameFromObject(encounterPatientDetails) ||
-                        encounterPatientDetails?.accountInfo?.username ||
-                        encounterUserDetails?.fullName ||
+                        (isPatientDetailResponse(encounterPatientDetails)
+                          ? encounterPatientDetails.accountInfo?.username
+                          : null) ||
                         encounterUserDetails?.userName ||
-                        encounterPatientDetails?.fullName ||
                         encounterPatientDetails?.patientCode ||
                         "Unknown";
                       const encounterPatientCode =
@@ -536,18 +516,24 @@ export function CreateEncounterForm({
                           : encounterPatientDetails?.gender || null;
                       const encounterAge = encounterUserDetails?.age ?? null;
                       const encounterPhone =
-                        encounterPatientDetails?.accountInfo?.phone ||
+                        (isPatientDetailResponse(encounterPatientDetails)
+                          ? encounterPatientDetails.accountInfo?.phone
+                          : null) ||
                         encounterUserDetails?.phone ||
                         encounterUserDetails?.phoneNumber ||
                         encounterPatientDetails?.phoneNumber ||
                         null;
                       const encounterEmail =
-                        encounterPatientDetails?.accountInfo?.email ||
+                        (isPatientDetailResponse(encounterPatientDetails)
+                          ? encounterPatientDetails.accountInfo?.email
+                          : null) ||
                         encounterUserDetails?.email ||
                         encounterPatientDetails?.email ||
                         null;
                       const encounterAddress =
-                        encounterPatientDetails?.accountInfo?.address ||
+                        (isPatientDetailResponse(encounterPatientDetails)
+                          ? encounterPatientDetails.accountInfo?.address
+                          : null) ||
                         encounterUserDetails?.location ||
                         encounterPatientDetails?.address ||
                         null;
@@ -990,10 +976,13 @@ export function CreateEncounterForm({
               <CardContent>
                 {(() => {
                   const encounterPatientName =
-                    encounterPatientDetails?.accountInfo?.username ||
-                    encounterUserDetails?.fullName ||
+                    getFullNameFromObject(encounterUserDetails) ||
+                    getFullNameFromObject(encounterPatientDetails) ||
+                    (isPatientDetailResponse(encounterPatientDetails)
+                      ? encounterPatientDetails.accountInfo?.username
+                      : null) ||
                     encounterUserDetails?.userName ||
-                    encounterPatientDetails?.fullName ||
+                    encounterPatientDetails?.patientCode ||
                     "Unknown";
                   const encounterPatientCode =
                     encounterPatientDetails?.patientCode || "";
@@ -1016,18 +1005,24 @@ export function CreateEncounterForm({
                       : encounterPatientDetails?.gender || null;
                   const encounterAge = encounterUserDetails?.age ?? null;
                   const encounterPhone =
-                    encounterPatientDetails?.accountInfo?.phone ||
+                    (isPatientDetailResponse(encounterPatientDetails)
+                      ? encounterPatientDetails.accountInfo?.phone
+                      : null) ||
                     encounterUserDetails?.phone ||
                     encounterUserDetails?.phoneNumber ||
                     encounterPatientDetails?.phoneNumber ||
                     null;
                   const encounterEmail =
-                    encounterPatientDetails?.accountInfo?.email ||
+                    (isPatientDetailResponse(encounterPatientDetails)
+                      ? encounterPatientDetails.accountInfo?.email
+                      : null) ||
                     encounterUserDetails?.email ||
                     encounterPatientDetails?.email ||
                     null;
                   const encounterAddress =
-                    encounterPatientDetails?.accountInfo?.address ||
+                    (isPatientDetailResponse(encounterPatientDetails)
+                      ? encounterPatientDetails.accountInfo?.address
+                      : null) ||
                     encounterUserDetails?.location ||
                     encounterPatientDetails?.address ||
                     null;
@@ -1482,14 +1477,11 @@ export function CreateEncounterForm({
                       {(() => {
                         const encounterPatientName =
                           getFullNameFromObject(encounterUserDetails) ||
-                          getFullNameFromObject(
-                            encounterPatientDetails?.accountInfo
-                          ) ||
                           getFullNameFromObject(encounterPatientDetails) ||
-                          encounterPatientDetails?.accountInfo?.username ||
-                          encounterUserDetails?.fullName ||
+                          (isPatientDetailResponse(encounterPatientDetails)
+                            ? encounterPatientDetails.accountInfo?.username
+                            : null) ||
                           encounterUserDetails?.userName ||
-                          encounterPatientDetails?.fullName ||
                           encounterPatientDetails?.patientCode ||
                           "Unknown";
                         const encounterPatientCode =
@@ -1513,18 +1505,24 @@ export function CreateEncounterForm({
                             : encounterPatientDetails?.gender || null;
                         const encounterAge = encounterUserDetails?.age ?? null;
                         const encounterPhone =
-                          encounterPatientDetails?.accountInfo?.phone ||
+                          (isPatientDetailResponse(encounterPatientDetails)
+                            ? encounterPatientDetails.accountInfo?.phone
+                            : null) ||
                           encounterUserDetails?.phone ||
                           encounterUserDetails?.phoneNumber ||
                           encounterPatientDetails?.phoneNumber ||
                           null;
                         const encounterEmail =
-                          encounterPatientDetails?.accountInfo?.email ||
+                          (isPatientDetailResponse(encounterPatientDetails)
+                            ? encounterPatientDetails.accountInfo?.email
+                            : null) ||
                           encounterUserDetails?.email ||
                           encounterPatientDetails?.email ||
                           null;
                         const encounterAddress =
-                          encounterPatientDetails?.accountInfo?.address ||
+                          (isPatientDetailResponse(encounterPatientDetails)
+                            ? encounterPatientDetails.accountInfo?.address
+                            : null) ||
                           encounterUserDetails?.location ||
                           encounterPatientDetails?.address ||
                           null;

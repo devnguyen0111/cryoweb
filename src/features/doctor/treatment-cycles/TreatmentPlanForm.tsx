@@ -14,6 +14,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { TreatmentPlanSignature } from "./TreatmentPlanSignature";
 import type { TreatmentType } from "@/api/types";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 type TreatmentPhase = {
   id: string;
@@ -166,18 +168,29 @@ export function TreatmentPlanForm({
     }
   }, [patientId, formState.patientId]);
 
-  // Search patients
+  // Pre-load all patients for selection
   const { data: patientsData } = useQuery({
-    queryKey: ["patients", patientSearch],
+    queryKey: ["patients", "all"],
     queryFn: async () => {
-      if (!patientSearch || patientSearch.length < 2) return { data: [] };
       return await api.patient.getPatients({
-        searchTerm: patientSearch,
-        pageSize: 10,
+        pageSize: 100, // Load up to 100 patients initially
       });
     },
-    enabled: patientSearch.length >= 2 && showPatientSelector,
+    enabled: showPatientSelector,
   });
+
+  // Filter patients by patientCode search (client-side filtering)
+  const filteredPatients = useMemo(() => {
+    if (!patientsData?.data) return [];
+    if (!patientSearch.trim()) return patientsData.data;
+    
+    const searchLower = patientSearch.toLowerCase().trim();
+    return patientsData.data.filter((patient: any) => {
+      const patientCode = patient.patientCode?.toLowerCase() || "";
+      const fullName = getFullNameFromObject(patient)?.toLowerCase() || "";
+      return patientCode.includes(searchLower) || fullName.includes(searchLower);
+    });
+  }, [patientsData?.data, patientSearch]);
   const [showSignatureStep, setShowSignatureStep] = useState(false);
   const [createdTreatmentId, setCreatedTreatmentId] = useState<string | null>(
     null
@@ -187,21 +200,7 @@ export function TreatmentPlanForm({
   );
 
   // Fetch patient details to check gender for IVF validation
-  const { data: patientDetails } = useQuery({
-    queryKey: ["patient-details", formState.patientId],
-    queryFn: async () => {
-      if (!formState.patientId) return null;
-      try {
-        const response = await api.patient.getPatientDetails(
-          formState.patientId
-        );
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!formState.patientId,
-  });
+  const { data: patientDetails } = usePatientDetails(formState.patientId);
 
   const { data: userDetails } = useQuery({
     queryKey: ["user-details", formState.patientId],
@@ -979,7 +978,9 @@ export function TreatmentPlanForm({
   const patientName =
     getFullNameFromObject(userDetails) ||
     userDetails?.userName ||
-    patientDetails?.accountInfo?.username ||
+    (isPatientDetailResponse(patientDetails)
+      ? patientDetails.accountInfo?.username
+      : null) ||
     getFullNameFromObject(patientDetails) ||
     "Unknown";
 
@@ -1000,54 +1001,85 @@ export function TreatmentPlanForm({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                Search Patient (by patient code)
+                Search Patient (by patient code or name)
               </label>
               <Input
-                placeholder="e.g. PAT001"
+                placeholder="Search by patient code or name..."
                 value={patientSearch}
                 onChange={(e) => setPatientSearch(e.target.value)}
               />
             </div>
 
-            {patientsData?.data && patientsData.data.length > 0 && (
-              <div className="rounded-lg border">
-                <div className="max-h-64 overflow-y-auto">
-                  {patientsData.data.map((patient: any) => (
-                    <button
-                      key={patient.id}
-                      type="button"
-                      onClick={() => {
-                        handleFieldChange("patientId", patient.id);
-                        setPatientSearch(
-                          `${patient.fullName} (${patient.patientCode})`
-                        );
-                        setShowPatientSelector(false);
-                        // Reset treatment type if it was IVF and new patient is male
-                        if (formState.treatmentType === "IVF") {
-                          const newPatientGender =
-                            patient.gender ||
-                            (patient.gender === true ? "Male" : "Female");
-                          if (newPatientGender === "Male") {
-                            handleFieldChange("treatmentType", "");
-                            toast.error(
-                              "IVF treatment is not available for male patients. Please select a different treatment type."
-                            );
-                          }
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Select Patient <span className="text-red-500">*</span>
+              </label>
+              <select
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={formState.patientId}
+                onChange={(e) => {
+                  handleFieldChange("patientId", e.target.value);
+                  if (e.target.value) {
+                    const selectedPatient = filteredPatients.find(
+                      (p: any) => p.id === e.target.value
+                    );
+                    if (selectedPatient) {
+                      setShowPatientSelector(false);
+                      // Reset treatment type if it was IVF and new patient is male
+                      if (formState.treatmentType === "IVF") {
+                        const newPatientGender =
+                          selectedPatient.gender ||
+                          (selectedPatient.gender === true ? "Male" : "Female");
+                        if (newPatientGender === "Male") {
+                          handleFieldChange("treatmentType", "");
+                          toast.error(
+                            "IVF treatment is not available for male patients. Please select a different treatment type."
+                          );
                         }
-                      }}
-                      className={`w-full border-b p-3 text-left transition last:border-b-0 hover:bg-gray-50 ${
-                        formState.patientId === patient.id ? "bg-primary/5" : ""
-                      }`}
-                    >
-                      <p className="font-medium">{patient.fullName}</p>
-                      <p className="text-sm text-gray-600">
-                        {patient.patientCode}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+                      }
+                    }
+                  }
+                }}
+                required
+              >
+                <option value="">Select a patient</option>
+                {filteredPatients.map((patient: any) => {
+                  // Get patient name with priority: accountInfo > patient object (like other dashboards)
+                  const patientName = (() => {
+                    if (!patient) return "";
+                    // Try to get name from accountInfo first (if PatientDetailResponse)
+                    if (isPatientDetailResponse(patient) && patient.accountInfo) {
+                      // accountInfo has username, not firstName/lastName, so use username directly
+                      if (patient.accountInfo.username) {
+                        return patient.accountInfo.username;
+                      }
+                    }
+                    // Fallback to patient object directly
+                    return getFullNameFromObject(patient);
+                  })();
+                  const patientCode = patient.patientCode || "";
+                  
+                  // Format: "FirstName LastName (patientCode)" or just "patientCode" if no name
+                  const displayText = patientName
+                    ? `${patientName}${patientCode ? ` (${patientCode})` : ""}`
+                    : patientCode || patient.id;
+                  
+                  return (
+                    <option key={patient.id} value={patient.id}>
+                      {displayText}
+                    </option>
+                  );
+                })}
+              </select>
+              {filteredPatients.length === 0 && patientsData?.data && patientsData.data.length > 0 && (
+                <p className="text-sm text-gray-500">
+                  No patients found matching your search.
+                </p>
+              )}
+              {!patientsData?.data && (
+                <p className="text-sm text-gray-500">Loading patients...</p>
+              )}
+            </div>
 
             {formState.patientId && (
               <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
@@ -1133,7 +1165,9 @@ export function TreatmentPlanForm({
               })()}
               {(() => {
                 const phone =
-                  patientDetails?.accountInfo?.phone ||
+                  (isPatientDetailResponse(patientDetails)
+                    ? patientDetails.accountInfo?.phone
+                    : null) ||
                   userDetails?.phone ||
                   userDetails?.phoneNumber ||
                   patientDetails?.phoneNumber ||
@@ -1147,7 +1181,9 @@ export function TreatmentPlanForm({
               })()}
               {(() => {
                 const email =
-                  patientDetails?.accountInfo?.email ||
+                  (isPatientDetailResponse(patientDetails)
+                    ? patientDetails.accountInfo?.email
+                    : null) ||
                   userDetails?.email ||
                   patientDetails?.email ||
                   null;
@@ -1168,7 +1204,9 @@ export function TreatmentPlanForm({
               )}
               {(() => {
                 const address =
-                  patientDetails?.accountInfo?.address ||
+                  (isPatientDetailResponse(patientDetails)
+                    ? patientDetails.accountInfo?.address
+                    : null) ||
                   userDetails?.location ||
                   patientDetails?.address ||
                   null;
@@ -1190,42 +1228,68 @@ export function TreatmentPlanForm({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                Search Patient (by patient code)
+                Search Patient (by patient code or name)
               </label>
               <Input
-                placeholder="e.g. PAT001"
+                placeholder="Search by patient code or name..."
                 value={patientSearch}
                 onChange={(e) => setPatientSearch(e.target.value)}
               />
             </div>
 
-            {patientsData?.data && patientsData.data.length > 0 && (
-              <div className="rounded-lg border">
-                <div className="max-h-64 overflow-y-auto">
-                  {patientsData.data.map((patient: any) => (
-                    <button
-                      key={patient.id}
-                      type="button"
-                      onClick={() => {
-                        handleFieldChange("patientId", patient.id);
-                        setPatientSearch(
-                          `${patient.fullName} (${patient.patientCode})`
-                        );
-                        setShowPatientSelector(false);
-                      }}
-                      className={`w-full border-b p-3 text-left transition last:border-b-0 hover:bg-gray-50 ${
-                        formState.patientId === patient.id ? "bg-primary/5" : ""
-                      }`}
-                    >
-                      <p className="font-medium">{patient.fullName}</p>
-                      <p className="text-sm text-gray-600">
-                        {patient.patientCode}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Select Patient <span className="text-red-500">*</span>
+              </label>
+              <select
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={formState.patientId}
+                onChange={(e) => {
+                  handleFieldChange("patientId", e.target.value);
+                  if (e.target.value) {
+                    setShowPatientSelector(false);
+                  }
+                }}
+                required
+              >
+                <option value="">Select a patient</option>
+                {filteredPatients.map((patient: any) => {
+                  // Get patient name with priority: accountInfo > patient object (like other dashboards)
+                  const patientName = (() => {
+                    if (!patient) return "";
+                    // Try to get name from accountInfo first (if PatientDetailResponse)
+                    if (isPatientDetailResponse(patient) && patient.accountInfo) {
+                      // accountInfo has username, not firstName/lastName, so use username directly
+                      if (patient.accountInfo.username) {
+                        return patient.accountInfo.username;
+                      }
+                    }
+                    // Fallback to patient object directly
+                    return getFullNameFromObject(patient);
+                  })();
+                  const patientCode = patient.patientCode || "";
+                  
+                  // Format: "FirstName LastName (patientCode)" or just "patientCode" if no name
+                  const displayText = patientName
+                    ? `${patientName}${patientCode ? ` (${patientCode})` : ""}`
+                    : patientCode || patient.id;
+                  
+                  return (
+                    <option key={patient.id} value={patient.id}>
+                      {displayText}
+                    </option>
+                  );
+                })}
+              </select>
+              {filteredPatients.length === 0 && patientsData?.data && patientsData.data.length > 0 && (
+                <p className="text-sm text-gray-500">
+                  No patients found matching your search.
+                </p>
+              )}
+              {!patientsData?.data && (
+                <p className="text-sm text-gray-500">Loading patients...</p>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}

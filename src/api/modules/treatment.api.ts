@@ -68,7 +68,7 @@ export class TreatmentApi {
   }
 
   /**
-   * Create new treatment (encounter)
+   * Create new treatment
    * POST /api/treatment
    */
   async createTreatment(

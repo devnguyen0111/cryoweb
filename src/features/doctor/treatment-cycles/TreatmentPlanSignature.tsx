@@ -13,6 +13,7 @@ import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { isAxiosError } from "axios";
 import { AgreementDocument } from "./AgreementDocument";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 interface TreatmentPlanSignatureProps {
   treatmentId: string;
@@ -226,22 +227,6 @@ export function TreatmentPlanSignature({
     );
   };
 
-  const handlePatientSign = () => {
-    if (!agreement?.id) {
-      toast.error("Agreement not found. Please create agreement first.");
-      return;
-    }
-    setIsSigning(true);
-    signAgreementMutation.mutate(
-      { signedBy: "patient" },
-      {
-        onSettled: () => {
-          setIsSigning(false);
-        },
-      }
-    );
-  };
-
   // Call onSigned after cycle is created
   // This hook MUST be called before any early returns to follow Rules of Hooks
   useEffect(() => {
@@ -361,7 +346,7 @@ export function TreatmentPlanSignature({
                     Doctor Signature
                   </h3>
                   <p className="text-sm text-gray-600">
-                    {user?.fullName || "Doctor"}
+                    {getFullNameFromObject(user) || "Doctor"}
                   </p>
                 </div>
                 {doctorSigned ? (

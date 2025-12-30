@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2 } from "lucide-react";
+import { formatCurrency as formatCurrencyUtil } from "@/utils/format";
 
 interface ServiceDetail {
   serviceId: string;
@@ -200,10 +201,7 @@ export function CreateServiceRequestForCycleModal({
 
   const formatCurrency = (value?: number | null) => {
     if (value === null || value === undefined) return "—";
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(value);
+    return formatCurrencyUtil(value);
   };
 
   return (

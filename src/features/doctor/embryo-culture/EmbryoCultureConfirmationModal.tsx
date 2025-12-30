@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { formatDateForInput } from "@/utils/date-helpers";
 
 interface EmbryoRow {
   id: string;
@@ -48,7 +49,7 @@ export function EmbryoCultureConfirmationModal({
   const [embryoCounter, setEmbryoCounter] = useState(1);
   const [labTechName, setLabTechName] = useState("");
   const [confirmationDate, setConfirmationDate] = useState(
-    new Date().toISOString().split("T")[0]
+    formatDateForInput(new Date())
   );
   const [generalNotes, setGeneralNotes] = useState("");
   const [selectedEmbryoId, setSelectedEmbryoId] = useState<string>("");
@@ -206,8 +207,8 @@ export function EmbryoCultureConfirmationModal({
           quality: embryo.embryo?.quality || "",
           notes: embryo.notes || "",
           creationDate: embryo.embryo?.creationDate
-            ? new Date(embryo.embryo.creationDate).toISOString().split("T")[0]
-            : new Date().toISOString().split("T")[0],
+            ? formatDateForInput(new Date(embryo.embryo.creationDate))
+            : formatDateForInput(new Date()),
           isFromDatabase: true, // Existing embryos are from database
         })
       );
@@ -224,7 +225,7 @@ export function EmbryoCultureConfirmationModal({
           cellCount: 0,
           quality: "",
           notes: "",
-          creationDate: new Date().toISOString().split("T")[0],
+          creationDate: formatDateForInput(new Date()),
           isFromDatabase: false,
         },
       ]);

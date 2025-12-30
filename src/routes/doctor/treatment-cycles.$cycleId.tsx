@@ -239,32 +239,23 @@ function DoctorTreatmentCycleDetail() {
   // Fetch sperm samples for this patient and cycle
   const { data: spermSamplesData, isLoading: spermSamplesLoading } =
     useQuery({
-      queryKey: ["sperm-samples", "cycle", cycleId, cycle.patientId],
+      queryKey: ["cycle-samples", "sperm", cycleId],
       queryFn: async () => {
-        if (!cycle.patientId) return { data: [] };
+        if (!cycleId) return { data: [] };
         try {
-          const response = await api.sample.getAllDetailSamples({
-            SampleType: "Sperm",
-            PatientId: cycle.patientId,
-            Page: 1,
-            Size: 100,
-            Sort: "collectionDate",
-            Order: "desc",
-          });
-          // Filter by treatmentCycleId if available
-          const samples = response.data || [];
-          return {
-            data: samples.filter(
-              (sample) =>
-                !sample.treatmentCycleId || sample.treatmentCycleId === cycleId
-            ),
-          };
+          const response = await api.treatmentCycle.getCycleSamples(cycleId);
+          const allSamples = response.data || [];
+          // Filter to only sperm samples
+          const spermSamples = allSamples.filter(
+            (sample) => sample.sampleType === "Sperm"
+          );
+          return { data: spermSamples };
         } catch (error) {
           console.error("Error fetching sperm samples:", error);
           return { data: [] };
         }
       },
-      enabled: !!cycle.patientId && activeTab === "sperm",
+      enabled: !!cycleId && activeTab === "sperm",
     });
 
   const oocyteSamples = oocyteSamplesData?.data || [];

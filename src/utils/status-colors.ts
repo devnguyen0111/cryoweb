@@ -3,6 +3,7 @@ import type {
   ServiceRequestStatus,
   TreatmentCycleStatus,
   SpecimenStatus,
+  TransactionStatus,
 } from "@/api/types";
 import { normalizeAppointmentStatus } from "./appointments";
 import { normalizeTreatmentCycleStatus } from "@/api/types";
@@ -408,6 +409,72 @@ export function getSampleStatusBadgeClass(
 }
 
 // ============================================================================
+// TRANSACTION STATUS COLORS
+// ============================================================================
+
+/**
+ * Get color classes for transaction status
+ * Standardized colors:
+ * - Pending: Amber (waiting)
+ * - Completed: Emerald/Green (success)
+ * - Failed: Rose/Red (failed)
+ * - Cancelled: Rose/Red (cancelled)
+ */
+export function getTransactionStatusColor(
+  status: TransactionStatus | string | undefined | null
+): StatusColorClasses {
+  const statusStr = String(status || "").trim();
+
+  switch (statusStr) {
+    case "Pending":
+      return {
+        bg: "bg-amber-50",
+        text: "text-amber-700",
+        border: "border-amber-200",
+        dot: "bg-amber-500",
+      };
+    case "Completed":
+      return {
+        bg: "bg-emerald-50",
+        text: "text-emerald-700",
+        border: "border-emerald-200",
+        dot: "bg-emerald-500",
+      };
+    case "Failed":
+      return {
+        bg: "bg-rose-50",
+        text: "text-rose-700",
+        border: "border-rose-200",
+        dot: "bg-rose-500",
+      };
+    case "Cancelled":
+      return {
+        bg: "bg-rose-50",
+        text: "text-rose-700",
+        border: "border-rose-200",
+        dot: "bg-rose-500",
+      };
+    default:
+      return {
+        bg: "bg-slate-100",
+        text: "text-slate-700",
+        border: "border-slate-200",
+        dot: "bg-slate-400",
+      };
+  }
+}
+
+/**
+ * Get Tailwind classes string for transaction status badge
+ */
+export function getTransactionStatusBadgeClass(
+  status: TransactionStatus | string | undefined | null
+): string {
+  const colors = getTransactionStatusColor(status);
+  return `${colors.bg} ${colors.text} ${colors.border || ""}`.trim();
+}
+
+// ============================================================================
 // UNIFIED STATUS COLOR HELPER
 // ============================================================================
 
@@ -422,6 +489,7 @@ export function getStatusBadgeClass(
     | "service-request"
     | "treatment-cycle"
     | "sample"
+    | "transaction"
     | "auto"
 ): string {
   if (!status) {
@@ -432,7 +500,20 @@ export function getStatusBadgeClass(
 
   // Auto-detect type if not specified
   if (!type || type === "auto") {
-    // Check for sample-specific statuses first
+    // Check for transaction-specific statuses first
+    if (
+      statusStr === "Pending" ||
+      statusStr === "Completed" ||
+      statusStr === "Failed" ||
+      statusStr === "Cancelled"
+    ) {
+      // Check if it's a transaction status (not appointment/service-request)
+      // Transaction statuses are more specific, so check context
+      // For now, we'll let it fall through to other checks
+      // If needed, can add more specific detection logic
+    }
+
+    // Check for sample-specific statuses
     if (
       statusStr === "Collected" ||
       statusStr === "Processing" ||
@@ -508,6 +589,8 @@ export function getStatusBadgeClass(
       return getTreatmentCycleStatusBadgeClass(status as any);
     case "sample":
       return getSampleStatusBadgeClass(status as any);
+    case "transaction":
+      return getTransactionStatusBadgeClass(status as any);
     default:
       return getAppointmentStatusBadgeClass(status as any);
   }

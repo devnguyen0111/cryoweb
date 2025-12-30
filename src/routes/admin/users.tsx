@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 import { EmptyState } from "@/components/admin/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { capitalize } from "@/utils/capitalize";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 export const Route = createFileRoute("/admin/users")({
   component: AdminUsersComponent,
@@ -187,7 +188,7 @@ function AdminUsersComponent() {
                           className="border-t bg-background hover:bg-muted/30"
                         >
                           <td className="truncate p-3 font-medium text-foreground">
-                            {user.fullName ||
+                            {getFullNameFromObject(user) ||
                               user.userName ||
                               "Unnamed account"}
                           </td>

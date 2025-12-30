@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { isAxiosError } from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -12,6 +11,7 @@ import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
+import { fetchWith404FallbackSimple } from "@/utils/api-helpers";
 
 export const Route = createFileRoute("/receptionist/dashboard")({
   component: ReceptionistDashboardComponent,
@@ -45,15 +45,14 @@ function ReceptionistDashboardComponent() {
     ],
     queryFn: async () => {
       try {
-        return await api.appointment.getAppointments({
-          pageNumber: 1,
-          pageSize: 5,
-          status: "Scheduled",
-        });
+        return await fetchWith404FallbackSimple(() =>
+          api.appointment.getAppointments({
+            pageNumber: 1,
+            pageSize: 5,
+            status: "Scheduled",
+          })
+        );
       } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
-        }
         console.error("Error fetching appointments:", error);
         return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
       }
@@ -64,11 +63,10 @@ function ReceptionistDashboardComponent() {
     queryKey: ["receptionist", "patients", { pageNumber: 1, pageSize: 5 }],
     queryFn: async () => {
       try {
-        return await api.patient.getPatients({ pageNumber: 1, pageSize: 5 });
+        return await fetchWith404FallbackSimple(() =>
+          api.patient.getPatients({ pageNumber: 1, pageSize: 5 })
+        );
       } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
-        }
         console.error("Error fetching patients:", error);
         return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
       }
@@ -83,15 +81,14 @@ function ReceptionistDashboardComponent() {
     ],
     queryFn: async () => {
       try {
-        return await api.serviceRequest.getServiceRequests({
-          pageNumber: 1,
-          pageSize: 5,
-          status: "Pending",
-        });
+        return await fetchWith404FallbackSimple(() =>
+          api.serviceRequest.getServiceRequests({
+            pageNumber: 1,
+            pageSize: 5,
+            status: "Pending",
+          })
+        );
       } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
-        }
         console.error("Error fetching service requests:", error);
         return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
       }

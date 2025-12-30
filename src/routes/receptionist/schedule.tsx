@@ -20,6 +20,7 @@ import {
 } from "@/utils/appointments";
 import { getAppointmentStatusBadgeClass } from "@/utils/status-colors";
 import { AppointmentDetailForm } from "@/features/receptionist/appointments/AppointmentDetailForm";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 // Default slots - 4 fixed slots (2 morning, 2 afternoon)
 const DEFAULT_SLOTS: (Slot & { notes?: string })[] = [
@@ -380,7 +381,7 @@ function ReceptionistScheduleComponent() {
     const raw = appointment as unknown as Record<string, any>;
     return (
       raw.patient?.accountInfo?.username ??
-      raw.patient?.fullName ??
+      getFullNameFromObject(raw.patient) ??
       raw.patientName ??
       raw.patientCode ??
       raw.patient?.patientCode ??
@@ -404,7 +405,7 @@ function ReceptionistScheduleComponent() {
       [];
     if (Array.isArray(doctorIds) && doctorIds.length > 0) {
       const doctor = doctorMap.get(doctorIds[0]);
-      return doctor?.fullName ?? "Assigned";
+      return getFullNameFromObject(doctor) ?? "Assigned";
     }
     return "No doctor assigned";
   };
@@ -652,7 +653,7 @@ function ReceptionistScheduleComponent() {
                                   <option value="">Select doctor...</option>
                                   {doctors.map((doctor) => (
                                     <option key={doctor.id} value={doctor.id}>
-                                      {doctor.fullName || doctor.id}
+                                      {getFullNameFromObject(doctor) || doctor.id}
                                     </option>
                                   ))}
                                 </select>
@@ -767,7 +768,7 @@ function ReceptionistScheduleComponent() {
                                     <option value="">Assign doctor...</option>
                                     {doctors.map((doctor) => (
                                       <option key={doctor.id} value={doctor.id}>
-                                        {doctor.fullName || doctor.id}
+                                        {getFullNameFromObject(doctor) || doctor.id}
                                       </option>
                                     ))}
                                   </select>

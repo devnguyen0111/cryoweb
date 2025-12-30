@@ -28,7 +28,9 @@ import {
 import { getAppointmentStatusBadgeClass } from "@/utils/status-colors";
 import { DoctorAppointmentDetailModal } from "@/features/doctor/appointments/DoctorAppointmentDetailModal";
 import { Modal } from "@/components/ui/modal";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
+import { createEmptyPaginatedResponse } from "@/utils/api-helpers";
 
 const DEFAULT_SLOTS: (Slot & { notes?: string })[] = [
   {
@@ -141,19 +143,7 @@ function DoctorScheduleComponent() {
           return response;
         } catch (error: any) {
           if (isAxiosError(error) && error.response?.status === 404) {
-            return {
-              code: 200,
-              message: "",
-              data: [],
-              metaData: {
-                pageNumber: 1,
-                pageSize: 100,
-                totalCount: 0,
-                totalPages: 0,
-                hasPrevious: false,
-                hasNext: false,
-              },
-            };
+            return createEmptyPaginatedResponse<Appointment>(100);
           }
           return {
             code: 200,
@@ -1178,7 +1168,7 @@ function DoctorScheduleComponent() {
         >
           <DoctorCreateAppointmentForm
             doctorId={doctorId ?? ""}
-            doctorName={doctorProfile?.fullName}
+            doctorName={getFullNameFromObject(doctorProfile)}
             layout="modal"
             onClose={() => setIsCreateModalOpen(false)}
             onCreated={() => {

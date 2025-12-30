@@ -26,16 +26,15 @@ export class SampleApi {
     }
 
     const mapped: Record<string, unknown> = {
-      // New API format (priority)
       SampleType: params.SampleType ?? params.sampleType,
       Status: params.Status ?? params.status,
-      CanFrozen: params.CanFrozen ?? params.canFrozen,
+      CanFrozen: params.CanFrozen,
       SearchTerm: params.SearchTerm ?? params.searchTerm,
       PatientId: params.PatientId ?? params.patientId,
       Page: params.Page ?? params.pageNumber ?? (params as any).page,
       Size: params.Size ?? params.pageSize ?? (params as any).size,
-      Sort: params.Sort ?? params.sort ?? (params as any).sortBy,
-      Order: params.Order ?? params.order ?? (params as any).sortOrder,
+      Sort: params.Sort ?? (params as any).sortBy,
+      Order: params.Order ?? (params as any).sortOrder,
     };
 
     Object.keys(mapped).forEach((key) => {
@@ -81,26 +80,32 @@ export class SampleApi {
   ): Promise<BaseResponse<LabSample>> {
     // Map to query params format
     const queryParams: Record<string, any> = {};
-    
+
     // Map new API format
     if (data.PatientId) queryParams.PatientId = data.PatientId;
     if (data.Volume !== undefined) queryParams.Volume = data.Volume;
-    if (data.Concentration !== undefined) queryParams.Concentration = data.Concentration;
+    if (data.Concentration !== undefined)
+      queryParams.Concentration = data.Concentration;
     if (data.Motility !== undefined) queryParams.Motility = data.Motility;
-    if (data.ProgressiveMotility !== undefined) queryParams.ProgressiveMotility = data.ProgressiveMotility;
+    if (data.ProgressiveMotility !== undefined)
+      queryParams.ProgressiveMotility = data.ProgressiveMotility;
     if (data.Morphology !== undefined) queryParams.Morphology = data.Morphology;
     if (data.PH !== undefined) queryParams.PH = data.PH;
     if (data.Viscosity) queryParams.Viscosity = data.Viscosity;
     if (data.Liquefaction) queryParams.Liquefaction = data.Liquefaction;
     if (data.Color) queryParams.Color = data.Color;
-    if (data.TotalSpermCount !== undefined) queryParams.TotalSpermCount = data.TotalSpermCount;
+    if (data.TotalSpermCount !== undefined)
+      queryParams.TotalSpermCount = data.TotalSpermCount;
     if (data.Notes) queryParams.Notes = data.Notes;
     if (data.Quality) queryParams.Quality = data.Quality;
-    if (data.IsAvailable !== undefined) queryParams.IsAvailable = data.IsAvailable;
-    if (data.IsQualityCheck !== undefined) queryParams.IsQualityCheck = data.IsQualityCheck;
-    
+    if (data.IsAvailable !== undefined)
+      queryParams.IsAvailable = data.IsAvailable;
+    if (data.IsQualityCheck !== undefined)
+      queryParams.IsQualityCheck = data.IsQualityCheck;
+
     // Legacy support
-    if (data.patientId && !data.PatientId) queryParams.PatientId = data.patientId;
+    if (data.patientId && !data.PatientId)
+      queryParams.PatientId = data.patientId;
 
     const response = await this.client.post<BaseResponse<LabSample>>(
       "/labsample/sperm",
@@ -119,21 +124,26 @@ export class SampleApi {
   ): Promise<BaseResponse<LabSample>> {
     // Map to query params format
     const queryParams: Record<string, any> = {};
-    
+
     // Map new API format
     if (data.PatientId) queryParams.PatientId = data.PatientId;
     if (data.MaturityStage) queryParams.MaturityStage = data.MaturityStage;
     if (data.IsMature !== undefined) queryParams.IsMature = data.IsMature;
     if (data.CumulusCells) queryParams.CumulusCells = data.CumulusCells;
-    if (data.CytoplasmAppearance) queryParams.CytoplasmAppearance = data.CytoplasmAppearance;
-    if (data.IsVitrified !== undefined) queryParams.IsVitrified = data.IsVitrified;
+    if (data.CytoplasmAppearance)
+      queryParams.CytoplasmAppearance = data.CytoplasmAppearance;
+    if (data.IsVitrified !== undefined)
+      queryParams.IsVitrified = data.IsVitrified;
     if (data.Notes) queryParams.Notes = data.Notes;
     if (data.Quality) queryParams.Quality = data.Quality;
-    if (data.IsAvailable !== undefined) queryParams.IsAvailable = data.IsAvailable;
-    if (data.IsQualityCheck !== undefined) queryParams.IsQualityCheck = data.IsQualityCheck;
-    
+    if (data.IsAvailable !== undefined)
+      queryParams.IsAvailable = data.IsAvailable;
+    if (data.IsQualityCheck !== undefined)
+      queryParams.IsQualityCheck = data.IsQualityCheck;
+
     // Legacy support
-    if (data.patientId && !data.PatientId) queryParams.PatientId = data.patientId;
+    if (data.patientId && !data.PatientId)
+      queryParams.PatientId = data.patientId;
 
     const response = await this.client.post<BaseResponse<LabSample>>(
       "/labsample/oocyte",
@@ -152,26 +162,34 @@ export class SampleApi {
   ): Promise<BaseResponse<LabSample>> {
     // Map to query params format
     const queryParams: Record<string, any> = {};
-    
+
     // Map new API format
     if (data.PatientId) queryParams.PatientId = data.PatientId;
-    if (data.LabSampleOocyteId) queryParams.LabSampleOocyteId = data.LabSampleOocyteId;
-    if (data.LabSampleSpermId) queryParams.LabSampleSpermId = data.LabSampleSpermId;
-    if (data.DayOfDevelopment !== undefined) queryParams.DayOfDevelopment = data.DayOfDevelopment;
+    if (data.LabSampleOocyteId)
+      queryParams.LabSampleOocyteId = data.LabSampleOocyteId;
+    if (data.LabSampleSpermId)
+      queryParams.LabSampleSpermId = data.LabSampleSpermId;
+    if (data.DayOfDevelopment !== undefined)
+      queryParams.DayOfDevelopment = data.DayOfDevelopment;
     if (data.Grade) queryParams.Grade = data.Grade;
     if (data.CellCount !== undefined) queryParams.CellCount = data.CellCount;
     if (data.Morphology) queryParams.Morphology = data.Morphology;
     if (data.IsBiopsied !== undefined) queryParams.IsBiopsied = data.IsBiopsied;
-    if (data.IsPGTTested !== undefined) queryParams.IsPGTTested = data.IsPGTTested;
+    if (data.IsPGTTested !== undefined)
+      queryParams.IsPGTTested = data.IsPGTTested;
     if (data.PGTResult) queryParams.PGTResult = data.PGTResult;
-    if (data.FertilizationMethod) queryParams.FertilizationMethod = data.FertilizationMethod;
+    if (data.FertilizationMethod)
+      queryParams.FertilizationMethod = data.FertilizationMethod;
     if (data.Notes) queryParams.Notes = data.Notes;
     if (data.Quality) queryParams.Quality = data.Quality;
-    if (data.IsAvailable !== undefined) queryParams.IsAvailable = data.IsAvailable;
-    if (data.IsQualityCheck !== undefined) queryParams.IsQualityCheck = data.IsQualityCheck;
-    
+    if (data.IsAvailable !== undefined)
+      queryParams.IsAvailable = data.IsAvailable;
+    if (data.IsQualityCheck !== undefined)
+      queryParams.IsQualityCheck = data.IsQualityCheck;
+
     // Legacy support
-    if (data.patientId && !data.PatientId) queryParams.PatientId = data.patientId;
+    if (data.patientId && !data.PatientId)
+      queryParams.PatientId = data.patientId;
 
     const response = await this.client.post<BaseResponse<LabSample>>(
       "/labsample/embryo",
@@ -186,11 +204,15 @@ export class SampleApi {
    * POST /api/labsample
    */
   async createSample(
-    data: Partial<LabSample> | CreateLabSampleSpermRequest | CreateLabSampleOocyteRequest | CreateLabSampleEmbryoRequest
+    data:
+      | Partial<LabSample>
+      | CreateLabSampleSpermRequest
+      | CreateLabSampleOocyteRequest
+      | CreateLabSampleEmbryoRequest
   ): Promise<BaseResponse<LabSample>> {
     // Determine sample type and route to appropriate endpoint
     const sampleType = (data as any).sampleType || (data as any).SampleType;
-    
+
     if (sampleType === "Sperm") {
       return this.createSpermSample(data as CreateLabSampleSpermRequest);
     } else if (sampleType === "Oocyte") {
@@ -198,7 +220,7 @@ export class SampleApi {
     } else if (sampleType === "Embryo") {
       return this.createEmbryoSample(data as CreateLabSampleEmbryoRequest);
     }
-    
+
     // Fallback to old endpoint if type not specified
     const response = await this.client.post<BaseResponse<LabSample>>(
       "/labsample",
@@ -273,36 +295,58 @@ export class SampleApi {
    */
   async updateSample(
     id: string,
-    data: Partial<LabSample> | UpdateLabSampleSpermRequest | UpdateLabSampleOocyteRequest | UpdateLabSampleEmbryoRequest
+    data:
+      | Partial<LabSample>
+      | UpdateLabSampleSpermRequest
+      | UpdateLabSampleOocyteRequest
+      | UpdateLabSampleEmbryoRequest
   ): Promise<BaseResponse<LabSample>> {
     // Try to determine sample type from data or fetch sample first
     const sampleType = (data as any).sampleType;
-    
+
     // If sample type is in data, route to specific endpoint
-    if (sampleType === "Sperm" || (data as UpdateLabSampleSpermRequest).volume !== undefined) {
+    if (
+      sampleType === "Sperm" ||
+      (data as UpdateLabSampleSpermRequest).volume !== undefined
+    ) {
       return this.updateSpermSample(id, data as UpdateLabSampleSpermRequest);
-    } else if (sampleType === "Oocyte" || (data as UpdateLabSampleOocyteRequest).maturityStage !== undefined) {
+    } else if (
+      sampleType === "Oocyte" ||
+      (data as UpdateLabSampleOocyteRequest).maturityStage !== undefined
+    ) {
       return this.updateOocyteSample(id, data as UpdateLabSampleOocyteRequest);
-    } else if (sampleType === "Embryo" || (data as UpdateLabSampleEmbryoRequest).dayOfDevelopment !== undefined) {
+    } else if (
+      sampleType === "Embryo" ||
+      (data as UpdateLabSampleEmbryoRequest).dayOfDevelopment !== undefined
+    ) {
       return this.updateEmbryoSample(id, data as UpdateLabSampleEmbryoRequest);
     }
-    
+
     // Fallback: try to get sample first to determine type
     try {
       const sample = await this.getSampleById(id);
       if (sample.data) {
         if (sample.data.sampleType === "Sperm") {
-          return this.updateSpermSample(id, data as UpdateLabSampleSpermRequest);
+          return this.updateSpermSample(
+            id,
+            data as UpdateLabSampleSpermRequest
+          );
         } else if (sample.data.sampleType === "Oocyte") {
-          return this.updateOocyteSample(id, data as UpdateLabSampleOocyteRequest);
+          return this.updateOocyteSample(
+            id,
+            data as UpdateLabSampleOocyteRequest
+          );
         } else if (sample.data.sampleType === "Embryo") {
-          return this.updateEmbryoSample(id, data as UpdateLabSampleEmbryoRequest);
+          return this.updateEmbryoSample(
+            id,
+            data as UpdateLabSampleEmbryoRequest
+          );
         }
       }
     } catch {
       // If fetch fails, use generic endpoint
     }
-    
+
     // Fallback to generic endpoint
     const response = await this.client.put<BaseResponse<LabSample>>(
       `/labsample/${id}`,
@@ -316,7 +360,9 @@ export class SampleApi {
    * DELETE /api/labsample/{id}
    */
   async deleteSample(id: string): Promise<BaseResponse<void>> {
-    const response = await this.client.delete<BaseResponse<void>>(`/labsample/${id}`);
+    const response = await this.client.delete<BaseResponse<void>>(
+      `/labsample/${id}`
+    );
     return response.data;
   }
 
@@ -329,20 +375,23 @@ export class SampleApi {
   ): Promise<DynamicResponse<LabSampleDetailResponse>> {
     // Map parameters to API format
     const queryParams: Record<string, any> = {};
-    
+
     // Required parameter
     queryParams.SampleType = params.SampleType || params.sampleType;
-    
+
     // Optional parameters (new API format - priority)
     if (params.Status !== undefined) queryParams.Status = params.Status;
-    if (params.CanFrozen !== undefined) queryParams.CanFrozen = params.CanFrozen;
-    if (params.SearchTerm !== undefined) queryParams.SearchTerm = params.SearchTerm;
-    if (params.PatientId !== undefined) queryParams.PatientId = params.PatientId;
+    if (params.CanFrozen !== undefined)
+      queryParams.CanFrozen = params.CanFrozen;
+    if (params.SearchTerm !== undefined)
+      queryParams.SearchTerm = params.SearchTerm;
+    if (params.PatientId !== undefined)
+      queryParams.PatientId = params.PatientId;
     if (params.Page !== undefined) queryParams.Page = params.Page;
     if (params.Size !== undefined) queryParams.Size = params.Size;
     if (params.Sort !== undefined) queryParams.Sort = params.Sort;
     if (params.Order !== undefined) queryParams.Order = params.Order;
-    
+
     // Legacy parameters (fallback if new ones not provided)
     if (params.status !== undefined && params.Status === undefined) {
       queryParams.Status = params.status;
@@ -369,10 +418,9 @@ export class SampleApi {
       queryParams.Order = params.order;
     }
 
-    const response = await this.client.get<DynamicResponse<LabSampleDetailResponse>>(
-      "/labsample/all-detail",
-      { params: queryParams }
-    );
+    const response = await this.client.get<
+      DynamicResponse<LabSampleDetailResponse>
+    >("/labsample/all-detail", { params: queryParams });
     return response.data;
   }
 
@@ -388,6 +436,48 @@ export class SampleApi {
       `/labsample/fertilize/${id}`,
       { canFertilize }
     );
+    return response.data;
+  }
+
+  /**
+   * Get samples available for fertilization
+   * GET /api/labsample/fertilize
+   */
+  async getFertilizeSamples(params: {
+    PatientId: string;
+    SampleType?: "Oocyte" | "Sperm" | "Embryo";
+    SearchTerm?: string;
+    Page?: number;
+    Size?: number;
+    Sort?: string;
+    Order?: string;
+  }): Promise<DynamicResponse<LabSampleDetailResponse>> {
+    const queryParams: Record<string, any> = {
+      PatientId: params.PatientId,
+    };
+
+    if (params.SampleType !== undefined) {
+      queryParams.SampleType = params.SampleType;
+    }
+    if (params.SearchTerm !== undefined) {
+      queryParams.SearchTerm = params.SearchTerm;
+    }
+    if (params.Page !== undefined) {
+      queryParams.Page = params.Page;
+    }
+    if (params.Size !== undefined) {
+      queryParams.Size = params.Size;
+    }
+    if (params.Sort !== undefined) {
+      queryParams.Sort = params.Sort;
+    }
+    if (params.Order !== undefined) {
+      queryParams.Order = params.Order;
+    }
+
+    const response = await this.client.get<
+      DynamicResponse<LabSampleDetailResponse>
+    >("/labsample/fertilize", { params: queryParams });
     return response.data;
   }
 }

@@ -20,7 +20,7 @@ export class ServiceRequestApi {
   async getServiceRequests(
     params?: ServiceRequestListQuery
   ): Promise<DynamicResponse<ServiceRequest>> {
-    const { status, ...rest } = params ?? {};
+    const { status } = params ?? {};
     const Status = (params as any)?.Status;
 
     const statusValue = Status ?? status;
@@ -35,15 +35,19 @@ export class ServiceRequestApi {
         Size: params?.pageSize ?? (params as any)?.Size,
         PatientId: params?.patientId ?? (params as any)?.PatientId,
         AppointmentId: params?.appointmentId ?? (params as any)?.AppointmentId,
-        RequestDateFrom: params?.requestDateFrom ?? (params as any)?.RequestDateFrom,
+        RequestDateFrom:
+          params?.requestDateFrom ?? (params as any)?.RequestDateFrom,
         RequestDateTo: params?.requestDateTo ?? (params as any)?.RequestDateTo,
         MinAmount: params?.minAmount ?? (params as any)?.MinAmount,
         MaxAmount: params?.maxAmount ?? (params as any)?.MaxAmount,
-        SearchTerm: params?.searchTerm ?? (params as any)?.SearchTerm ?? (params as any)?.searchTerm,
+        SearchTerm:
+          params?.searchTerm ??
+          (params as any)?.SearchTerm ??
+          (params as any)?.searchTerm,
         Sort: params?.sort ?? (params as any)?.Sort,
         Order: params?.order ?? (params as any)?.Order,
       };
-      
+
       // Remove undefined values
       Object.keys(statusParams).forEach((key) => {
         if (statusParams[key] === undefined || statusParams[key] === null) {
@@ -65,11 +69,15 @@ export class ServiceRequestApi {
       Size: params?.pageSize ?? (params as any)?.Size,
       PatientId: params?.patientId ?? (params as any)?.PatientId,
       AppointmentId: params?.appointmentId ?? (params as any)?.AppointmentId,
-      RequestDateFrom: params?.requestDateFrom ?? (params as any)?.RequestDateFrom,
+      RequestDateFrom:
+        params?.requestDateFrom ?? (params as any)?.RequestDateFrom,
       RequestDateTo: params?.requestDateTo ?? (params as any)?.RequestDateTo,
       MinAmount: params?.minAmount ?? (params as any)?.MinAmount,
       MaxAmount: params?.maxAmount ?? (params as any)?.MaxAmount,
-      SearchTerm: params?.searchTerm ?? (params as any)?.SearchTerm ?? (params as any)?.searchTerm,
+      SearchTerm:
+        params?.searchTerm ??
+        (params as any)?.SearchTerm ??
+        (params as any)?.searchTerm,
       Sort: params?.sort ?? (params as any)?.Sort,
       Order: params?.order ?? (params as any)?.Order,
     };

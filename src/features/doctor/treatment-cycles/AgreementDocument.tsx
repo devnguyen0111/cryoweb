@@ -9,6 +9,8 @@ import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 interface AgreementDocumentProps {
   treatmentId: string;
@@ -58,14 +60,7 @@ export function AgreementDocument({
   });
 
   // Fetch patient details
-  const { data: patientDetails } = useQuery({
-    queryKey: ["patient-details", patientId],
-    queryFn: async () => {
-      const response = await api.patient.getPatientDetails(patientId);
-      return response.data;
-    },
-    enabled: !!patientId,
-  });
+  const { data: patientDetails } = usePatientDetails(patientId);
 
   // Fetch user details for patient
   const { data: userDetails } = useQuery({
@@ -80,10 +75,11 @@ export function AgreementDocument({
   // Get patient information
   const patientName =
     getFullNameFromObject(userDetails) ||
-    getFullNameFromObject(patientDetails?.accountInfo) ||
     getFullNameFromObject(patientDetails) ||
     userDetails?.userName ||
-    patientDetails?.accountInfo?.username ||
+    (isPatientDetailResponse(patientDetails)
+      ? patientDetails.accountInfo?.username
+      : null) ||
     "N/A";
   const patientCode = patientDetails?.patientCode || "N/A";
   const nationalId = patientDetails?.nationalId || "N/A";
@@ -101,18 +97,24 @@ export function AgreementDocument({
         : "Female"
       : "N/A");
   const phone =
-    patientDetails?.accountInfo?.phone ||
+    (isPatientDetailResponse(patientDetails)
+      ? patientDetails.accountInfo?.phone
+      : null) ||
     userDetails?.phone ||
     userDetails?.phoneNumber ||
     patientDetails?.phoneNumber ||
     "N/A";
   const email =
-    patientDetails?.accountInfo?.email ||
+    (isPatientDetailResponse(patientDetails)
+      ? patientDetails.accountInfo?.email
+      : null) ||
     userDetails?.email ||
     patientDetails?.email ||
     "N/A";
   const address =
-    patientDetails?.accountInfo?.address ||
+    (isPatientDetailResponse(patientDetails)
+      ? patientDetails.accountInfo?.address
+      : null) ||
     userDetails?.location ||
     patientDetails?.address ||
     "N/A";
@@ -121,7 +123,6 @@ export function AgreementDocument({
   const doctorName =
     getFullNameFromObject(doctorProfile) ||
     getFullNameFromObject(user) ||
-    doctorProfile?.userName ||
     user?.userName ||
     "N/A";
   const doctorCode = doctorProfile?.badgeId || "N/A";
@@ -178,10 +179,6 @@ export function AgreementDocument({
     cycleNumber?: number;
   }
 
-  interface StructuredNoteData {
-    phases?: StructuredPhase[];
-    [key: string]: unknown;
-  }
 
   const parsePhases = (): StructuredPhase[] => {
     if (!treatment?.notes) return [];

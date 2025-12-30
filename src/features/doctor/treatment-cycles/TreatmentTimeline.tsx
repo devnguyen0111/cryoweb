@@ -199,6 +199,52 @@ export function TreatmentTimeline({
     return new Set(completedSteps);
   }, [completedSteps]);
 
+  // Check if cycle status is Completed
+  const cycleStatus = useMemo(() => {
+    return normalizeTreatmentCycleStatus(cycle.status);
+  }, [cycle.status]);
+
+  // Check if all steps are completed
+  // All steps are completed if:
+  // 1. Cycle status is "Completed", OR
+  // 2. completedStepsSet has all steps, OR
+  // 3. completedStepsSet has steps.length - 1 steps and currentStep is the last step
+  const allStepsCompleted = useMemo(() => {
+    if (cycleStatus === "Completed") {
+      return true;
+    }
+    if (completedStepsSet.size === steps.length) {
+      return true;
+    }
+    // If we have all steps except one, and currentStep is the last step, consider all completed
+    if (
+      completedStepsSet.size === steps.length - 1 &&
+      currentStepIndex === steps.length - 1
+    ) {
+      return true;
+    }
+    return false;
+  }, [
+    cycleStatus,
+    completedStepsSet.size,
+    steps.length,
+    currentStepIndex,
+  ]);
+
+  // If all steps are completed, mark all steps as completed
+  const finalCompletedStepsSet = useMemo(() => {
+    if (allStepsCompleted) {
+      // Mark all steps as completed
+      return new Set(steps.map((step) => step.id));
+    }
+    const finalSet = new Set(completedStepsSet);
+    if (currentStep) {
+      // Don't add currentStep to completed if not all steps are completed
+      // Only add if it's already in completedSteps or if all are completed
+    }
+    return finalSet;
+  }, [allStepsCompleted, currentStep, completedStepsSet, steps]);
+
   if (!isIVF && !isIUI) {
     return (
       <div className={cn("text-sm text-gray-500", className)}>
@@ -216,8 +262,8 @@ export function TreatmentTimeline({
         {/* Steps */}
         <div className="relative space-y-6">
           {steps.map((step, index) => {
-            const isCompleted = completedStepsSet.has(step.id);
-            const isCurrent = currentStep === step.id;
+            const isCompleted = finalCompletedStepsSet.has(step.id);
+            const isCurrent = currentStep === step.id && !allStepsCompleted;
             const isPast = currentStepIndex > index;
 
             return (
@@ -309,31 +355,25 @@ export function TreatmentTimeline({
       <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-600">
-            Progress: {completedStepsSet.size}/{steps.length} steps
+            Current Treatment Progress: {finalCompletedStepsSet.size}/{steps.length}
           </span>
           <span
             className={cn(
               "font-semibold",
-              (() => {
-                const status = normalizeTreatmentCycleStatus(cycle.status);
-                return status === "Completed"
-                  ? "text-green-600"
-                  : status === "InProgress"
-                    ? "text-primary"
-                    : "text-gray-500";
-              })()
+              cycleStatus === "Completed"
+                ? "text-green-600"
+                : cycleStatus === "InProgress"
+                  ? "text-primary"
+                  : "text-gray-500"
             )}
           >
-            {(() => {
-              const status = normalizeTreatmentCycleStatus(cycle.status);
-              return status === "Completed"
-                ? "Completed"
-                : status === "InProgress"
-                  ? "In Progress"
-                  : status === "Cancelled"
-                    ? "Cancelled"
-                    : "Planned";
-            })()}
+            {cycleStatus === "Completed"
+              ? "Completed"
+              : cycleStatus === "InProgress"
+                ? "In Progress"
+                : cycleStatus === "Cancelled"
+                  ? "Cancelled"
+                  : "Planned"}
           </span>
         </div>
       </div>

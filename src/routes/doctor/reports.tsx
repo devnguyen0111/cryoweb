@@ -12,6 +12,8 @@ import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/utils/cn";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
+import { getFullNameFromObject } from "@/utils/name-helpers";
+import { fetchWith404Fallback } from "@/utils/api-helpers";
 
 export const Route = createFileRoute("/doctor/reports")({
   component: DoctorReportsComponent,
@@ -79,22 +81,17 @@ function DoctorReportsComponent() {
     queryKey: ["doctor", "reports", "treatment-cycles", "in-progress"],
     retry: false,
     queryFn: async () => {
-      try {
-        const response = await api.treatmentCycle.getTreatmentCycles({
+      const response = await fetchWith404Fallback(() =>
+        api.treatmentCycle.getTreatmentCycles({
           status: "InProgress",
           pageNumber: 1,
           pageSize: 1,
-        });
-        return {
-          data: response.data,
-          metaData: { totalCount: response.metaData.totalCount },
-        };
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return { data: [], metaData: { totalCount: 0 } } as any;
-        }
-        throw error;
-      }
+        })
+      );
+      return {
+        data: response.data,
+        metaData: { totalCount: response.metaData.totalCount },
+      };
     },
   });
 
@@ -102,22 +99,17 @@ function DoctorReportsComponent() {
     queryKey: ["doctor", "reports", "treatment-cycles", "completed"],
     retry: false,
     queryFn: async () => {
-      try {
-        const response = await api.treatmentCycle.getTreatmentCycles({
+      const response = await fetchWith404Fallback(() =>
+        api.treatmentCycle.getTreatmentCycles({
           status: "Completed",
           pageNumber: 1,
           pageSize: 1,
-        });
-        return {
-          data: response.data,
-          metaData: { totalCount: response.metaData.totalCount },
-        };
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return { data: [], metaData: { totalCount: 0 } } as any;
-        }
-        throw error;
-      }
+        })
+      );
+      return {
+        data: response.data,
+        metaData: { totalCount: response.metaData.totalCount },
+      };
     },
   });
 
@@ -422,7 +414,7 @@ function DoctorReportsComponent() {
               <CardTitle>Notes</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-gray-600">
-              <p>- This report only includes data for Dr. {user?.fullName}.</p>
+              <p>- This report only includes data for Dr. {getFullNameFromObject(user) || "Unknown"}.</p>
               <p>
                 - Success metrics are aggregated from treatment and lab systems.
               </p>

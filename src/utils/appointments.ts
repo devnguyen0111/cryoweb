@@ -1,4 +1,4 @@
-import type { AppointmentStatus } from "@/api/types";
+import type { AppointmentStatus, Appointment } from "@/api/types";
 
 const STATUS_NORMALIZATION_MAP: Record<string, AppointmentStatus> = {
   scheduled: "Scheduled",
@@ -51,3 +51,19 @@ export const ensureAppointmentStatus = (
   return normalizeAppointmentStatus(value) ?? "Scheduled";
 };
 
+/**
+ * Extracts patient ID from appointment object
+ * Handles multiple field name variations for backward compatibility
+ * @param apt - Appointment object
+ * @returns Patient ID string or null if not found
+ */
+export function getAppointmentPatientId(apt: Appointment): string | null {
+  const raw = apt as unknown as Record<string, any>;
+  return (
+    (apt.patientId || raw.patientId || raw.PatientID) ??
+    raw.patient?.id ??
+    raw.patient?.accountId ??
+    raw.PatientAccountID ??
+    null
+  );
+}

@@ -55,6 +55,9 @@ import { FertilizationModal } from "@/features/doctor/fertilization/Fertilizatio
 import { Modal } from "@/components/ui/modal";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { formatDateForInput } from "@/utils/date-helpers";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 // Component to display prescription with full details
 function PrescriptionCard({
@@ -205,11 +208,6 @@ interface CycleUpdateModalProps {
   onClose: () => void;
 }
 
-type UpdateRecordFormData = {
-  outcome: string;
-  notes: string;
-};
-
 type PrescriptionFormData = {
   medicalRecordId: string;
   diagnosis: string;
@@ -241,7 +239,6 @@ export function CycleUpdateModal({
 }: CycleUpdateModalProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("assessment");
   const [prescriptionViewMode, setPrescriptionViewMode] = useState<
     "create" | "view"
@@ -279,7 +276,7 @@ export function CycleUpdateModal({
       return response.data;
     },
     enabled: isOpen && !!cycle.id,
-    staleTime: 0,
+    staleTime: 30000, // Cache for 30 seconds to reduce unnecessary refetches
   });
 
   const rawCurrentCycle = cycleDetails || cycle;
@@ -413,28 +410,6 @@ export function CycleUpdateModal({
     enabled: !!doctorId && isOpen,
   });
 
-  // Parse outcome and notes
-  const parseCycleData = useMemo(() => {
-    const notes = currentCycle.notes || "";
-    let outcome = "";
-    let cleanNotes = notes;
-
-    const outcomeMatch = notes.match(/^Outcome:\s*(.+?)(?:\n\n|\n|$)/i);
-    if (outcomeMatch) {
-      outcome = outcomeMatch[1].trim();
-      cleanNotes = notes.replace(/^Outcome:\s*.+?(\n\n|\n|$)/i, "").trim();
-    }
-
-    return { outcome, notes: cleanNotes };
-  }, [currentCycle.notes]);
-
-  const form = useForm<UpdateRecordFormData>({
-    defaultValues: {
-      outcome: parseCycleData.outcome,
-      notes: parseCycleData.notes,
-    },
-  });
-
   // Prescription Form
   const prescriptionForm = useForm<PrescriptionFormData>({
     defaultValues: {
@@ -464,17 +439,10 @@ export function CycleUpdateModal({
   });
 
   // Get patient details
-  const { data: patientData } = useQuery({
-    queryKey: ["patient", currentCycle.patientId],
-    queryFn: async () => {
-      if (!currentCycle.patientId) return null;
-      const response = await api.patient.getPatientDetails(
-        currentCycle.patientId
-      );
-      return response.data;
-    },
-    enabled: !!currentCycle.patientId && isOpen,
-  });
+  const { data: patientData } = usePatientDetails(
+    currentCycle.patientId,
+    !!currentCycle.patientId && isOpen
+  );
 
   // Get user details for patient (has fullName, dob, etc.)
   const accountId = patientData?.accountId || currentCycle.patientId;
@@ -542,14 +510,6 @@ export function CycleUpdateModal({
       treatmentData?.treatmentType === "IVF"
     );
   }, [currentCycle.treatmentType, treatmentData?.treatmentType]);
-
-  // Note: isIUICycle is available if needed for future IUI-specific logic
-  // const isIUICycle = useMemo(() => {
-  //   return (
-  //     currentCycle.treatmentType === "IUI" ||
-  //     treatmentData?.treatmentType === "IUI"
-  //   );
-  // }, [currentCycle.treatmentType, treatmentData?.treatmentType]);
 
   // Fetch ALL sperm samples of patient that have been quality checked (for validation)
   // Fetch relationships to get partner patient ID for sperm samples (IVF only)
@@ -678,7 +638,7 @@ export function CycleUpdateModal({
       isOpen &&
       (isIVFCycle ? !!partnerPatientId : true) && // For IVF, need partner; for IUI, just need patient
       (!isIVFCycle || !!relationshipsResponse), // For IVF, wait for relationships
-    staleTime: 0, // Always fetch fresh data
+    staleTime: 30000, // Cache for 30 seconds to reduce unnecessary refetches
   });
 
   // Fetch ALL oocyte samples of patient that have been quality checked (for validation and display)
@@ -739,43 +699,31 @@ export function CycleUpdateModal({
         }
       },
       enabled: !!currentCycle.patientId && isOpen,
-      staleTime: 0, // Always fetch fresh data
+      staleTime: 30000, // Cache for 30 seconds to reduce unnecessary refetches
     }
   );
 
   // For display in tabs, also fetch samples for current cycle (not filtered by quality check)
   const { data: cycleSpermSamplesData } = useQuery({
-    queryKey: [
-      "sperm-samples",
-      "cycle",
-      currentCycle.id,
-      currentCycle.patientId,
-    ],
+    queryKey: ["cycle-samples", "sperm", currentCycle.id],
     queryFn: async () => {
-      if (!currentCycle.patientId) return { data: [] };
+      if (!currentCycle.id) return { data: [] };
       try {
-        const response = await api.sample.getAllDetailSamples({
-          SampleType: "Sperm",
-          PatientId: currentCycle.patientId,
-          Page: 1,
-          Size: 100,
-          Sort: "collectionDate",
-          Order: "desc",
-        });
-        const samples = response.data || [];
-        return {
-          data: samples.filter(
-            (sample) =>
-              !sample.treatmentCycleId ||
-              sample.treatmentCycleId === currentCycle.id
-          ),
-        };
+        const response = await api.treatmentCycle.getCycleSamples(
+          currentCycle.id
+        );
+        const allSamples = response.data || [];
+        // Filter to only sperm samples
+        const spermSamples = allSamples.filter(
+          (sample) => sample.sampleType === "Sperm"
+        );
+        return { data: spermSamples };
       } catch (error) {
         console.error("Error fetching cycle sperm samples:", error);
         return { data: [] };
       }
     },
-    enabled: !!currentCycle.patientId && isOpen && activeTab === "sperm",
+    enabled: !!currentCycle.id && isOpen && activeTab === "sperm",
   });
 
   const { data: cycleOocyteSamplesData } = useQuery({
@@ -1060,42 +1008,42 @@ export function CycleUpdateModal({
   }, [assessmentRecord]);
 
   // Update mutation
-  const updateMutation = useMutation({
-    mutationFn: async (data: UpdateRecordFormData) => {
-      let combinedNotes = "";
-      if (data.outcome) {
-        combinedNotes = `Outcome: ${data.outcome}`;
-        if (data.notes) {
-          combinedNotes += `\n\n${data.notes}`;
-        }
-      } else if (data.notes) {
-        combinedNotes = data.notes;
-      }
+  // const updateMutation = useMutation({
+  //   mutationFn: async (data: UpdateRecordFormData) => {
+  //     let combinedNotes = "";
+  //     if (data.outcome) {
+  //       combinedNotes = `Outcome: ${data.outcome}`;
+  //       if (data.notes) {
+  //         combinedNotes += `\n\n${data.notes}`;
+  //       }
+  //     } else if (data.notes) {
+  //       combinedNotes = data.notes;
+  //     }
 
-      const response = await api.treatmentCycle.updateTreatmentCycle(
-        currentCycle.id,
-        {
-          notes: combinedNotes || undefined,
-        }
-      );
-      return response.data;
-    },
-    onSuccess: () => {
-      toast.success("Treatment record updated successfully");
-      queryClient.invalidateQueries({
-        queryKey: ["doctor", "treatment-cycles"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["doctor", "treatment-cycle", cycle.id],
-      });
-      onClose();
-    },
-    onError: (error: any) => {
-      toast.error(
-        error?.response?.data?.message || "Failed to update treatment record"
-      );
-    },
-  });
+  //     const response = await api.treatmentCycle.updateTreatmentCycle(
+  //       currentCycle.id,
+  //       {
+  //         notes: combinedNotes || undefined,
+  //       }
+  //     );
+  //     return response.data;
+  //   },
+  //   onSuccess: () => {
+  //     toast.success("Treatment record updated successfully");
+  //     queryClient.invalidateQueries({
+  //       queryKey: ["doctor", "treatment-cycles"],
+  //     });
+  //     queryClient.invalidateQueries({
+  //       queryKey: ["doctor", "treatment-cycle", cycle.id],
+  //     });
+  //     onClose();
+  //   },
+  //   onError: (error: any) => {
+  //     toast.error(
+  //       error?.response?.data?.message || "Failed to update treatment record"
+  //     );
+  //   },
+  // });
 
   // Fetch medicines for prescription
   const { data: medicinesData } = useQuery<PaginatedResponse<Medicine>>({
@@ -1192,16 +1140,6 @@ export function CycleUpdateModal({
       );
     },
   });
-
-  // Note: onSubmit handler available if form submission is needed
-  // const onSubmit = form.handleSubmit(async (data) => {
-  //   setIsSubmitting(true);
-  //   try {
-  //     await updateMutation.mutateAsync(data);
-  //   } finally {
-  //     setIsSubmitting(false);
-  //   }
-  // });
 
   // Check cycle status
   const cycleStatus = normalizeTreatmentCycleStatus(currentCycle.status);
@@ -1746,7 +1684,9 @@ export function CycleUpdateModal({
     getFullNameFromObject(userDetails) ||
     getFullNameFromObject(patientData) ||
     userDetails?.userName ||
-    patientData?.accountInfo?.username ||
+    (isPatientDetailResponse(patientData)
+      ? patientData.accountInfo?.username
+      : null) ||
     "Unknown Patient";
   const patientCode = patientData?.patientCode || "";
 
@@ -1769,7 +1709,11 @@ export function CycleUpdateModal({
   const patientAge = calculateAge(userDetails?.dob || patientData?.dateOfBirth);
 
   const patientPhone =
-    patientData?.accountInfo?.phone || patientData?.phoneNumber || null;
+    (isPatientDetailResponse(patientData)
+      ? patientData.accountInfo?.phone
+      : null) ||
+    patientData?.phoneNumber ||
+    null;
   const formattedPhone = patientPhone
     ? patientPhone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
     : null;
@@ -1835,15 +1779,12 @@ export function CycleUpdateModal({
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Button size="sm" className="gap-2">
-                Update Record
-              </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
                 className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700"
-                disabled={isSubmitting}
+                disabled={false}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -3158,7 +3099,6 @@ export function CycleUpdateModal({
                             <th className="text-left p-3">Sample Code</th>
                             <th className="text-left p-3">Collection Date</th>
                             <th className="text-left p-3">Status</th>
-                            <th className="text-left p-3">Quantity</th>
                             <th className="text-left p-3">Maturity Stage</th>
                             <th className="text-left p-3">Is Mature</th>
                             <th className="text-left p-3">Quality</th>
@@ -3194,12 +3134,6 @@ export function CycleUpdateModal({
                                   >
                                     {sample.status}
                                   </Badge>
-                                </td>
-                                <td className="p-3 text-sm">
-                                  {sample.oocyte?.quantity !== undefined &&
-                                  sample.oocyte.quantity !== null
-                                    ? sample.oocyte.quantity
-                                    : "—"}
                                 </td>
                                 <td className="p-3 text-sm">
                                   {sample.oocyte?.maturityStage || "—"}
@@ -3741,7 +3675,7 @@ export function CycleUpdateModal({
             layout="modal"
             defaultPatientId={currentCycle.patientId}
             disablePatientSelection={true}
-            defaultAppointmentDate={new Date().toISOString().split("T")[0]}
+            defaultAppointmentDate={formatDateForInput(new Date())}
             defaultAppointmentType="Consultation"
             treatmentCycleId={currentCycle.id}
             onClose={() => setShowCreateAppointmentModal(false)}

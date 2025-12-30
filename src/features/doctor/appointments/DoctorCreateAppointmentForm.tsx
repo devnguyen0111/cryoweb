@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 // Default slots - 4 fixed slots (2 morning, 2 afternoon) - same as in doctor schedule
 const DEFAULT_SLOTS: (Slot & { notes?: string })[] = [
@@ -134,10 +136,8 @@ export function DoctorCreateAppointmentForm({
       if (doctor.account?.firstName && doctor.account?.lastName) {
         return `${doctor.account.firstName} ${doctor.account.lastName}`.trim();
       }
-      // Fallback to fullName if account doesn't have firstName/lastName
-      if (doctor.fullName) {
-        return doctor.fullName;
-      }
+      // Fallback to getFullNameFromObject
+      return getFullNameFromObject(doctor) || undefined;
     }
 
     return null;
@@ -181,21 +181,10 @@ export function DoctorCreateAppointmentForm({
   const patients = patientsData?.data ?? [];
 
   // Fetch patient details when patient is locked (from treatment cycle)
-  const { data: lockedPatientDetails } = useQuery({
-    queryKey: ["patient-details", formState.patientId],
-    queryFn: async () => {
-      if (!formState.patientId) return null;
-      try {
-        const response = await api.patient.getPatientDetails(
-          formState.patientId
-        );
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
-    enabled: disablePatientSelection && !!formState.patientId,
-  });
+  const { data: lockedPatientDetails } = usePatientDetails(
+    formState.patientId,
+    disablePatientSelection && !!formState.patientId
+  );
 
   const { data: lockedUserDetails } = useQuery({
     queryKey: ["user-details", formState.patientId],
@@ -214,10 +203,11 @@ export function DoctorCreateAppointmentForm({
   // Get locked patient display info - use same logic as AgreementDocument
   const lockedPatientName =
     getFullNameFromObject(lockedUserDetails) ||
-    getFullNameFromObject(lockedPatientDetails?.accountInfo) ||
     getFullNameFromObject(lockedPatientDetails) ||
     lockedUserDetails?.userName ||
-    lockedPatientDetails?.accountInfo?.username ||
+    (isPatientDetailResponse(lockedPatientDetails)
+      ? lockedPatientDetails.accountInfo?.username
+      : null) ||
     "Unknown";
   const lockedPatientCode = lockedPatientDetails?.patientCode;
 
@@ -243,7 +233,7 @@ export function DoctorCreateAppointmentForm({
   // Following the same logic as doctor schedule dashboard
   const { data: appointmentsData, isFetching: isLoadingAppointments } =
     useQuery<PaginatedResponse<Appointment>>({
-      queryKey: ["doctor", "appointments", doctorId, formState.appointmentDate],
+      queryKey: ["appointments", "doctor", doctorId, formState.appointmentDate],
       enabled: Boolean(doctorId && formState.appointmentDate && !isWeekend),
       retry: false,
       queryFn: async (): Promise<PaginatedResponse<Appointment>> => {
@@ -511,7 +501,7 @@ export function DoctorCreateAppointmentForm({
           ],
         });
       }
-      
+
       // Send notification to patient
       if (appointment?.patientId && appointment?.id) {
         const { sendAppointmentNotification } = await import(
@@ -523,13 +513,14 @@ export function DoctorCreateAppointmentForm({
           {
             appointmentId: appointment.id,
             appointmentDate: appointment.appointmentDate,
-            appointmentType: appointment.appointmentType || (appointment as any).type,
-            doctorName: displayDoctorName,
+            appointmentType:
+              appointment.appointmentType || (appointment as any).type,
+            doctorName: displayDoctorName || undefined,
           },
           doctorId
         );
       }
-      
+
       if (appointment?.id) {
         onCreated?.(appointment.id);
       }
@@ -737,7 +728,9 @@ export function DoctorCreateAppointmentForm({
                     <option value="">Select patient</option>
                     {patients.map((patient) => (
                       <option key={patient.id} value={patient.id}>
-                        {patient.fullName || patient.patientCode || patient.id}
+                        {getFullNameFromObject(patient) ||
+                          patient.patientCode ||
+                          patient.id}
                       </option>
                     ))}
                   </select>

@@ -20,6 +20,9 @@ import type {
 } from "@/api/types";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { queryKeys } from "@/utils/query-keys";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 type MedicalRecordFormValues = {
   patientId: string;
@@ -86,7 +89,7 @@ export function CreateMedicalRecordForm({
 
   // Search patients
   const { data: patientsData } = useQuery({
-    queryKey: ["patients", "search", patientSearch],
+    queryKey: queryKeys.patients.search(patientSearch),
     queryFn: async () => {
       if (!patientSearch || patientSearch.length < 2) return { data: [] };
       return await api.patient.getPatients({
@@ -100,20 +103,7 @@ export function CreateMedicalRecordForm({
   const patients = patientsData?.data ?? [];
 
   // Get patient details - also fetch if defaultPatientId is provided
-  const { data: selectedPatient } = useQuery({
-    queryKey: ["patient-details", effectivePatientId],
-    queryFn: async () => {
-      if (!effectivePatientId) return null;
-      try {
-        const response =
-          await api.patient.getPatientDetails(effectivePatientId);
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!effectivePatientId,
-  });
+  const { data: selectedPatient } = usePatientDetails(effectivePatientId);
 
   // Fetch user details for patient (same as AgreementDocument)
   const { data: userDetails } = useQuery({
@@ -137,7 +127,9 @@ export function CreateMedicalRecordForm({
       getFullNameFromObject(userDetails) ||
       getFullNameFromObject(selectedPatient) ||
       userDetails?.userName ||
-      selectedPatient?.accountInfo?.username ||
+      (isPatientDetailResponse(selectedPatient)
+        ? selectedPatient.accountInfo?.username
+        : null) ||
       selectedPatient?.patientCode ||
       "N/A"
     );

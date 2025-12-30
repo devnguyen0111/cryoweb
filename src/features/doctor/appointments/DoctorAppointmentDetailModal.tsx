@@ -26,6 +26,8 @@ import {
   getAppointmentStatusBadgeClass,
   getTreatmentCycleStatusBadgeClass,
 } from "@/utils/status-colors";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 interface DoctorAppointmentDetailModalProps {
   appointmentId: string | null;
@@ -277,24 +279,7 @@ export function DoctorAppointmentDetailModal({
     isFetching: detailsFetching,
     isError: patientError,
     error: patientErrorData,
-  } = useQuery<PatientDetailResponse | null>({
-    enabled: isOpen && Boolean(patientId),
-    queryKey: ["doctor", "patients", patientId, "appointment-modal-details"],
-    retry: false,
-    queryFn: async () => {
-      if (!patientId) return null;
-      try {
-        const response = await api.patient.getPatientDetails(patientId);
-        return response.data ?? null;
-      } catch (error) {
-        console.error("Failed to fetch patient details:", error);
-        if (isAxiosError(error) && error.response?.status === 404) {
-          return null;
-        }
-        throw error;
-      }
-    },
-  });
+  } = usePatientDetails(patientId, isOpen && Boolean(patientId));
 
   const patient = useMemo(() => {
     if (!userDetails && !patientDetails) {
@@ -326,13 +311,20 @@ export function DoctorAppointmentDetailModal({
       gender: gender,
       age: age,
       phoneNumber:
-        patientDetails?.accountInfo?.phone ||
+        (isPatientDetailResponse(patientDetails)
+          ? patientDetails.accountInfo?.phone
+          : null) ||
         userDetails?.phone ||
         userDetails?.phoneNumber ||
         null,
-      email: patientDetails?.accountInfo?.email || userDetails?.email || null,
+      email:
+        (isPatientDetailResponse(patientDetails)
+          ? patientDetails.accountInfo?.email
+          : null) || userDetails?.email || null,
       address:
-        patientDetails?.accountInfo?.address || userDetails?.location || null,
+        (isPatientDetailResponse(patientDetails)
+          ? patientDetails.accountInfo?.address
+          : null) || userDetails?.location || null,
     } as PatientDetailResponse & { age?: number | null };
 
     console.log("Merged patient:", merged);

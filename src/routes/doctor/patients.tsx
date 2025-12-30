@@ -13,7 +13,6 @@ import type {
   PaginatedResponse,
   TreatmentCycle,
   UserDetailResponse,
-  PatientDetailResponse,
   Relationship,
 } from "@/api/types";
 import { normalizeTreatmentCycleStatus } from "@/api/types";
@@ -25,6 +24,7 @@ import {
 } from "@/utils/patient-helpers";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
 
 const emptyCycleResponse: PaginatedResponse<TreatmentCycle> = {
   code: 200,
@@ -261,37 +261,13 @@ function DoctorPatientsComponent() {
   // Fetch full patient details for selected patient
   const {
     data: selectedPatientDetails,
-    isLoading: selectedPatientDetailsLoading,
-  } = useQuery<PatientDetailResponse | null>({
-    enabled: Boolean(selectedPatientId),
-    queryKey: ["doctor", "patients", selectedPatientId, "details"],
-    retry: false,
-    queryFn: async () => {
-      if (!selectedPatientId) return null;
-      try {
-        const response = await api.patient.getPatientById(selectedPatientId);
-        return response.data ?? null;
-      } catch (err) {
-        if (isAxiosError(err)) {
-          if (err.response?.status === 403) {
-            const fallback = await api.patient.getPatientDetails(
-              selectedPatientId
-            );
-            return fallback.data ?? null;
-          }
-          if (err.response?.status === 404) {
-            return null;
-          }
-        }
-        return null;
-      }
-    },
-  });
+    // isLoading: selectedPatientDetailsLoading,
+  } = usePatientDetails(selectedPatientId, Boolean(selectedPatientId));
 
   // Fetch relationships for partner information
   const {
     data: relationshipsResponse,
-    isLoading: relationshipsLoading,
+    // isLoading: relationshipsLoading,
   } = useQuery({
     enabled: Boolean(selectedPatientId),
     queryKey: ["doctor", "patients", selectedPatientId, "relationships"],
@@ -775,7 +751,7 @@ function DoctorPatientsComponent() {
                           (isPatientDetailResponse(selectedPatient)
                             ? (selectedPatient as any).accountInfo?.username
                             : null) ||
-                          selectedPatient.fullName ||
+                          getFullNameFromObject(selectedPatient) ||
                           selectedPatient.patientCode ||
                           "Unnamed patient"}
                       </h2>
@@ -815,7 +791,9 @@ function DoctorPatientsComponent() {
                           </p>
                           <p>
                             <span className="font-medium">Occupation:</span>{" "}
-                            {selectedPatientDetails?.occupation || "Not provided"}
+                            {isPatientDetailResponse(selectedPatientDetails)
+                              ? selectedPatientDetails.occupation || "Not provided"
+                              : "Not provided"}
                           </p>
                         </div>
                         <div>
@@ -825,24 +803,27 @@ function DoctorPatientsComponent() {
                               selectedPatient.bloodType ||
                               "Not recorded"}
                           </p>
-                          {selectedPatientDetails?.height && (
-                            <p>
-                              <span className="font-medium">Height:</span>{" "}
-                              {selectedPatientDetails.height} cm
-                            </p>
-                          )}
-                          {selectedPatientDetails?.weight && (
-                            <p>
-                              <span className="font-medium">Weight:</span>{" "}
-                              {selectedPatientDetails.weight} kg
-                            </p>
-                          )}
-                          {selectedPatientDetails?.bmi && (
-                            <p>
-                              <span className="font-medium">BMI:</span>{" "}
-                              {selectedPatientDetails.bmi.toFixed(1)}
-                            </p>
-                          )}
+                          {isPatientDetailResponse(selectedPatientDetails) &&
+                            selectedPatientDetails.height && (
+                              <p>
+                                <span className="font-medium">Height:</span>{" "}
+                                {selectedPatientDetails.height} cm
+                              </p>
+                            )}
+                          {isPatientDetailResponse(selectedPatientDetails) &&
+                            selectedPatientDetails.weight && (
+                              <p>
+                                <span className="font-medium">Weight:</span>{" "}
+                                {selectedPatientDetails.weight} kg
+                              </p>
+                            )}
+                          {isPatientDetailResponse(selectedPatientDetails) &&
+                            selectedPatientDetails.bmi && (
+                              <p>
+                                <span className="font-medium">BMI:</span>{" "}
+                                {selectedPatientDetails.bmi.toFixed(1)}
+                              </p>
+                            )}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2 text-xs font-medium">
@@ -884,30 +865,32 @@ function DoctorPatientsComponent() {
                         <div>
                           <p className="text-gray-500">Email</p>
                           <p>
-                            {selectedPatientDetails?.accountInfo?.email ||
-                              (isPatientDetailResponse(selectedPatient)
-                                ? (selectedPatient as any).accountInfo?.email
-                                : null) ||
-                              selectedPatient.email ||
+                            {(isPatientDetailResponse(selectedPatientDetails)
+                              ? selectedPatientDetails.accountInfo?.email
+                              : null) ||
+                              selectedPatient?.email ||
                               "Not provided"}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Phone</p>
                           <p>
-                            {selectedPatientDetails?.accountInfo?.phone ||
-                              (isPatientDetailResponse(selectedPatient)
-                                ? (selectedPatient as any).accountInfo?.phone
-                                : null) ||
-                              selectedPatient.phoneNumber ||
+                            {(isPatientDetailResponse(selectedPatientDetails)
+                              ? selectedPatientDetails.accountInfo?.phone
+                              : null) ||
+                              selectedPatient?.phoneNumber ||
                               "Not provided"}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Address</p>
                           <p>
-                            {selectedPatientDetails?.accountInfo?.address ||
-                              selectedPatientDetails?.address ||
+                            {(isPatientDetailResponse(selectedPatientDetails)
+                              ? selectedPatientDetails.accountInfo?.address
+                              : null) ||
+                              (isPatientDetailResponse(selectedPatientDetails)
+                                ? selectedPatientDetails.address
+                                : null) ||
                               selectedPatient.address ||
                               "Not provided"}
                           </p>
@@ -915,7 +898,9 @@ function DoctorPatientsComponent() {
                         <div>
                           <p className="text-gray-500">Insurance</p>
                           <p>
-                            {selectedPatientDetails?.insurance ||
+                            {(isPatientDetailResponse(selectedPatientDetails)
+                              ? selectedPatientDetails.insurance
+                              : null) ||
                               getPatientProperty(
                                 selectedPatient,
                                 "insurance",
@@ -926,7 +911,9 @@ function DoctorPatientsComponent() {
                         <div>
                           <p className="text-gray-500">Emergency contact</p>
                           <p>
-                            {selectedPatientDetails?.emergencyContact ||
+                            {(isPatientDetailResponse(selectedPatientDetails)
+                              ? selectedPatientDetails.emergencyContact
+                              : null) ||
                               getPatientProperty(
                                 selectedPatient,
                                 "emergencyContact",
@@ -934,7 +921,9 @@ function DoctorPatientsComponent() {
                               )}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {selectedPatientDetails?.emergencyPhone ||
+                            {(isPatientDetailResponse(selectedPatientDetails)
+                              ? selectedPatientDetails.emergencyPhone
+                              : null) ||
                               getPatientProperty(
                                 selectedPatient,
                                 "emergencyPhone",
@@ -945,32 +934,33 @@ function DoctorPatientsComponent() {
                       </div>
                     </section>
 
-                    {(selectedPatientDetails?.medicalHistory ||
-                      selectedPatientDetails?.allergies) && (
-                      <section className="space-y-3 text-sm text-gray-700">
-                        <p className="text-sm font-semibold text-gray-900">
-                          Medical information
-                        </p>
-                        <div className="grid gap-2">
-                          {selectedPatientDetails?.medicalHistory && (
-                            <div>
-                              <p className="text-gray-500">Medical history</p>
-                              <p className="whitespace-pre-wrap">
-                                {selectedPatientDetails.medicalHistory}
-                              </p>
-                            </div>
-                          )}
-                          {selectedPatientDetails?.allergies && (
-                            <div>
-                              <p className="text-gray-500">Allergies</p>
-                              <p className="whitespace-pre-wrap">
-                                {selectedPatientDetails.allergies}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </section>
-                    )}
+                    {isPatientDetailResponse(selectedPatientDetails) &&
+                      (selectedPatientDetails.medicalHistory ||
+                        selectedPatientDetails.allergies) && (
+                        <section className="space-y-3 text-sm text-gray-700">
+                          <p className="text-sm font-semibold text-gray-900">
+                            Medical information
+                          </p>
+                          <div className="grid gap-2">
+                            {selectedPatientDetails.medicalHistory && (
+                              <div>
+                                <p className="text-gray-500">Medical history</p>
+                                <p className="whitespace-pre-wrap">
+                                  {selectedPatientDetails.medicalHistory}
+                                </p>
+                              </div>
+                            )}
+                            {selectedPatientDetails.allergies && (
+                              <div>
+                                <p className="text-gray-500">Allergies</p>
+                                <p className="whitespace-pre-wrap">
+                                  {selectedPatientDetails.allergies}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </section>
+                      )}
 
                     {partnerInfo && (
                       <section className="space-y-3 text-sm text-gray-700">

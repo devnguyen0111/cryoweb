@@ -8,7 +8,6 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { api } from "@/api/client";
 import type { ServiceRequestStatus, Appointment, Patient } from "@/api/types";
 import { ServiceRequestDetailModal } from "@/features/doctor/service-requests/ServiceRequestDetailModal";
@@ -17,6 +16,7 @@ import { ServiceRequestActionModal } from "@/features/doctor/service-requests/Se
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
 import { cn } from "@/utils/cn";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 export const Route = createFileRoute("/doctor/service-requests")({
   component: DoctorServiceRequestsComponent,
@@ -417,7 +417,7 @@ function DoctorServiceRequestsComponent() {
                               </td>
                               <td className="px-4 py-3 text-sm">
                                 {patient
-                                  ? `${patient.fullName}${patient.patientCode ? ` (${patient.patientCode})` : ""}`
+                                  ? `${getFullNameFromObject(patient)}${patient.patientCode ? ` (${patient.patientCode})` : ""}`
                                   : "—"}
                               </td>
                               <td className="px-4 py-3 text-sm">

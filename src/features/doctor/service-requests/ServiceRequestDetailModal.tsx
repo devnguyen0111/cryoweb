@@ -21,6 +21,7 @@ import { Image as ImageIcon } from "lucide-react";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatCurrency as formatCurrencyUtil } from "@/utils/format";
 interface ServiceRequestDetailModalProps {
   requestId: string;
   isOpen: boolean;
@@ -42,10 +43,7 @@ const formatDate = (value?: string | null) => {
 
 const formatCurrency = (value?: number | null) => {
   if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-  }).format(value);
+  return formatCurrencyUtil(value);
 };
 
 const getStatusBadgeClass = (status: string) => {

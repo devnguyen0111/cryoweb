@@ -13,9 +13,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { CreateEncounterForm } from "@/features/doctor/encounters/CreateEncounterForm";
 import { TreatmentViewModal } from "@/features/doctor/encounters/TreatmentViewModal";
 import { isAxiosError } from "axios";
-import { StructuredNote } from "@/components/StructuredNote";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 export const Route = createFileRoute("/doctor/encounters")({
   component: DoctorEncountersComponent,
@@ -192,70 +193,9 @@ function DoctorEncountersComponent() {
     );
   }
 
-  // Component to display treatment notes in a readable format
-  function TreatmentNotesDisplay({
-    notes,
-    treatmentId,
-    treatmentType,
-  }: {
-    notes: string;
-    treatmentId: string;
-    treatmentType?: string;
-  }) {
-    // Fetch agreement to sync signature status
-    const { data: agreement } = useQuery({
-      queryKey: ["agreement", treatmentId],
-      queryFn: async () => {
-        if (treatmentType !== "IUI" && treatmentType !== "IVF") {
-          return null;
-        }
-        try {
-          const response = await api.agreement.getAgreements({
-            TreatmentId: treatmentId,
-            Size: 1,
-          });
-          if (response.data && response.data.length > 0) {
-            return response.data[0];
-          }
-          return null;
-        } catch (error) {
-          if (isAxiosError(error) && error.response?.status === 404) {
-            return null;
-          }
-          return null;
-        }
-      },
-      enabled:
-        !!treatmentId && (treatmentType === "IUI" || treatmentType === "IVF"),
-      retry: false,
-      refetchOnWindowFocus: true, // Refetch when window gains focus to get latest signature status
-      refetchInterval: 3000, // Refetch every 3 seconds to catch signature updates
-    });
-
-    return (
-      <StructuredNote
-        note={notes}
-        className="text-sm text-gray-700"
-        agreement={agreement || undefined}
-      />
-    );
-  }
-
   // Component to display patient info
   function PatientInfo({ patientId }: { patientId?: string }) {
-    const { data: patientDetails } = useQuery({
-      queryKey: ["patient-details", patientId],
-      queryFn: async () => {
-        if (!patientId) return null;
-        try {
-          const response = await api.patient.getPatientDetails(patientId);
-          return response.data;
-        } catch {
-          return null;
-        }
-      },
-      enabled: !!patientId,
-    });
+    const { data: patientDetails } = usePatientDetails(patientId);
 
     const { data: userDetails } = useQuery({
       queryKey: ["user-details", patientId],
@@ -275,10 +215,11 @@ function DoctorEncountersComponent() {
 
     const patientName =
       getFullNameFromObject(userDetails) ||
-      getFullNameFromObject(patientDetails?.accountInfo) ||
       getFullNameFromObject(patientDetails) ||
       userDetails?.userName ||
-      patientDetails?.accountInfo?.username ||
+      (isPatientDetailResponse(patientDetails)
+        ? patientDetails.accountInfo?.username
+        : null) ||
       "Unknown";
     const patientCode = patientDetails?.patientCode;
     // Use patientCode if available, otherwise use short ID (last 4 chars)

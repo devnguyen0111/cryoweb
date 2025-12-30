@@ -116,8 +116,8 @@ export function createQueryClient(): QueryClient {
         // Don't refetch on reconnect by default (can be overridden per query)
         refetchOnReconnect: false,
 
-        // Don't refetch on mount if data is fresh
-        refetchOnMount: true,
+        // Only refetch on mount if data is stale (better performance, reduces unnecessary requests)
+        refetchOnMount: false,
 
         // Custom stale time based on query key - data freshness duration
         staleTime: (query) => {

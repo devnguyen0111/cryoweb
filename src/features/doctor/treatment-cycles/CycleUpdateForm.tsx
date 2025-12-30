@@ -26,6 +26,7 @@ import {
 } from "@/api/types";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
+import { formatCurrency as formatCurrencyUtil } from "@/utils/format";
 
 interface CycleUpdateFormProps {
   cycle: TreatmentCycle;
@@ -631,7 +632,6 @@ export function CycleUpdateForm({
 
   // Type assertion helpers to ensure legacy steps are recognized
   const asIVFStep = (step: string): IVFStep => step as IVFStep;
-  const asIUIStep = (step: string): IUIStep => step as IUIStep;
 
   // Helper function to map stepType enum from backend to frontend step IDs
   const mapStepTypeToStepId = (
@@ -1450,10 +1450,7 @@ export function CycleUpdateForm({
 
                 const formatCurrency = (value?: number | null) => {
                   if (value === null || value === undefined) return "—";
-                  return new Intl.NumberFormat("vi-VN", {
-                    style: "currency",
-                    currency: "VND",
-                  }).format(value);
+                  return formatCurrencyUtil(value);
                 };
 
                 return (

@@ -21,33 +21,12 @@ import type {
   TreatmentCycle,
 } from "@/api/types";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
-
-const createEmptyResponse = <T,>(): PaginatedResponse<T> => ({
-  code: 200,
-  message: "",
-  data: [],
-  metaData: {
-    pageNumber: 1,
-    pageSize: 10,
-    totalCount: 0,
-    totalPages: 0,
-    hasPrevious: false,
-    hasNext: false,
-  },
-});
-
-const fetchWith404Fallback = async <T,>(
-  request: () => Promise<PaginatedResponse<T>>
-): Promise<PaginatedResponse<T>> => {
-  try {
-    return await request();
-  } catch (error) {
-    if (isAxiosError(error) && error.response?.status === 404) {
-      return createEmptyResponse<T>();
-    }
-    throw error;
-  }
-};
+import { getFullNameFromObject } from "@/utils/name-helpers";
+import {
+  createEmptyPaginatedResponse,
+  fetchWith404Fallback,
+} from "@/utils/api-helpers";
+import { formatDateForInput } from "@/utils/date-helpers";
 
 export const Route = createFileRoute("/doctor/dashboard")({
   component: DoctorDashboardComponent,
@@ -85,7 +64,7 @@ function DoctorDashboardComponent() {
   const { data: doctorProfile, isLoading: doctorProfileLoading } =
     useDoctorProfile();
 
-  const today = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const today = useMemo(() => formatDateForInput(new Date()), []);
 
   const { data: upcomingAppointments, isFetching: appointmentsLoading } =
     useQuery<PaginatedResponse<Appointment>>({
@@ -101,7 +80,7 @@ function DoctorDashboardComponent() {
       retry: false,
       queryFn: async (): Promise<PaginatedResponse<Appointment>> => {
         if (!doctorId) {
-          return createEmptyResponse<Appointment>();
+          return createEmptyPaginatedResponse<Appointment>();
         }
 
         try {
@@ -113,13 +92,13 @@ function DoctorDashboardComponent() {
           });
         } catch (error: any) {
           if (isAxiosError(error) && error.response?.status === 404) {
-            return createEmptyResponse<Appointment>();
+            return createEmptyPaginatedResponse<Appointment>();
           }
           const message =
             error?.response?.data?.message ||
             "Unable to load today's appointments.";
           toast.error(message);
-          return createEmptyResponse<Appointment>();
+          return createEmptyPaginatedResponse<Appointment>();
         }
       },
     });
@@ -132,7 +111,7 @@ function DoctorDashboardComponent() {
       retry: false,
       queryFn: async (): Promise<PaginatedResponse<Appointment>> => {
         if (!doctorId) {
-          return createEmptyResponse<Appointment>();
+          return createEmptyPaginatedResponse<Appointment>();
         }
 
         try {
@@ -143,9 +122,9 @@ function DoctorDashboardComponent() {
           });
         } catch (error: any) {
           if (isAxiosError(error) && error.response?.status === 404) {
-            return createEmptyResponse<Appointment>();
+            return createEmptyPaginatedResponse<Appointment>();
           }
-          return createEmptyResponse<Appointment>();
+          return createEmptyPaginatedResponse<Appointment>();
         }
       },
     }
@@ -215,8 +194,8 @@ function DoctorDashboardComponent() {
     return patientIds.map((patientId, index) => {
       const detail = details[patientId];
       const displayName =
-        detail?.fullName ||
-        detail?.accountInfo?.username ||
+        getFullNameFromObject(detail) ||
+        (detail as any)?.accountInfo?.username ||
         detail?.patientCode ||
         `Patient #${index + 1}`;
       const email = detail?.accountInfo?.email || detail?.email || "—";
@@ -253,7 +232,7 @@ function DoctorDashboardComponent() {
             error?.response?.data?.message ||
             "Unable to load treatment cycles.";
           toast.error(message);
-          return createEmptyResponse<TreatmentCycle>();
+          return createEmptyPaginatedResponse<TreatmentCycle>();
         }
       },
     }
@@ -265,7 +244,7 @@ function DoctorDashboardComponent() {
     retry: false,
     queryFn: async (): Promise<PaginatedResponse<DoctorSchedule>> => {
       if (!doctorId) {
-        return createEmptyResponse<DoctorSchedule>();
+        return createEmptyPaginatedResponse<DoctorSchedule>();
       }
 
       try {
@@ -279,7 +258,7 @@ function DoctorDashboardComponent() {
         const message =
           error?.response?.data?.message || "Unable to load work schedule.";
         toast.error(message);
-        return createEmptyResponse<DoctorSchedule>();
+        return createEmptyPaginatedResponse<DoctorSchedule>();
       }
     },
   });
@@ -306,7 +285,7 @@ function DoctorDashboardComponent() {
     retry: false,
     queryFn: async (): Promise<PaginatedResponse<ServiceRequest>> => {
       if (!doctorId || appointmentIds.length === 0) {
-        return createEmptyResponse<ServiceRequest>();
+        return createEmptyPaginatedResponse<ServiceRequest>();
       }
 
       try {
@@ -349,7 +328,7 @@ function DoctorDashboardComponent() {
           error?.response?.data?.message ||
           "Unable to load pending prescriptions or requests.";
         toast.error(message);
-        return createEmptyResponse<ServiceRequest>();
+        return createEmptyPaginatedResponse<ServiceRequest>();
       }
     },
   });
@@ -433,7 +412,10 @@ function DoctorDashboardComponent() {
     [scheduleData, today]
   );
 
-  const displayName = doctorProfile?.fullName || user?.fullName || user?.email;
+  const displayName =
+    getFullNameFromObject(doctorProfile) ||
+    getFullNameFromObject(user) ||
+    user?.email;
 
   const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -572,7 +554,7 @@ function DoctorDashboardComponent() {
                         // Get patient info if available
                         const appointmentData = appointment as any;
                         const patientName =
-                          appointmentData?.patient?.fullName ||
+                          getFullNameFromObject(appointmentData?.patient) ||
                           appointmentData?.patientName ||
                           null;
 

@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, Snowflake } from "lucide-react";
-import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
 
 interface EmbryoQualityCheckModalProps {

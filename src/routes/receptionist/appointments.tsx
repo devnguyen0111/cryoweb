@@ -18,6 +18,7 @@ import {
   normalizeAppointmentStatus,
 } from "@/utils/appointments";
 import { getAppointmentStatusBadgeClass } from "@/utils/status-colors";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 export const Route = createFileRoute("/receptionist/appointments")({
   component: ReceptionistAppointmentsComponent,
@@ -55,7 +56,7 @@ function ReceptionistAppointmentsComponent() {
     const raw = appointment as unknown as Record<string, any>;
     return (
       raw.patient?.accountInfo?.username ??
-      raw.patient?.fullName ??
+      getFullNameFromObject(raw.patient) ??
       raw.patientName ??
       raw.patientCode ??
       raw.patient?.patientCode ??

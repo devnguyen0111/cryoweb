@@ -17,6 +17,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { getLast4Chars } from "@/utils/id-helpers";
+import { getAppointmentPatientId } from "@/utils/appointments";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { extractDatePart, formatDateForInput } from "@/utils/date-helpers";
+import { queryKeys } from "@/utils/query-keys";
 
 const serviceRequestSchema = z.object({
   appointmentId: z.string().min(1, "Appointment is required"),
@@ -50,12 +55,11 @@ interface CreateServiceRequestModalProps {
   defaultAppointmentId?: string;
 }
 
+import { formatCurrency as formatCurrencyUtil } from "@/utils/format";
+
 const formatCurrency = (value?: number | null) => {
   if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-  }).format(value);
+  return formatCurrencyUtil(value);
 };
 
 export function CreateServiceRequestModal({
@@ -77,7 +81,7 @@ export function CreateServiceRequestModal({
     defaultValues: {
       appointmentId: defaultAppointmentId || "",
       patientId: defaultPatientId || "",
-      requestedDate: new Date().toISOString().split("T")[0],
+      requestedDate: formatDateForInput(new Date()),
       notes: "",
       serviceDetails: [],
     },
@@ -139,27 +143,10 @@ export function CreateServiceRequestModal({
   const patients = patientsData?.data ?? [];
 
   // Helper function to extract patientId from appointment (handles multiple field name variations)
-  const getAppointmentPatientId = (apt: Appointment): string | null => {
-    const raw = apt as unknown as Record<string, any>;
-    return (
-      apt.patientId ??
-      raw.patientID ??
-      raw.PatientId ??
-      raw.PatientID ??
-      raw.patient?.id ??
-      raw.patient?.patientId ??
-      raw.patient?.accountId ??
-      raw.patientAccountId ??
-      raw.patientAccountID ??
-      raw.PatientAccountId ??
-      raw.PatientAccountID ??
-      null
-    );
-  };
 
   // Fetch appointments for selected patient - only when modal is open and patient is selected
   const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
-    queryKey: ["appointments", "for-service-request", selectedPatientId],
+    queryKey: queryKeys.appointments.byPatient(selectedPatientId),
     queryFn: async () => {
       if (!selectedPatientId) return [];
 
@@ -256,31 +243,12 @@ export function CreateServiceRequestModal({
   // Use selectedAppointment or defaultAppointmentDetails
   const effectiveAppointment = selectedAppointment || defaultAppointmentDetails;
 
-  // Get patient from the patients list (already fetched, faster display)
-  const selectedPatient = patients.find((p) => p.id === selectedPatientId);
-
   // Fetch selected patient details to ensure we have the latest info
   // Always fetch when patient is selected to ensure we have complete info
-  const { data: patientDetails } = useQuery({
-    queryKey: ["patient", selectedPatientId],
-    enabled: isOpen && !!selectedPatientId,
-    queryFn: async () => {
-      if (!selectedPatientId) return null;
-      try {
-        const response = await api.patient.getPatientById(selectedPatientId);
-        return response.data ?? null;
-      } catch (error) {
-        // Try patient details as fallback
-        try {
-          const fallback =
-            await api.patient.getPatientDetails(selectedPatientId);
-          return fallback.data ?? null;
-        } catch {
-          return null;
-        }
-      }
-    },
-  });
+  const { data: patientDetails } = usePatientDetails(
+    selectedPatientId,
+    isOpen && !!selectedPatientId
+  );
 
   // Set default values when modal opens
   useEffect(() => {
@@ -337,11 +305,7 @@ export function CreateServiceRequestModal({
     ) {
       if (defaultAppointmentDetails.appointmentDate) {
         let dateString: string;
-        if (defaultAppointmentDetails.appointmentDate.includes("T")) {
-          dateString = defaultAppointmentDetails.appointmentDate.split("T")[0];
-        } else {
-          dateString = defaultAppointmentDetails.appointmentDate;
-        }
+        dateString = extractDatePart(defaultAppointmentDetails.appointmentDate);
         form.setValue("requestedDate", dateString);
       }
     }
@@ -366,14 +330,9 @@ export function CreateServiceRequestModal({
       // Update requestedDate to match appointment date
       if (effectiveAppointment.appointmentDate) {
         // Handle both DateOnly (YYYY-MM-DD) and ISO datetime formats
-        let dateString: string;
-        if (effectiveAppointment.appointmentDate.includes("T")) {
-          // ISO datetime format
-          dateString = effectiveAppointment.appointmentDate.split("T")[0];
-        } else {
-          // DateOnly format (YYYY-MM-DD)
-          dateString = effectiveAppointment.appointmentDate;
-        }
+        const dateString = extractDatePart(
+          effectiveAppointment.appointmentDate
+        );
         form.setValue("requestedDate", dateString);
       }
     }
@@ -478,8 +437,7 @@ export function CreateServiceRequestModal({
       requestDate: data.requestedDate
         ? new Date(data.requestedDate).toISOString()
         : new Date().toISOString(),
-      requestedDate:
-        data.requestedDate || new Date().toISOString().split("T")[0],
+      requestedDate: data.requestedDate || formatDateForInput(new Date()),
       notes: data.notes || null,
       serviceDetails: serviceDetails.map((detail) => ({
         serviceId: detail.serviceId,
@@ -589,8 +547,8 @@ export function CreateServiceRequestModal({
                       : "Select appointment"}
               </option>
               {appointments.map((apt) => {
-                const aptCode = apt.appointmentCode
-                  ? apt.appointmentCode.slice(-8)
+                const aptCode = (apt as any).appointmentCode
+                  ? (apt as any).appointmentCode.slice(-8)
                   : apt.id.slice(-8);
                 const aptDate = formatDate(apt.appointmentDate);
                 return (
@@ -605,10 +563,8 @@ export function CreateServiceRequestModal({
                   (apt) => apt.id === defaultAppointmentDetails.id
                 ) && (
                   <option value={defaultAppointmentDetails.id}>
-                    {defaultAppointmentDetails.appointmentCode
-                      ? defaultAppointmentDetails.appointmentCode.slice(-8)
-                      : defaultAppointmentDetails.id.slice(-8)}{" "}
-                    - {formatDate(defaultAppointmentDetails.appointmentDate)} (
+                    {getLast4Chars(defaultAppointmentDetails.id)} -{" "}
+                    {formatDate(defaultAppointmentDetails.appointmentDate)} (
                     {defaultAppointmentDetails.status})
                   </option>
                 )}

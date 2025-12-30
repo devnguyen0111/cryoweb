@@ -24,6 +24,8 @@ import type {
 import { cn } from "@/utils/cn";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import { getTransactionStatusBadgeClass } from "@/utils/status-colors";
+import { formatCurrency as formatCurrencyUtil } from "@/utils/format";
 
 export const Route = createFileRoute("/receptionist/transactions")({
   component: ReceptionistTransactionsComponent,
@@ -112,37 +114,23 @@ function ReceptionistTransactionsComponent() {
   const totalPages = data?.metaData?.totalPages ?? 1;
 
   const getStatusBadgeClass = (status?: TransactionStatus) => {
-    switch (status) {
-      case "Pending":
-        return "bg-amber-100 text-amber-700";
-      case "Completed":
-        return "bg-emerald-100 text-emerald-700";
-      case "Failed":
-        return "bg-rose-100 text-rose-700";
-      case "Cancelled":
-        return "bg-gray-100 text-gray-700";
-      default:
-        return "bg-slate-100 text-slate-700";
-    }
+    return getTransactionStatusBadgeClass(status);
   };
 
   const getTypeBadgeClass = (type?: TransactionType) => {
     switch (type) {
       case "Payment":
-        return "bg-blue-100 text-blue-700";
+        return "bg-blue-50 text-blue-700 border border-blue-200";
       case "Refund":
-        return "bg-purple-100 text-purple-700";
+        return "bg-purple-50 text-purple-700 border border-purple-200";
       default:
-        return "bg-gray-100 text-gray-700";
+        return "bg-slate-100 text-slate-700 border border-slate-200";
     }
   };
 
   const formatCurrency = (amount?: number) => {
     if (amount == null) return "—";
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(amount);
+    return formatCurrencyUtil(amount);
   };
 
   const formatDate = (dateStr?: string) => {

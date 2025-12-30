@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { getFullNameFromObject } from "@/utils/name-helpers";
 
 export const Route = createFileRoute("/admin/patients")({
   component: AdminPatientsComponent,
@@ -54,7 +55,7 @@ function AdminPatientsComponent() {
                         <tbody>
                           {patients.map((patient) => {
                             const displayName =
-                              patient.fullName ||
+                              getFullNameFromObject(patient) ||
                               patient.patientCode ||
                               "Unknown";
                             return (

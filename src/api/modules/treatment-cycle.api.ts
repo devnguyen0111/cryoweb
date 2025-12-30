@@ -17,6 +17,7 @@ import type {
   AddCycleAppointmentRequest,
   AddCycleDocumentRequest,
   DocumentSummary,
+  LabSampleDetailResponse,
 } from "../types";
 
 /**
@@ -247,12 +248,14 @@ export class TreatmentCycleApi {
   /**
    * Get cycle samples
    * GET /api/treatment-cycles/{id}/samples
-   * Returns array of sample IDs (strings)
+   * Returns array of sample detail objects with nested sperm/oocyte/embryo and patient data
    */
-  async getCycleSamples(id: string): Promise<BaseResponse<string[]>> {
-    const response = await this.client.get<BaseResponse<string[]>>(
-      `/treatment-cycles/${id}/samples`
-    );
+  async getCycleSamples(
+    id: string
+  ): Promise<BaseResponse<LabSampleDetailResponse[]>> {
+    const response = await this.client.get<
+      BaseResponse<LabSampleDetailResponse[]>
+    >(`/treatment-cycles/${id}/samples`);
     return response.data;
   }
 

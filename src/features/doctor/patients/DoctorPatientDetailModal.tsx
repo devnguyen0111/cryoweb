@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { api } from "@/api/client";
 import type {
-  Patient,
   PatientDetailResponse,
   UserDetailResponse,
   Relationship,
@@ -16,6 +15,7 @@ import { cn } from "@/utils/cn";
 import { StructuredNote } from "@/components/StructuredNote";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { getLast4Chars } from "@/utils/id-helpers";
+import { usePatientDetails } from "@/hooks/usePatientDetails";
 
 interface DoctorPatientDetailModalProps {
   patientId: string | null;
@@ -103,31 +103,7 @@ export function DoctorPatientDetailModal({
     isError,
     error,
     isFetching,
-  } = useQuery<Patient | PatientDetailResponse | null>({
-    enabled: isOpen && Boolean(patientId),
-    queryKey: ["doctor", "patient", patientId, "detail-modal"],
-    retry: false,
-    queryFn: async () => {
-      if (!patientId) {
-        return null;
-      }
-      try {
-        const response = await api.patient.getPatientById(patientId);
-        return response.data ?? null;
-      } catch (err) {
-        if (isAxiosError(err)) {
-          if (err.response?.status === 403) {
-            const fallback = await api.patient.getPatientDetails(patientId);
-            return fallback.data ?? null;
-          }
-          if (err.response?.status === 404) {
-            return null;
-          }
-        }
-        throw err;
-      }
-    },
-  });
+  } = usePatientDetails(patientId, isOpen && Boolean(patientId));
 
   const patientDetail = useMemo(() => {
     return patient && "accountInfo" in patient

@@ -66,7 +66,7 @@ export function ServiceRequestDetailModal({
     useState<ServiceRequestDetail | null>(null);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentGateway, setPaymentGateway] = useState<"VnPay" | "PayOS">("PayOS");
+  const [paymentGateway, setPaymentGateway] = useState<"PayOS">("PayOS");
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [createdTransactionId, setCreatedTransactionId] = useState<
@@ -308,7 +308,7 @@ export function ServiceRequestDetailModal({
     return request?.totalAmount ?? 0;
   }, [serviceDetails, request?.totalAmount]);
 
-  // Create payment transaction mutation (PayOS/VnPay)
+  // Create payment transaction mutation (PayOS)
   const createPaymentQRMutation = useMutation({
     mutationFn: () => {
       return api.transaction.createPaymentQR({
@@ -320,9 +320,8 @@ export function ServiceRequestDetailModal({
     onSuccess: (response) => {
       if (response.data) {
         // For PayOS, check for qrCodeData or qrCodeUrl
-        // For VnPay, use paymentUrl
         const qrCodeData = (response.data as any).qrCodeData;
-        const qrCodeUrl = (response.data as any).qrCodeUrl || response.data.paymentUrl || response.data.vnPayUrl;
+        const qrCodeUrl = (response.data as any).qrCodeUrl || response.data.paymentUrl;
         
         if (qrCodeData) {
           setQrCodeData(qrCodeData);
@@ -390,12 +389,12 @@ export function ServiceRequestDetailModal({
     setShowPaymentMethodModal(true);
   };
 
-  const handleSelectPaymentMethod = (method: "cash" | "payos" | "vnpay") => {
+  const handleSelectPaymentMethod = (method: "cash" | "payos") => {
     if (method === "cash") {
       createCashTransactionMutation.mutate();
     } else {
       // Set payment gateway before creating transaction
-      setPaymentGateway(method === "payos" ? "PayOS" : "VnPay");
+      setPaymentGateway("PayOS");
       createPaymentQRMutation.mutate();
     }
   };
@@ -813,23 +812,6 @@ export function ServiceRequestDetailModal({
                 <div className="text-xs text-gray-500">Processing...</div>
               )}
             </Button>
-            <Button
-              onClick={() => handleSelectPaymentMethod("vnpay")}
-              disabled={createPaymentQRMutation.isPending}
-              variant="outline"
-              className="w-full h-auto py-4 flex flex-col items-center gap-2"
-            >
-              <div className="text-lg">💳</div>
-              <div className="text-center">
-                <div className="font-semibold">Use VNPay</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  Online payment via VNPay
-                </div>
-              </div>
-              {createPaymentQRMutation.isPending && (
-                <div className="text-xs text-gray-500">Processing...</div>
-              )}
-            </Button>
           </div>
           <div className="flex justify-end pt-2">
             <Button
@@ -842,7 +824,7 @@ export function ServiceRequestDetailModal({
         </div>
       </Modal>
 
-      {/* Payment QR Code/URL Modal (PayOS/VnPay) */}
+      {/* Payment QR Code/URL Modal (PayOS) */}
       <Modal
         isOpen={showPaymentModal}
         onClose={() => {
@@ -900,7 +882,7 @@ export function ServiceRequestDetailModal({
               </Button>
             </div>
           ) : paymentUrl ? (
-            // VnPay Payment URL Display
+            // Payment URL Display
             <div className="space-y-4">
               <div className="text-center space-y-2">
                 <p className="text-sm text-gray-600">

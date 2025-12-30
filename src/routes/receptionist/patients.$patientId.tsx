@@ -168,7 +168,7 @@ function ReceptionistPatientDetail() {
       | "ServiceRequest"
       | "CryoStorageContract",
     relatedEntityId: "",
-    paymentGateway: "PayOS" as "VnPay" | "PayOS",
+    paymentGateway: "PayOS" as "PayOS",
   });
   const [showQRCode, setShowQRCode] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
@@ -246,12 +246,11 @@ function ReceptionistPatientDetail() {
     onSuccess: (response) => {
       if (response.data) {
         // For PayOS, check for qrCodeData or qrCodeUrl
-        // For VnPay, use paymentUrl
+        // For PayOS, check for qrCodeData or qrCodeUrl
         const qrCodeData = (response.data as any).qrCodeData;
         const qrCodeUrl =
           (response.data as any).qrCodeUrl ||
-          response.data.paymentUrl ||
-          response.data.vnPayUrl;
+          response.data.paymentUrl;
 
         if (qrCodeData) {
           setQrCodeData(qrCodeData);
@@ -821,13 +820,12 @@ function ReceptionistPatientDetail() {
                 onChange={(e) =>
                   setCreateTransactionFormData((prev) => ({
                     ...prev,
-                    paymentGateway: e.target.value as "VnPay" | "PayOS",
+                    paymentGateway: e.target.value as "PayOS",
                   }))
                 }
                 className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <option value="PayOS">PayOS</option>
-                <option value="VnPay">VnPay</option>
               </select>
             </div>
 
@@ -924,7 +922,7 @@ function ReceptionistPatientDetail() {
                 </div>
               </div>
             ) : paymentUrl ? (
-              // VnPay Payment URL Display
+              // Payment URL Display
               <div className="space-y-4">
                 <div className="text-center text-sm text-gray-600">
                   <p>

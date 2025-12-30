@@ -72,7 +72,7 @@ function ReceptionistTransactionsComponent() {
       | "ServiceRequest"
       | "CryoStorageContract",
     relatedEntityId: "",
-    paymentGateway: "PayOS" as "VnPay" | "PayOS", // Default to PayOS
+    paymentGateway: "PayOS" as "PayOS", // Default to PayOS
   });
 
   const filters = useMemo(
@@ -270,12 +270,10 @@ function ReceptionistTransactionsComponent() {
     onSuccess: (response) => {
       if (response.data) {
         // For PayOS, check for qrCodeData or qrCodeUrl
-        // For VnPay, use paymentUrl
+        // For PayOS, check for qrCodeData or qrCodeUrl
         const qrCodeData = (response.data as any).qrCodeData;
         const qrCodeUrl =
-          (response.data as any).qrCodeUrl ||
-          response.data.paymentUrl ||
-          response.data.vnPayUrl;
+          (response.data as any).qrCodeUrl || response.data.paymentUrl;
 
         if (qrCodeData) {
           setQrCodeData(qrCodeData);
@@ -900,8 +898,7 @@ function ReceptionistTransactionsComponent() {
                                     View Details
                                   </Button>
                                   {transaction.transactionType === "Payment" &&
-                                    (transaction.paymentUrl ||
-                                      transaction.vnPayUrl) && (
+                                    transaction.paymentUrl && (
                                       <Button
                                         size="sm"
                                         variant="outline"
@@ -1883,13 +1880,12 @@ function ReceptionistTransactionsComponent() {
                 onChange={(e) =>
                   setCreateFormData((prev) => ({
                     ...prev,
-                    paymentGateway: e.target.value as "VnPay" | "PayOS",
+                    paymentGateway: e.target.value as "PayOS",
                   }))
                 }
                 className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <option value="PayOS">PayOS</option>
-                <option value="VnPay">VnPay</option>
               </select>
             </div>
 
@@ -1988,7 +1984,7 @@ function ReceptionistTransactionsComponent() {
                 </div>
               </div>
             ) : paymentUrl ? (
-              // VnPay Payment URL Display
+              // Payment URL Display
               <div className="space-y-4">
                 <div className="text-center text-sm text-gray-600">
                   <p>

@@ -36,7 +36,7 @@ function ReceptionistServiceRequestDetailRoute() {
   const [decisionNotes, setDecisionNotes] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
-  const [paymentGateway, setPaymentGateway] = useState<"VnPay" | "PayOS">("PayOS");
+  const [paymentGateway, setPaymentGateway] = useState<"PayOS">("PayOS");
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [createdTransactionId, setCreatedTransactionId] = useState<
@@ -185,9 +185,8 @@ function ReceptionistServiceRequestDetailRoute() {
     onSuccess: (response) => {
       if (response.data) {
         // For PayOS, check for qrCodeData or qrCodeUrl
-        // For VnPay, use paymentUrl
         const qrCodeData = (response.data as any).qrCodeData;
-        const qrCodeUrl = (response.data as any).qrCodeUrl || response.data.paymentUrl || response.data.vnPayUrl;
+        const qrCodeUrl = (response.data as any).qrCodeUrl || response.data.paymentUrl;
         
         if (qrCodeData) {
           setQrCodeData(qrCodeData);
@@ -552,12 +551,11 @@ function ReceptionistServiceRequestDetailRoute() {
               <select
                 value={paymentGateway}
                 onChange={(e) =>
-                  setPaymentGateway(e.target.value as "VnPay" | "PayOS")
+                  setPaymentGateway(e.target.value as "PayOS")
                 }
                 className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <option value="PayOS">PayOS</option>
-                <option value="VnPay">VnPay</option>
               </select>
             </div>
             <div className="flex gap-2 pt-4">
@@ -654,7 +652,7 @@ function ReceptionistServiceRequestDetailRoute() {
                 </div>
               </div>
             ) : paymentUrl ? (
-              // VnPay Payment URL Display
+              // Payment URL Display
               <div className="space-y-4">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-gray-600">

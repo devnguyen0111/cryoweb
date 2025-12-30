@@ -36,9 +36,11 @@ export const Route = createFileRoute("/doctor/quality-check")({
 function QualityCheckComponent() {
   const queryClient = useQueryClient();
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
+  const [selectedEmbryoAction, setSelectedEmbryoAction] = useState<"transfer" | "frozen" | null>(null);
+  const [isViewMode, setIsViewMode] = useState(false);
   const [sampleToCancel, setSampleToCancel] = useState<string | null>(null);
   const [sampleTypeFilter, setSampleTypeFilter] = useState<
-    "Sperm" | "Oocyte" | ""
+    "Sperm" | "Oocyte" | "Embryo" | ""
   >("");
   const [canFrozenFilter, setCanFrozenFilter] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -99,6 +101,25 @@ function QualityCheckComponent() {
     enabled: sampleTypeFilter === "" || sampleTypeFilter === "Oocyte",
   });
 
+  const embryoFilters = useMemo(
+    () => ({
+      SampleType: "Embryo" as const,
+      Status: "QualityChecked" as const,
+      SearchTerm: searchTerm || undefined,
+      Page: 1,
+      Size: 100,
+      Sort: "collectionDate",
+      Order: "desc" as const,
+    }),
+    [searchTerm]
+  );
+
+  const { data: embryoData, isLoading: embryoLoading } = useQuery({
+    queryKey: ["quality-check-samples", "embryo", embryoFilters],
+    queryFn: () => api.sample.getAllDetailSamples(embryoFilters),
+    enabled: sampleTypeFilter === "" || sampleTypeFilter === "Embryo",
+  });
+
   // Combine all quality-checked samples
   const qualityCheckedSamples = useMemo(() => {
     const allSamples: LabSampleDetailResponse[] = [];
@@ -117,8 +138,15 @@ function QualityCheckComponent() {
       allSamples.push(...oocyteSamples);
     }
 
+    if (sampleTypeFilter === "" || sampleTypeFilter === "Embryo") {
+      const embryoSamples = (embryoData?.data ?? []).filter(
+        (s) => s.sampleType === "Embryo" && s.status === "QualityChecked"
+      ) as LabSampleDetailResponse[];
+      allSamples.push(...embryoSamples);
+    }
+
     return allSamples;
-  }, [spermData?.data, oocyteData?.data, sampleTypeFilter]);
+  }, [spermData?.data, oocyteData?.data, embryoData?.data, sampleTypeFilter]);
 
   // Extract unique patient IDs from samples
   const patientIds = useMemo(() => {
@@ -202,11 +230,38 @@ function QualityCheckComponent() {
       const allSamples = [
         ...(spermData?.data ?? []),
         ...(oocyteData?.data ?? []),
+        ...(embryoData?.data ?? []),
       ];
       const sample = allSamples.find((s) => s.id === sampleId);
 
       if (!sample) throw new Error("Sample not found");
 
+      // If status is "Stored" (freeze for storage action), use frozen API
+      if (status === "Stored") {
+        // Use the frozen API endpoint
+        const frozenResponse = await api.sample.updateFrozenStatus(sampleId, true);
+        
+        // If notes are provided, update them separately
+        if (notes) {
+          const updateData: any = {
+            notes,
+          };
+          
+          if (sample.sampleType === "Sperm") {
+            await api.sample.updateSpermSample(sampleId, updateData);
+          } else if (sample.sampleType === "Oocyte") {
+            await api.sample.updateOocyteSample(sampleId, updateData);
+          } else if (sample.sampleType === "Embryo") {
+            await api.sample.updateEmbryoSample(sampleId, updateData);
+          } else {
+            await api.sample.updateSample(sampleId, updateData);
+          }
+        }
+        
+        return frozenResponse;
+      }
+
+      // For "Used" status or other actions, use the regular update flow
       const updateData: any = {
         status,
         notes,
@@ -217,6 +272,8 @@ function QualityCheckComponent() {
         return api.sample.updateSpermSample(sampleId, updateData);
       } else if (sample.sampleType === "Oocyte") {
         return api.sample.updateOocyteSample(sampleId, updateData);
+      } else if (sample.sampleType === "Embryo") {
+        return api.sample.updateEmbryoSample(sampleId, updateData);
       }
 
       // Fallback to generic update
@@ -244,13 +301,14 @@ function QualityCheckComponent() {
       const allSamples = [
         ...(spermData?.data ?? []),
         ...(oocyteData?.data ?? []),
+        ...(embryoData?.data ?? []),
       ];
       const sample = allSamples.find((s) => s.id === sampleId);
 
       if (!sample) throw new Error("Sample not found");
 
       const updateData: any = {
-        status: "Disposed" as SpecimenStatus,
+        status: sample.sampleType === "Embryo" ? ("Discarded" as SpecimenStatus) : ("Disposed" as SpecimenStatus),
         notes: notes || "Cancelled by doctor",
       };
 
@@ -259,6 +317,8 @@ function QualityCheckComponent() {
         return api.sample.updateSpermSample(sampleId, updateData);
       } else if (sample.sampleType === "Oocyte") {
         return api.sample.updateOocyteSample(sampleId, updateData);
+      } else if (sample.sampleType === "Embryo") {
+        return api.sample.updateEmbryoSample(sampleId, updateData);
       }
 
       // Fallback to generic update
@@ -301,7 +361,7 @@ function QualityCheckComponent() {
     return getSampleStatusBadgeClass(status);
   };
 
-  const isLoading = spermLoading || oocyteLoading;
+  const isLoading = spermLoading || oocyteLoading || embryoLoading;
 
   return (
     <ProtectedRoute allowedRoles={["Doctor"]}>
@@ -311,7 +371,7 @@ function QualityCheckComponent() {
             <div>
               <h1 className="text-3xl font-bold">Quality Check</h1>
               <p className="text-gray-600 mt-2">
-                Review quality-checked samples (Oocyte and Sperm). Confirm to
+                Review quality-checked samples (Oocyte, Sperm, and Embryo). Confirm to
                 use in treatment or store for freezing.
               </p>
             </div>
@@ -384,13 +444,14 @@ function QualityCheckComponent() {
                       value={sampleTypeFilter}
                       onChange={(e) =>
                         setSampleTypeFilter(
-                          e.target.value as "Sperm" | "Oocyte" | ""
+                          e.target.value as "Sperm" | "Oocyte" | "Embryo" | ""
                         )
                       }
                     >
                       <option value="">All Types</option>
                       <option value="Sperm">Sperm</option>
                       <option value="Oocyte">Oocyte</option>
+                      <option value="Embryo">Embryo</option>
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -454,23 +515,6 @@ function QualityCheckComponent() {
                             <th className="text-left p-3">Patient</th>
                             <th className="text-left p-3">Collection Date</th>
                             <th className="text-left p-3">Status</th>
-                            {(sampleTypeFilter === "" ||
-                              sampleTypeFilter === "Sperm") && (
-                              <>
-                                <th className="text-left p-3">Volume</th>
-                                <th className="text-left p-3">Concentration</th>
-                                <th className="text-left p-3">Motility</th>
-                                <th className="text-left p-3">Morphology</th>
-                              </>
-                            )}
-                            {(sampleTypeFilter === "" ||
-                              sampleTypeFilter === "Oocyte") && (
-                              <>
-                                <th className="text-left p-3">Quantity</th>
-                                <th className="text-left p-3">Maturity</th>
-                                <th className="text-left p-3">Quality</th>
-                              </>
-                            )}
                             <th className="text-left p-3">Actions</th>
                           </tr>
                         </thead>
@@ -526,11 +570,13 @@ function QualityCheckComponent() {
                                   <div className="flex items-center gap-2">
                                     {isSperm ? (
                                       <FlaskConical className="h-4 w-4 text-blue-500" />
-                                    ) : (
+                                    ) : isOocyte ? (
                                       <FlaskConical className="h-4 w-4 text-pink-500" />
+                                    ) : (
+                                      <FlaskConical className="h-4 w-4 text-purple-500" />
                                     )}
                                     <span className="text-sm font-medium">
-                                      {isSperm ? "Sperm" : "Oocyte"}
+                                      {isSperm ? "Sperm" : isOocyte ? "Oocyte" : "Embryo"}
                                     </span>
                                   </div>
                                 </td>
@@ -579,88 +625,31 @@ function QualityCheckComponent() {
                                     {sample.status}
                                   </Badge>
                                 </td>
-                                {(sampleTypeFilter === "" ||
-                                  sampleTypeFilter === "Sperm") && (
-                                  <>
-                                    {isSperm ? (
-                                      <>
-                                        <td className="p-3 text-sm">
-                                          {sample.sperm?.volume !== undefined &&
-                                          sample.sperm.volume !== null
-                                            ? `${sample.sperm.volume} mL`
-                                            : "—"}
-                                        </td>
-                                        <td className="p-3 text-sm">
-                                          {sample.sperm?.concentration !==
-                                            undefined &&
-                                          sample.sperm.concentration !== null
-                                            ? `${sample.sperm.concentration} million/mL`
-                                            : "—"}
-                                        </td>
-                                        <td className="p-3 text-sm">
-                                          {sample.sperm?.motility !==
-                                            undefined &&
-                                          sample.sperm.motility !== null
-                                            ? `${sample.sperm.motility}%`
-                                            : "—"}
-                                        </td>
-                                        <td className="p-3 text-sm">
-                                          {sample.sperm?.morphology !==
-                                            undefined &&
-                                          sample.sperm.morphology !== null
-                                            ? `${sample.sperm.morphology}%`
-                                            : "—"}
-                                        </td>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <td className="p-3 text-sm">—</td>
-                                        <td className="p-3 text-sm">—</td>
-                                        <td className="p-3 text-sm">—</td>
-                                        <td className="p-3 text-sm">—</td>
-                                      </>
-                                    )}
-                                  </>
-                                )}
-                                {(sampleTypeFilter === "" ||
-                                  sampleTypeFilter === "Oocyte") && (
-                                  <>
-                                    {isOocyte ? (
-                                      <>
-                                        <td className="p-3 text-sm">
-                                          {sample.oocyte?.quantity !==
-                                            undefined &&
-                                          sample.oocyte.quantity !== null
-                                            ? `${sample.oocyte.quantity}`
-                                            : "—"}
-                                        </td>
-                                        <td className="p-3 text-sm">
-                                          {sample.oocyte?.maturity || "—"}
-                                        </td>
-                                        <td className="p-3 text-sm">
-                                          {sample.oocyte?.quality || "—"}
-                                        </td>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <td className="p-3 text-sm">—</td>
-                                        <td className="p-3 text-sm">—</td>
-                                        <td className="p-3 text-sm">—</td>
-                                      </>
-                                    )}
-                                  </>
-                                )}
                                 <td className="p-3">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() =>
-                                        setSelectedSampleId(sample.id)
-                                      }
+                                      onClick={() => {
+                                        setSelectedSampleId(sample.id);
+                                        setIsViewMode(true);
+                                        setSelectedEmbryoAction(null);
+                                      }}
                                       className="flex items-center gap-1"
                                     >
                                       <Eye className="h-4 w-4" />
+                                      View Details
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedSampleId(sample.id);
+                                        setSelectedEmbryoAction(null);
+                                        setIsViewMode(false);
+                                      }}
+                                      className="flex items-center gap-1 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    >
                                       Confirm
                                     </Button>
                                     <Button
@@ -672,7 +661,7 @@ function QualityCheckComponent() {
                                       className="flex items-center gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
                                     >
                                       <Trash2 className="h-4 w-4" />
-                                      Cancel Sample
+                                      Cancel
                                     </Button>
                                   </div>
                                 </td>
@@ -697,7 +686,11 @@ function QualityCheckComponent() {
           <QualityCheckModal
             sampleId={selectedSampleId}
             isOpen={!!selectedSampleId}
-            onClose={() => setSelectedSampleId(null)}
+            onClose={() => {
+              setSelectedSampleId(null);
+              setSelectedEmbryoAction(null);
+              setIsViewMode(false);
+            }}
             onSuccess={(status, notes) => {
               updateSampleMutation.mutate({
                 sampleId: selectedSampleId,
@@ -706,6 +699,8 @@ function QualityCheckComponent() {
               });
             }}
             isLoading={updateSampleMutation.isPending}
+            embryoAction={selectedEmbryoAction}
+            viewMode={isViewMode}
           />
         )}
 

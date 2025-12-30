@@ -10,8 +10,6 @@ import { toast } from "sonner";
 import {
   X,
   Calendar,
-  History,
-  Printer,
   Play,
   CheckCircle,
   XCircle,
@@ -37,6 +35,7 @@ import type {
   PaginatedResponse,
   IUIStep,
   LabSampleDetailResponse,
+  LabSampleEmbryo,
   Relationship,
 } from "@/api/types";
 import { HorizontalTreatmentTimeline } from "./HorizontalTreatmentTimeline";
@@ -52,6 +51,7 @@ import { CreateMedicalRecordForm } from "@/features/doctor/medical-records/Creat
 import { DoctorCreateAppointmentForm } from "@/features/doctor/appointments/DoctorCreateAppointmentForm";
 import { CreateServiceRequestModal } from "@/features/doctor/service-requests/CreateServiceRequestModal";
 import { FertilizationModal } from "@/features/doctor/fertilization/FertilizationModal";
+import { EmbryoTransferForm } from "@/features/doctor/embryo-transfer/EmbryoTransferForm";
 import { Modal } from "@/components/ui/modal";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
@@ -259,6 +259,7 @@ export function CycleUpdateModal({
     string | null
   >(null);
   const [showFertilizationModal, setShowFertilizationModal] = useState(false);
+  const [showEmbryoTransferForm, setShowEmbryoTransferForm] = useState(false);
   const { data: doctorProfile } = useDoctorProfile();
 
   // Reset selectedSpermSampleId when modal closes or cycle changes
@@ -763,6 +764,45 @@ export function CycleUpdateModal({
   // For validation: use all quality-checked samples of patient
   const spermSamples = spermSamplesData?.data || [];
   const oocyteSamples = oocyteSamplesData?.data || [];
+
+  // Fetch embryos for this cycle that have been transferred or frozen
+  const { data: cycleEmbryosData, isLoading: cycleEmbryosLoading } = useQuery({
+    queryKey: ["embryos", "cycle", currentCycle.id, currentCycle.patientId],
+    queryFn: async () => {
+      if (!currentCycle.patientId) return [];
+      try {
+        const response = await api.sample.getSamples({
+          SampleType: "Embryo",
+          PatientId: currentCycle.patientId,
+          Page: 1,
+          Size: 100,
+        });
+
+        const allEmbryos = response.data ?? [];
+        // Filter embryos for this cycle that have been transferred (Used) or frozen (Stored)
+        const cycleEmbryos = allEmbryos.filter((e) => {
+          // If treatmentCycleId exists, filter by it
+          if (e.treatmentCycleId) {
+            return (
+              e.treatmentCycleId === currentCycle.id &&
+              (e.status === "Used" || e.status === "Stored")
+            );
+          }
+          // If no treatmentCycleId, include all embryos with Used or Stored status for this patient
+          return e.status === "Used" || e.status === "Stored";
+        });
+
+        return cycleEmbryos;
+      } catch (error) {
+        console.error("Error fetching cycle embryos:", error);
+        return [];
+      }
+    },
+    enabled: !!currentCycle.patientId && isOpen,
+    staleTime: 30000,
+  });
+
+  const cycleEmbryos = cycleEmbryosData || [];
 
   // For display in tabs: use samples for current cycle
   const cycleSpermSamples = cycleSpermSamplesData?.data || [];
@@ -1321,19 +1361,22 @@ export function CycleUpdateModal({
         );
       }
 
+      // Validate outcome is required
+      if (!completeOutcome.trim()) {
+        throw new Error("Outcome is required to complete the treatment cycle");
+      }
+
       // Use POST /api/treatment-cycles/{id}/complete
       const completeRequest: {
         endDate: string;
-        outcome?: string;
+        outcome: string;
         notes?: string;
       } = {
         endDate: new Date().toISOString(),
+        outcome: completeOutcome.trim(),
       };
 
-      // Only include outcome and notes if they have values
-      if (completeOutcome.trim()) {
-        completeRequest.outcome = completeOutcome.trim();
-      }
+      // Only include notes if it has value
       if (completeNotes.trim()) {
         completeRequest.notes = completeNotes.trim();
       }
@@ -1848,16 +1891,6 @@ export function CycleUpdateModal({
                   </button>
                 ))}
               </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <Button variant="outline" size="sm" className="gap-2">
-                  <History className="h-4 w-4" />
-                  History
-                </Button>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Printer className="h-4 w-4" />
-                  Print
-                </Button>
-              </div>
             </div>
           </div>
         </div>
@@ -1961,6 +1994,174 @@ export function CycleUpdateModal({
                       </Card>
                     )}
                   </div>
+                )}
+
+                {/* Embryo Transfer Section - only show for step7_embryo_transfer */}
+                {(() => {
+                  // Check if we're at embryo transfer step
+                  const currentStep = String(
+                    currentCycle.currentStep || ""
+                  ).toLowerCase();
+                  const stepType = String(
+                    currentCycle.stepType || ""
+                  ).toUpperCase();
+                  const cycleName = String(
+                    currentCycle.cycleName || ""
+                  ).toLowerCase();
+
+                  const isEmbryoTransferStep =
+                    currentStep === "step7_embryo_transfer" ||
+                    stepType === "IVF_EMBRYOTRANSFER" ||
+                    stepType.includes("EMBRYOTRANSFER") ||
+                    (stepType.includes("TRANSFER") &&
+                      stepType.includes("EMBRYO")) ||
+                    cycleName.includes("embryo transfer") ||
+                    (cycleName.includes("transfer") &&
+                      cycleName.includes("embryo"));
+
+                  const shouldShow =
+                    isEmbryoTransferStep &&
+                    isIVFCycle &&
+                    hasStarted &&
+                    !isCompleted &&
+                    !isCancelled;
+
+                  return shouldShow;
+                })() && (
+                  <Card className="border-primary/50 bg-primary/5">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-base">
+                            <FlaskConical className="h-5 w-5 text-primary" />
+                            Embryo Transfer
+                          </CardTitle>
+                        </div>
+                        <Button
+                          onClick={() => setShowEmbryoTransferForm(true)}
+                          className="bg-primary hover:bg-primary/90"
+                          size="sm"
+                        >
+                          Select Embryos
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {cycleEmbryosLoading ? (
+                        <div className="py-4 text-center text-sm text-gray-500">
+                          Loading embryos...
+                        </div>
+                      ) : cycleEmbryos.length > 0 ? (
+                        <div className="space-y-4">
+                          <div className="rounded-lg border border-gray-200 bg-white p-4">
+                            <p className="text-sm font-medium text-gray-700 mb-3">
+                              Embryos Processed ({cycleEmbryos.length})
+                            </p>
+                            <div className="overflow-x-auto">
+                              <table className="w-full">
+                                <thead>
+                                  <tr className="border-b">
+                                    <th className="text-left p-2 text-xs uppercase text-gray-500">
+                                      Code
+                                    </th>
+                                    <th className="text-left p-2 text-xs uppercase text-gray-500">
+                                      Status
+                                    </th>
+                                    <th className="text-left p-2 text-xs uppercase text-gray-500">
+                                      Quality
+                                    </th>
+                                    <th className="text-left p-2 text-xs uppercase text-gray-500">
+                                      Quantity
+                                    </th>
+                                    <th className="text-left p-2 text-xs uppercase text-gray-500">
+                                      Date
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {cycleEmbryos.map((embryo) => {
+                                    const embryoSample =
+                                      embryo as LabSampleEmbryo;
+                                    const transferDate = embryo.collectionDate
+                                      ? new Date(
+                                          embryo.collectionDate
+                                        ).toLocaleDateString("en-US", {
+                                          day: "2-digit",
+                                          month: "short",
+                                          year: "numeric",
+                                        })
+                                      : "—";
+
+                                    return (
+                                      <tr
+                                        key={embryo.id}
+                                        className="border-b hover:bg-gray-50"
+                                      >
+                                        <td className="p-2">
+                                          <span className="font-mono text-sm">
+                                            {embryo.sampleCode ||
+                                              getLast4Chars(embryo.id)}
+                                          </span>
+                                        </td>
+                                        <td className="p-2">
+                                          <Badge
+                                            className={cn(
+                                              "inline-flex rounded-full px-2 py-1 text-xs font-semibold border",
+                                              embryo.status === "Used"
+                                                ? "bg-blue-100 text-blue-800 border-blue-200"
+                                                : "bg-purple-100 text-purple-800 border-purple-200"
+                                            )}
+                                          >
+                                            {embryo.status === "Used"
+                                              ? "Transferred"
+                                              : "Frozen"}
+                                          </Badge>
+                                        </td>
+                                        <td className="p-2 text-sm">
+                                          {embryoSample.grade ||
+                                            embryoSample.quality ||
+                                            embryo.quality ||
+                                            "—"}
+                                        </td>
+                                        <td className="p-2 text-sm">
+                                          {embryoSample.quantity || 1}
+                                        </td>
+                                        <td className="p-2 text-sm text-gray-600">
+                                          {transferDate}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                            <p className="text-xs text-blue-900">
+                              {
+                                cycleEmbryos.filter((e) => e.status === "Used")
+                                  .length
+                              }{" "}
+                              embryo(s) transferred,{" "}
+                              {
+                                cycleEmbryos.filter(
+                                  (e) => e.status === "Stored"
+                                ).length
+                              }{" "}
+                              embryo(s) frozen
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-gray-200 bg-white p-4">
+                          <p className="text-sm text-gray-600">
+                            Please select embryos to transfer or freeze. No
+                            embryos have been processed yet.
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 )}
 
                 {/* In Vitro Fertilization Section - only show for step5_fertilization */}
@@ -3609,13 +3810,14 @@ export function CycleUpdateModal({
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="complete-outcome">
-                  Outcome <span className="text-gray-500">(Optional)</span>
+                  Outcome <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="complete-outcome"
                   value={completeOutcome}
                   onChange={(e) => setCompleteOutcome(e.target.value)}
                   placeholder="e.g., Successful, Positive Result, etc."
+                  required
                 />
               </div>
               <div className="space-y-2">
@@ -3645,7 +3847,9 @@ export function CycleUpdateModal({
               </Button>
               <Button
                 onClick={() => completeCycleMutation.mutate()}
-                disabled={completeCycleMutation.isPending}
+                disabled={
+                  completeCycleMutation.isPending || !completeOutcome.trim()
+                }
               >
                 {completeCycleMutation.isPending
                   ? "Completing..."
@@ -3693,6 +3897,37 @@ export function CycleUpdateModal({
                 queryKey: ["medical-records"],
               });
             }}
+          />
+        </Modal>
+      )}
+
+      {/* Embryo Transfer Form Modal */}
+      {showEmbryoTransferForm && (
+        <Modal
+          title="Select Embryos to Transfer or Freeze"
+          description="Select an action for each embryo: transfer or freeze"
+          isOpen={showEmbryoTransferForm}
+          onClose={() => setShowEmbryoTransferForm(false)}
+          size="2xl"
+        >
+          <EmbryoTransferForm
+            cycleId={currentCycle.id}
+            onSuccess={() => {
+              queryClient.invalidateQueries({
+                queryKey: ["doctor", "treatment-cycle", currentCycle.id],
+              });
+              queryClient.invalidateQueries({
+                queryKey: ["embryos", "transfer-form", currentCycle.id],
+              });
+              queryClient.invalidateQueries({
+                queryKey: ["embryos", "cycle", currentCycle.id],
+              });
+              queryClient.invalidateQueries({
+                queryKey: ["embryo-transfer-embryos"],
+              });
+              setShowEmbryoTransferForm(false);
+            }}
+            onCancel={() => setShowEmbryoTransferForm(false)}
           />
         </Modal>
       )}

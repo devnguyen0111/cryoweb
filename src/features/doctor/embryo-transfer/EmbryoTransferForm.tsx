@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { api } from "@/api/client";
 import { toast } from "sonner";
 import type {
   TreatmentCycle,
-  LabSampleDetailResponse,
+  LabSample,
+  LabSampleEmbryo,
   SpecimenStatus,
 } from "@/api/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { useDoctorProfile } from "@/hooks/useDoctorProfile";
+import { useAuth } from "@/contexts/AuthContext";
+import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 interface EmbryoRow {
   id: string;
@@ -23,6 +27,7 @@ interface EmbryoRow {
   grade: string;
   quantity: number;
   notes: string;
+  action: "transfer" | "freeze" | ""; // Action for each embryo: transfer or freeze
 }
 
 interface EmbryoTransferFormData {
@@ -101,27 +106,57 @@ export function EmbryoTransferForm({
       },
     });
 
-  // Fetch embryos ready for transfer
+  // Fetch embryos ready for transfer or freezing
+  // Load all embryos from database using GET /api/labsample
   const { data: embryos, isLoading: embryosLoading } = useQuery<
-    LabSampleDetailResponse[]
+    LabSample[]
   >({
-    enabled: Boolean(cycleId),
-    queryKey: ["embryos", "transfer-form", cycleId],
+    enabled: Boolean(cycleId) && Boolean(cycle?.patientId),
+    queryKey: ["embryos", "transfer-form", cycleId, cycle?.patientId],
     queryFn: async () => {
-      if (!cycleId) return [];
+      if (!cycleId || !cycle?.patientId) return [];
       try {
-        const response = await api.sample.getAllDetailSamples({
+        // Use GET /api/labsample with PatientId filter
+        const response = await api.sample.getSamples({
           SampleType: "Embryo",
-          Status: "QualityChecked",
+          PatientId: cycle.patientId,
           Page: 1,
           Size: 100,
         });
-        return (response.data ?? []).filter(
-          (e) =>
-            e.treatmentCycleId === cycleId &&
-            (e.status === "QualityChecked" || e.status === "Processing")
+        
+        // Filter embryos for this cycle only (if treatmentCycleId is available)
+        // If treatmentCycleId is not set, include all embryos for the patient
+        const allEmbryos = response.data ?? [];
+        const cycleEmbryos = allEmbryos.filter(
+          (e) => {
+            // If treatmentCycleId exists in embryo, filter by it
+            // Otherwise, include all embryos for the patient (they might not have treatmentCycleId set yet)
+            if (e.treatmentCycleId) {
+              return e.treatmentCycleId === cycleId;
+            }
+            // Include embryos without treatmentCycleId (they might be newly created)
+            return true;
+          }
         );
+        
+        // Debug log
+        console.log("[EmbryoTransferForm] Loaded embryos:", {
+          cycleId,
+          patientId: cycle.patientId,
+          totalFromAPI: allEmbryos.length,
+          cycleEmbryos: cycleEmbryos.length,
+          embryos: cycleEmbryos.map((e) => ({
+            id: e.id,
+            code: e.sampleCode,
+            status: e.status,
+            quality: e.quality,
+            cycleId: e.treatmentCycleId,
+          })),
+        });
+        
+        return cycleEmbryos;
       } catch (error) {
+        console.error("[EmbryoTransferForm] Error loading embryos:", error);
         return [];
       }
     },
@@ -151,6 +186,10 @@ export function EmbryoTransferForm({
     },
   });
 
+  // Fetch doctor profile for auto-filling doctor name and signature
+  const { data: doctorProfile } = useDoctorProfile();
+  const { user } = useAuth();
+
   // Initialize form data when cycle and patient data are loaded
   useEffect(() => {
     if (cycle && patientDetails) {
@@ -158,10 +197,13 @@ export function EmbryoTransferForm({
         getFullNameFromObject(userDetails) ||
         getFullNameFromObject(patientDetails) ||
         userDetails?.userName ||
-        (patientDetails as any)?.accountInfo?.username ||
+        (isPatientDetailResponse(patientDetails)
+          ? patientDetails.accountInfo?.username
+          : null) ||
         "";
 
-      const patientMrn = (patientDetails as any)?.patientCode || "";
+      // Get patient code (Medical Record Number) - available in both Patient and PatientDetailResponse
+      const patientMrn = patientDetails.patientCode || "";
 
       setFormData((prev) => ({
         ...prev,
@@ -171,26 +213,84 @@ export function EmbryoTransferForm({
     }
   }, [cycle, patientDetails, userDetails]);
 
-  // Initialize embryos table when embryos are loaded
+  // Auto-fill doctor name and signature when doctor profile is loaded
   useEffect(() => {
-    if (embryos && embryos.length > 0 && formData.embryos.length === 0) {
-      const initialEmbryos: EmbryoRow[] = embryos.map((embryo, index) => ({
-        id: embryo.id,
-        code: embryo.sampleCode || `E${String(index + 1).padStart(3, "0")}`,
-        type: "Frozen", // Default to frozen, can be changed
-        grade: embryo.embryo?.quality || "",
-        quantity: embryo.embryo?.quantity || 1,
-        notes: "",
-      }));
+    if (doctorProfile || user) {
+      const doctorName =
+        getFullNameFromObject(doctorProfile) ||
+        getFullNameFromObject(user) ||
+        user?.userName ||
+        "";
+
+      // Use doctor name as signature (or can be customized)
+      const doctorSignature = doctorName;
+
+      // Also auto-fill the "Performing Doctor" field in section 1
       setFormData((prev) => ({
         ...prev,
-        embryos: initialEmbryos,
-        transferredCount: initialEmbryos.reduce(
-          (sum, e) => sum + e.quantity,
-          0
-        ),
+        doctor: doctorName,
+        doctorName,
+        doctorSignature,
       }));
+    }
+  }, [doctorProfile, user]);
+
+  // Initialize embryos table when embryos are loaded from database
+  // Use a ref to track if we've already loaded embryos to avoid re-loading
+  const embryosLoadedRef = useRef(false);
+  
+  // Reset ref when cycleId changes
+  useEffect(() => {
+    embryosLoadedRef.current = false;
+  }, [cycleId]);
+  
+  useEffect(() => {
+    console.log("[EmbryoTransferForm] useEffect embryos:", {
+      embryosLength: embryos?.length || 0,
+      embryosLoaded: embryosLoadedRef.current,
+      formDataEmbryosLength: formData.embryos.length,
+    });
+    
+    if (embryos && embryos.length > 0 && !embryosLoadedRef.current) {
+      console.log("[EmbryoTransferForm] Loading embryos into form:", embryos.length);
+      
+      const initialEmbryos: EmbryoRow[] = embryos.map((embryo, index) => {
+        // Cast to LabSampleEmbryo to access embryo-specific fields
+        const embryoSample = embryo as LabSampleEmbryo;
+        
+        return {
+          id: embryo.id,
+          code: embryo.sampleCode || `E${String(index + 1).padStart(3, "0")}`,
+          // Determine type based on embryo status or default to Frozen
+          type: embryo.status === "Frozen" || embryo.status === "Stored" ? "Frozen" : "Fresh",
+          grade: embryoSample.grade || embryoSample.quality || embryo.quality || "",
+          quantity: embryoSample.quantity || 1,
+          notes: embryo.notes || "",
+          action: "", // Default to empty, user must choose transfer or freeze
+        };
+      });
+      
+      console.log("[EmbryoTransferForm] Mapped embryos:", initialEmbryos);
+      
+      setFormData((prev) => {
+        // Only update if form is empty or if we have new embryos
+        if (prev.embryos.length === 0 || prev.embryos.every((e) => e.id.startsWith("new-"))) {
+          return {
+            ...prev,
+            embryos: initialEmbryos,
+            transferredCount: initialEmbryos
+              .filter((e) => e.action === "transfer")
+              .reduce((sum, e) => sum + e.quantity, 0),
+          };
+        }
+        return prev;
+      });
+      
       setEmbryoCounter(embryos.length + 1);
+      embryosLoadedRef.current = true;
+    } else if (embryos && embryos.length === 0) {
+      // Reset flag if embryos list becomes empty
+      embryosLoadedRef.current = false;
     }
   }, [embryos]);
 
@@ -202,6 +302,7 @@ export function EmbryoTransferForm({
       grade: "",
       quantity: 1,
       notes: "",
+      action: "",
     };
     setFormData((prev) => ({
       ...prev,
@@ -211,30 +312,35 @@ export function EmbryoTransferForm({
   };
 
   const updateEmbryoRow = (id: string, field: keyof EmbryoRow, value: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      embryos: prev.embryos.map((embryo) =>
+    setFormData((prev) => {
+      const updatedEmbryos = prev.embryos.map((embryo) =>
         embryo.id === id ? { ...embryo, [field]: value } : embryo
-      ),
-      transferredCount:
-        field === "quantity"
-          ? prev.embryos.reduce((sum, e) => {
-              if (e.id === id) return sum + Number(value);
-              return sum + e.quantity;
-            }, 0)
-          : prev.transferredCount,
-    }));
+      );
+      
+      // Recalculate transferredCount based on action
+      const transferredCount = updatedEmbryos
+        .filter((e) => e.action === "transfer")
+        .reduce((sum, e) => sum + e.quantity, 0);
+      
+      return {
+        ...prev,
+        embryos: updatedEmbryos,
+        transferredCount,
+      };
+    });
   };
 
   const removeEmbryoRow = (id: string) => {
     setFormData((prev) => {
-      const removed = prev.embryos.find((e) => e.id === id);
+      const updatedEmbryos = prev.embryos.filter((e) => e.id !== id);
+      const transferredCount = updatedEmbryos
+        .filter((e) => e.action === "transfer")
+        .reduce((sum, e) => sum + e.quantity, 0);
+      
       return {
         ...prev,
-        embryos: prev.embryos.filter((e) => e.id !== id),
-        transferredCount: removed
-          ? prev.transferredCount - removed.quantity
-          : prev.transferredCount,
+        embryos: updatedEmbryos,
+        transferredCount,
       };
     });
   };
@@ -251,12 +357,30 @@ export function EmbryoTransferForm({
       embryoId,
       status,
       notes,
+      isFreeze = false,
     }: {
       embryoId: string;
       status: SpecimenStatus;
       notes?: string;
+      isFreeze?: boolean;
     }) => {
-      return api.sample.updateSample(embryoId, {
+      // If freezing, use the frozen API endpoint: PUT /api/labsample/frozen/{id}
+      if (isFreeze) {
+        // Call the frozen API endpoint with canFrozen: true
+        const frozenResponse = await api.sample.updateFrozenStatus(embryoId, true);
+        
+        // If notes are provided, update them separately using updateEmbryoSample
+        if (notes) {
+          await api.sample.updateEmbryoSample(embryoId, {
+            notes,
+          });
+        }
+        
+        return frozenResponse;
+      }
+      
+      // For transfer (Used status), use the embryo update endpoint
+      return api.sample.updateEmbryoSample(embryoId, {
         status,
         notes,
       });
@@ -285,6 +409,22 @@ export function EmbryoTransferForm({
       return;
     }
 
+    // Check if all embryos have an action selected
+    const embryosWithoutAction = formData.embryos.filter(
+      (e) => !e.action
+    );
+    if (embryosWithoutAction.length > 0) {
+      toast.error("Please select an action (Transfer or Freeze) for all embryos");
+      return;
+    }
+
+    // Check if at least one embryo is being transferred
+    const transferEmbryos = formData.embryos.filter((e) => e.action === "transfer");
+    if (transferEmbryos.length === 0) {
+      toast.error("Please select at least one embryo to transfer");
+      return;
+    }
+
     if (formData.transferredCount === 0) {
       toast.error("Transferred embryo count must be greater than 0");
       return;
@@ -296,22 +436,42 @@ export function EmbryoTransferForm({
     }
 
     try {
-      // Update embryo statuses
+      // Update embryo statuses based on action
       const updatePromises = formData.embryos.map((embryo) => {
         if (embryo.id.startsWith("new-")) {
           // New embryo, might need to create it or skip
           return Promise.resolve();
         }
-        return updateEmbryoMutation.mutateAsync({
-          embryoId: embryo.id,
-          status: "Used",
-          notes: embryo.notes || formData.procedureNotes || undefined,
-        });
+        
+        if (embryo.action === "transfer") {
+          // Transfer: set status to "Used"
+          return updateEmbryoMutation.mutateAsync({
+            embryoId: embryo.id,
+            status: "Used",
+            notes: embryo.notes || formData.procedureNotes || undefined,
+            isFreeze: false,
+          });
+        } else if (embryo.action === "freeze") {
+          // Freeze: set status to "Stored"
+          return updateEmbryoMutation.mutateAsync({
+            embryoId: embryo.id,
+            status: "Stored",
+            notes: embryo.notes || formData.procedureNotes || undefined,
+            isFreeze: true,
+          });
+        }
+        
+        return Promise.resolve();
       });
 
       await Promise.all(updatePromises);
 
-      toast.success("Embryo transfer confirmed successfully");
+      const transferCount = transferEmbryos.length;
+      const freezeCount = formData.embryos.filter((e) => e.action === "freeze").length;
+      
+      toast.success(
+        `Successfully confirmed: ${transferCount} embryos transferred, ${freezeCount} embryos frozen`
+      );
       onSuccess?.();
     } catch (error: any) {
       toast.error(
@@ -409,37 +569,54 @@ export function EmbryoTransferForm({
           {/* Section 2: Embryo Information */}
           <div className="space-y-4">
             <h4 className="text-lg font-semibold">
-              1. Embryo Transfer Information
+              1. Embryo Information and Action Selection
             </h4>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-2 text-xs uppercase text-gray-500">
-                      No.
-                    </th>
-                    <th className="text-left p-2 text-xs uppercase text-gray-500">
-                      Embryo Code
-                    </th>
-                    <th className="text-left p-2 text-xs uppercase text-gray-500">
-                      Embryo Type
-                    </th>
-                    <th className="text-left p-2 text-xs uppercase text-gray-500">
-                      Quality (Grade)
-                    </th>
-                    <th className="text-left p-2 text-xs uppercase text-gray-500">
-                      Transfer Quantity
-                    </th>
-                    <th className="text-left p-2 text-xs uppercase text-gray-500">
-                      Notes
-                    </th>
-                    <th className="text-left p-2 text-xs uppercase text-gray-500">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {formData.embryos.map((embryo, index) => (
+            <p className="text-sm text-gray-600 mb-4">
+              Please select an action for each embryo: <strong>Transfer</strong> or <strong>Freeze</strong>
+            </p>
+            {embryosLoading ? (
+              <div className="py-8 text-center text-sm text-gray-500">
+                Loading embryos from database...
+              </div>
+            ) : formData.embryos.length === 0 ? (
+              <div className="py-8 text-center text-sm text-gray-500">
+                {embryos && embryos.length === 0
+                  ? "No embryos found for this treatment cycle. Please add embryos manually or ensure embryos are created for this cycle."
+                  : "No embryos loaded. Please wait..."}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        No.
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Embryo Code
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Embryo Type
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Quality (Grade)
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Transfer Quantity
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Action
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Notes
+                      </th>
+                      <th className="text-left p-2 text-xs uppercase text-gray-500">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formData.embryos.map((embryo, index) => (
                     <tr key={embryo.id} className="border-b hover:bg-gray-50">
                       <td className="p-2">{index + 1}</td>
                       <td className="p-2">
@@ -501,6 +678,24 @@ export function EmbryoTransferForm({
                         />
                       </td>
                       <td className="p-2">
+                        <select
+                          value={embryo.action}
+                          onChange={(e) =>
+                            updateEmbryoRow(
+                              embryo.id,
+                              "action",
+                              e.target.value as "transfer" | "freeze" | ""
+                            )
+                          }
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          required
+                        >
+                          <option value="">Select action</option>
+                          <option value="transfer">Transfer</option>
+                          <option value="freeze">Freeze</option>
+                        </select>
+                      </td>
+                      <td className="p-2">
                         <Input
                           value={embryo.notes}
                           onChange={(e) =>
@@ -520,10 +715,11 @@ export function EmbryoTransferForm({
                         </Button>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <Button
               type="button"
               variant="outline"

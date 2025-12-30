@@ -784,7 +784,6 @@ export function ServiceRequestDetailModal({
               variant="outline"
               className="w-full h-auto py-4 flex flex-col items-center gap-2"
             >
-              <div className="text-lg">💵</div>
               <div className="text-center">
                 <div className="font-semibold">Pay with Cash</div>
                 <div className="text-xs text-gray-500 mt-1">
@@ -801,7 +800,6 @@ export function ServiceRequestDetailModal({
               variant="outline"
               className="w-full h-auto py-4 flex flex-col items-center gap-2"
             >
-              <div className="text-lg">📱</div>
               <div className="text-center">
                 <div className="font-semibold">Use PayOS</div>
                 <div className="text-xs text-gray-500 mt-1">

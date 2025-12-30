@@ -970,7 +970,12 @@ function DoctorPatientsComponent() {
                         <div className="grid gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-2">
                           <div>
                             <p className="text-gray-500">Partner name</p>
-                            <p className="font-medium">{partnerInfo.fullName}</p>
+                            <p className="font-medium">
+                              {getFullNameFromObject(partnerInfo) ||
+                                partnerInfo?.fullName ||
+                                partnerInfo?.patientCode ||
+                                "—"}
+                            </p>
                           </div>
                           <div>
                             <p className="text-gray-500">Relationship type</p>

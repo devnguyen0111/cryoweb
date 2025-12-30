@@ -495,7 +495,12 @@ export function DoctorPatientDetailModal({
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <DetailField
                   label="Partner name"
-                  value={partnerInfo.fullName}
+                  value={
+                    getFullNameFromObject(partnerInfo) ||
+                    partnerInfo?.fullName ||
+                    partnerInfo?.patientCode ||
+                    "—"
+                  }
                 />
                 <DetailField
                   label="Relationship type"

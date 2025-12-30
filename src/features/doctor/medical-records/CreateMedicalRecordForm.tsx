@@ -452,7 +452,10 @@ export function CreateMedicalRecordForm({
                               patient.patientCode}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {patient.patientCode} - {patient.email || ""}
+                            {patient.patientCode} -{" "}
+                            {getFullNameFromObject(patient) ||
+                              patient.email ||
+                              ""}
                           </div>
                         </button>
                       ))}

@@ -36,7 +36,9 @@ export const Route = createFileRoute("/doctor/quality-check")({
 function QualityCheckComponent() {
   const queryClient = useQueryClient();
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
-  const [selectedEmbryoAction, setSelectedEmbryoAction] = useState<"transfer" | "frozen" | null>(null);
+  const [selectedEmbryoAction, setSelectedEmbryoAction] = useState<
+    "transfer" | "frozen" | null
+  >(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [sampleToCancel, setSampleToCancel] = useState<string | null>(null);
   const [sampleTypeFilter, setSampleTypeFilter] = useState<
@@ -236,29 +238,9 @@ function QualityCheckComponent() {
 
       if (!sample) throw new Error("Sample not found");
 
-      // If status is "Stored" (freeze for storage action), use frozen API
+      // If status is "Stored" (freeze for storage action), use frozen API only
       if (status === "Stored") {
-        // Use the frozen API endpoint
-        const frozenResponse = await api.sample.updateFrozenStatus(sampleId, true);
-        
-        // If notes are provided, update them separately
-        if (notes) {
-          const updateData: any = {
-            notes,
-          };
-          
-          if (sample.sampleType === "Sperm") {
-            await api.sample.updateSpermSample(sampleId, updateData);
-          } else if (sample.sampleType === "Oocyte") {
-            await api.sample.updateOocyteSample(sampleId, updateData);
-          } else if (sample.sampleType === "Embryo") {
-            await api.sample.updateEmbryoSample(sampleId, updateData);
-          } else {
-            await api.sample.updateSample(sampleId, updateData);
-          }
-        }
-        
-        return frozenResponse;
+        return await api.sample.updateFrozenStatus(sampleId, true);
       }
 
       // For "Used" status or other actions, use the regular update flow
@@ -308,7 +290,10 @@ function QualityCheckComponent() {
       if (!sample) throw new Error("Sample not found");
 
       const updateData: any = {
-        status: sample.sampleType === "Embryo" ? ("Discarded" as SpecimenStatus) : ("Disposed" as SpecimenStatus),
+        status:
+          sample.sampleType === "Embryo"
+            ? ("Discarded" as SpecimenStatus)
+            : ("Disposed" as SpecimenStatus),
         notes: notes || "Cancelled by doctor",
       };
 
@@ -371,8 +356,8 @@ function QualityCheckComponent() {
             <div>
               <h1 className="text-3xl font-bold">Quality Check</h1>
               <p className="text-gray-600 mt-2">
-                Review quality-checked samples (Oocyte, Sperm, and Embryo). Confirm to
-                use in treatment or store for freezing.
+                Review quality-checked samples (Oocyte, Sperm, and Embryo).
+                Confirm to use in treatment or store for freezing.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -576,7 +561,11 @@ function QualityCheckComponent() {
                                       <FlaskConical className="h-4 w-4 text-purple-500" />
                                     )}
                                     <span className="text-sm font-medium">
-                                      {isSperm ? "Sperm" : isOocyte ? "Oocyte" : "Embryo"}
+                                      {isSperm
+                                        ? "Sperm"
+                                        : isOocyte
+                                          ? "Oocyte"
+                                          : "Embryo"}
                                     </span>
                                   </div>
                                 </td>

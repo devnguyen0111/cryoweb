@@ -127,6 +127,8 @@ function DoctorPatientsComponent() {
 
       return response;
     },
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   const patients = data?.data ?? [];
@@ -151,6 +153,8 @@ function DoctorPatientsComponent() {
       queryKey: ["doctor", "patients", patient.id, "cycle-snapshot"],
       enabled: Boolean(patient.id),
       retry: false,
+      staleTime: 30000, // Cache for 30 seconds
+      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
       queryFn: async () => {
         if (!patient.id) {
           return emptyCycleResponse;
@@ -187,6 +191,8 @@ function DoctorPatientsComponent() {
       queryKey: ["doctor", "patients", patient.id, "user-details"],
       enabled: Boolean(patient.id || patient.accountId),
       retry: false,
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
       queryFn: async (): Promise<UserDetailResponse | null> => {
         const accountId = patient.accountId || patient.id;
         if (!accountId) {
@@ -272,6 +278,8 @@ function DoctorPatientsComponent() {
     enabled: Boolean(selectedPatientId),
     queryKey: ["doctor", "patients", selectedPatientId, "relationships"],
     retry: false,
+    staleTime: 60000, // Cache for 1 minute
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     queryFn: async () => {
       if (!selectedPatientId) return null;
       try {
@@ -319,9 +327,11 @@ function DoctorPatientsComponent() {
     data: selectedPatientCycles = emptyCycleResponse,
     isFetching: selectedPatientCyclesLoading,
   } = useQuery({
-    queryKey: ["doctor", "patients", selectedPatientId, "cycles", pageSize],
+      queryKey: ["doctor", "patients", selectedPatientId, "cycles", pageSize],
     enabled: Boolean(selectedPatientId),
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async () => {
       if (!selectedPatientId) {
         return emptyCycleResponse;

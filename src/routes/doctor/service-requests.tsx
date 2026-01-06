@@ -68,6 +68,8 @@ function DoctorServiceRequestsComponent() {
       },
     ],
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: () =>
       api.serviceRequest.getServiceRequests({
         pageNumber: page,
@@ -92,6 +94,8 @@ function DoctorServiceRequestsComponent() {
   const appointmentsQuery = useQuery({
     queryKey: ["appointments", "by-ids", appointmentIds],
     enabled: appointmentIds.length > 0,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async () => {
       const results: Record<string, Appointment & { patient?: Patient }> = {};
       await Promise.all(
@@ -164,6 +168,8 @@ function DoctorServiceRequestsComponent() {
     enabled:
       patientIds.length > 0 ||
       Object.keys(appointmentsQuery.data ?? {}).length > 0,
+    staleTime: 60000, // Cache for 1 minute
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     queryFn: async () => {
       const results: Record<string, Patient> = {};
 

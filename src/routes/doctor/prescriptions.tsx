@@ -182,6 +182,8 @@ function DoctorPrescriptionComponent() {
   const prescriptionsQuery = useQuery<PaginatedResponse<Prescription>>({
     queryKey: ["prescriptions", "doctor-prescriptions", filterParams],
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async (): Promise<PaginatedResponse<Prescription>> => {
       try {
         const response = await api.prescription.getPrescriptions(filterParams);
@@ -221,6 +223,8 @@ function DoctorPrescriptionComponent() {
     queryKey: ["medical-records", "by-ids", medicalRecordIds, "prescriptions"],
     enabled: medicalRecordIds.length > 0,
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async () => {
       const results: Record<string, MedicalRecord & { patientId?: string }> =
         {};
@@ -262,6 +266,8 @@ function DoctorPrescriptionComponent() {
   const patientQueries = useQueries({
     queries: patientIds.map((patientId) => ({
       queryKey: ["doctor", "patient", patientId, "prescriptions"],
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
       queryFn: async (): Promise<Patient | PatientDetailResponse | null> => {
         try {
           const response = await api.patient.getPatientById(patientId);

@@ -94,6 +94,8 @@ function DoctorAppointmentsComponent() {
     ],
     enabled: !!doctorId,
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: () =>
       api.appointment.getAppointments({
         doctorId: doctorId!,
@@ -154,7 +156,8 @@ function DoctorAppointmentsComponent() {
         }
       },
       retry: false,
-      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     })),
   });
 

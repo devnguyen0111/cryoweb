@@ -82,6 +82,8 @@ function QualityCheckComponent() {
     queryKey: ["quality-check-samples", "sperm", spermFilters],
     queryFn: () => api.sample.getAllDetailSamples(spermFilters),
     enabled: sampleTypeFilter === "" || sampleTypeFilter === "Sperm",
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   const oocyteFilters = useMemo(
@@ -101,6 +103,8 @@ function QualityCheckComponent() {
     queryKey: ["quality-check-samples", "oocyte", oocyteFilters],
     queryFn: () => api.sample.getAllDetailSamples(oocyteFilters),
     enabled: sampleTypeFilter === "" || sampleTypeFilter === "Oocyte",
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   const embryoFilters = useMemo(
@@ -120,6 +124,8 @@ function QualityCheckComponent() {
     queryKey: ["quality-check-samples", "embryo", embryoFilters],
     queryFn: () => api.sample.getAllDetailSamples(embryoFilters),
     enabled: sampleTypeFilter === "" || sampleTypeFilter === "Embryo",
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   // Combine all quality-checked samples
@@ -184,7 +190,8 @@ function QualityCheckComponent() {
         }
       },
       retry: false,
-      staleTime: 5 * 60 * 1000,
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     })),
   });
 

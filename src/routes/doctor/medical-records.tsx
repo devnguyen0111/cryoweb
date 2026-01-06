@@ -95,11 +95,15 @@ function DoctorMedicalRecordsComponent() {
         return createEmptyPaginatedResponse<MedicalRecord>();
       }
     },
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   const { data: selectedRecord } = useQuery<MedicalRecordDetailResponse>({
     queryKey: ["medical-record", selectedRecordId],
     enabled: !!selectedRecordId,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async () => {
       if (!selectedRecordId) throw new Error("No record ID");
       const response =
@@ -112,6 +116,8 @@ function DoctorMedicalRecordsComponent() {
   const { data: mediaFiles, isLoading: mediaLoading } = useQuery<Media[]>({
     queryKey: ["media", "medical-record", selectedRecordId],
     enabled: !!selectedRecordId,
+    staleTime: 60000, // Cache for 1 minute
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     queryFn: async () => {
       if (!selectedRecordId) return [];
       try {

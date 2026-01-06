@@ -78,6 +78,8 @@ function DoctorDashboardComponent() {
       ],
       enabled: !!doctorId,
       retry: false,
+      staleTime: 30000, // Cache for 30 seconds
+      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
       queryFn: async (): Promise<PaginatedResponse<Appointment>> => {
         if (!doctorId) {
           return createEmptyPaginatedResponse<Appointment>();
@@ -109,6 +111,8 @@ function DoctorDashboardComponent() {
       queryKey: ["doctor", "appointments", "recent", doctorId],
       enabled: !!doctorId,
       retry: false,
+      staleTime: 30000, // Cache for 30 seconds
+      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
       queryFn: async (): Promise<PaginatedResponse<Appointment>> => {
         if (!doctorId) {
           return createEmptyPaginatedResponse<Appointment>();
@@ -162,6 +166,8 @@ function DoctorDashboardComponent() {
     queryKey: ["doctor-dashboard", "patient-details", patientIds],
     enabled: patientIds.length > 0,
     retry: false,
+    staleTime: 60000, // Cache for 1 minute
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     queryFn: async () => {
       const entries = await Promise.all(
         patientIds.map(async (id) => {
@@ -217,6 +223,8 @@ function DoctorDashboardComponent() {
       queryKey: ["treatment-cycles", "doctor-dashboard", doctorId],
       enabled: !!doctorId,
       retry: false,
+      staleTime: 30000, // Cache for 30 seconds
+      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
       queryFn: async (): Promise<PaginatedResponse<TreatmentCycle>> => {
         try {
           // Backend API supports filtering by doctorId directly
@@ -242,6 +250,8 @@ function DoctorDashboardComponent() {
     queryKey: ["schedule", doctorId, today],
     enabled: !!doctorId,
     retry: false,
+    staleTime: 60000, // Cache for 1 minute
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     queryFn: async (): Promise<PaginatedResponse<DoctorSchedule>> => {
       if (!doctorId) {
         return createEmptyPaginatedResponse<DoctorSchedule>();
@@ -283,6 +293,8 @@ function DoctorDashboardComponent() {
     ],
     enabled: !!doctorId && appointmentIds.length > 0,
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async (): Promise<PaginatedResponse<ServiceRequest>> => {
       if (!doctorId || appointmentIds.length === 0) {
         return createEmptyPaginatedResponse<ServiceRequest>();

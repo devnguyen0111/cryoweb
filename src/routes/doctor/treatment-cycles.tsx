@@ -3,7 +3,7 @@
  * Displays patients currently in treatment with their treatment type and timeline
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, memo } from "react";
 import { RefreshCw } from "lucide-react";
 import { isAxiosError } from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -81,6 +81,8 @@ function DoctorTreatmentCyclesComponent() {
     queryKey: ["doctor", "treatment-cycles", "all", doctorId],
     enabled: !!doctorId,
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async (): Promise<PaginatedResponse<TreatmentCycle>> => {
       try {
         // Fetch all cycles for doctor (API has issues with Status filter, so we filter client-side)
@@ -147,6 +149,8 @@ function DoctorTreatmentCyclesComponent() {
   const { data: treatmentsData } = useQuery({
     queryKey: ["treatments", "for-cycles", uniqueTreatmentIds],
     enabled: uniqueTreatmentIds.length > 0,
+    staleTime: 60000, // Cache for 1 minute
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     queryFn: async () => {
       const treatments = await Promise.all(
         uniqueTreatmentIds.map(async (treatmentId) => {
@@ -237,39 +241,41 @@ function DoctorTreatmentCyclesComponent() {
     patientMap.forEach((patient) => {
       if (patient.allCycles.length === 0) return;
 
+      // Pre-compute statuses to avoid repeated calls
+      const cyclesWithStatus = patient.allCycles.map((c) => ({
+        cycle: c,
+        status: normalizeTreatmentCycleStatus(c.status),
+      }));
+
       // Find all cycles that are not Completed, Cancelled, or Failed
       // Sort by cycleNumber (ascending) and return the first one
-      const activeCycles = patient.allCycles
-        .filter((c) => {
-          const status = normalizeTreatmentCycleStatus(c.status);
+      const activeCycles = cyclesWithStatus
+        .filter(({ status }) => {
           return (
             status !== "Completed" &&
             status !== "Cancelled" &&
             status !== "Failed"
           );
         })
-        .sort((a, b) => a.cycleNumber - b.cycleNumber);
+        .sort((a, b) => a.cycle.cycleNumber - b.cycle.cycleNumber);
 
       // Select the cycle with lowest cycleNumber as activeCycle
       // If no active cycles, use the most recent cycle (including cancelled) for display
       if (activeCycles.length > 0) {
-        patient.activeCycle = activeCycles[0];
+        patient.activeCycle = activeCycles[0].cycle;
       } else {
         // All cycles are cancelled/completed/failed - use the most recent one for display
-        const sortedByDate = [...patient.allCycles].sort((a, b) => {
-          const aDate = a.updatedAt
-            ? new Date(a.updatedAt).getTime()
-            : a.createdAt
-              ? new Date(a.createdAt).getTime()
-              : 0;
-          const bDate = b.updatedAt
-            ? new Date(b.updatedAt).getTime()
-            : b.createdAt
-              ? new Date(b.createdAt).getTime()
-              : 0;
-          return bDate - aDate; // Most recent first
-        });
-        patient.activeCycle = sortedByDate[0] || null;
+        // Pre-compute dates to avoid repeated Date parsing
+        const cyclesWithDates = cyclesWithStatus.map(({ cycle }) => ({
+          cycle,
+          date: cycle.updatedAt
+            ? new Date(cycle.updatedAt).getTime()
+            : cycle.createdAt
+              ? new Date(cycle.createdAt).getTime()
+              : 0,
+        }));
+        cyclesWithDates.sort((a, b) => b.date - a.date); // Most recent first
+        patient.activeCycle = cyclesWithDates[0]?.cycle || null;
       }
     });
 
@@ -277,35 +283,52 @@ function DoctorTreatmentCyclesComponent() {
   }, [cyclesData?.data, treatmentToPatientMap, treatmentsData]);
 
   // Filter patients based on search and treatment type
+  // Optimized: Pre-compute lowercase values and use early returns
   const filteredPatients = useMemo(() => {
-    let filtered = patientsInTreatment;
-
-    if (treatmentTypeFilter) {
-      filtered = filtered.filter(
-        (p) => p.treatmentType === treatmentTypeFilter
-      );
+    if (!treatmentTypeFilter && !searchTerm) {
+      return patientsInTreatment;
     }
 
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (p) =>
-          p.patientName.toLowerCase().includes(searchLower) ||
-          p.patientCode?.toLowerCase().includes(searchLower) ||
-          p.patientId.toLowerCase().includes(searchLower)
-      );
-    }
+    const searchLower = searchTerm ? searchTerm.toLowerCase() : null;
 
-    return filtered;
+    return patientsInTreatment.filter((p) => {
+      // Filter by treatment type first (faster check)
+      if (treatmentTypeFilter && p.treatmentType !== treatmentTypeFilter) {
+        return false;
+      }
+
+      // Filter by search term
+      if (searchLower) {
+        const nameMatch = p.patientName.toLowerCase().includes(searchLower);
+        const codeMatch = p.patientCode?.toLowerCase().includes(searchLower);
+        const idMatch = p.patientId.toLowerCase().includes(searchLower);
+
+        if (!nameMatch && !codeMatch && !idMatch) {
+          return false;
+        }
+      }
+
+      return true;
+    });
   }, [patientsInTreatment, treatmentTypeFilter, searchTerm]);
 
   // Component to fetch and display patient info
-  function PatientCard({ patient }: { patient: PatientInTreatment }) {
+  // Memoized to prevent unnecessary re-renders
+  const PatientCard = memo(function PatientCard({
+    patient,
+  }: {
+    patient: PatientInTreatment;
+  }) {
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
     const [isCycleDetailModalOpen, setIsCycleDetailModalOpen] = useState(false);
     const activeCycle = patient.activeCycle;
 
     // Fetch treatment to ensure we have treatmentType for the cycle
+    // Use cached treatment data if available from parent query
+    const treatmentFromCache = useMemo(() => {
+      return treatmentsData?.find((t) => t?.id === activeCycle?.treatmentId);
+    }, [treatmentsData, activeCycle?.treatmentId]);
+
     const { data: cycleTreatment } = useQuery({
       queryKey: ["treatment", activeCycle?.treatmentId],
       queryFn: async () => {
@@ -319,7 +342,10 @@ function DoctorTreatmentCyclesComponent() {
           return null;
         }
       },
-      enabled: !!activeCycle?.treatmentId,
+      enabled: !!activeCycle?.treatmentId && !treatmentFromCache,
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+      initialData: treatmentFromCache || undefined,
     });
 
     // Ensure activeCycle has treatmentType
@@ -352,6 +378,8 @@ function DoctorTreatmentCyclesComponent() {
         }
       },
       enabled: !!patient.patientId,
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     });
 
     // Fetch all appointments for this patient (for the entire treatment)
@@ -386,53 +414,33 @@ function DoctorTreatmentCyclesComponent() {
         }
       },
       enabled: !!patient.patientId,
+      staleTime: 30000, // Cache for 30 seconds
+      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     });
 
     // Fetch all lab samples for all cycles in this treatment
+    // Optimized: Only fetch samples for active cycle, not all cycles
     const { data: samplesData } = useQuery({
-      queryKey: ["samples", "treatment", cycleWithType?.treatmentId],
+      queryKey: ["samples", "cycle", cycleWithType?.id],
       queryFn: async () => {
-        if (!cycleWithType?.treatmentId) return [];
+        if (!cycleWithType?.id) return [];
         try {
-          // Get all cycles for the treatment first
-          const cyclesResponse = await api.treatmentCycle.getTreatmentCycles({
-            TreatmentId: cycleWithType.treatmentId,
-            Page: 1,
-            Size: 100,
-          });
-          const cycles = cyclesResponse.data || [];
-
-          // Fetch samples for all cycles
-          // Handle 500 errors gracefully - API might not be available for all cycles
-          const allSamples = await Promise.allSettled(
-            cycles.map(async (cycle) => {
-              try {
-                const samplesResponse =
-                  await api.treatmentCycle.getCycleSamples(cycle.id);
-                return samplesResponse.data || [];
-              } catch (error: any) {
-                // If 500 error, API might not be implemented yet - return empty array
-                if (error?.response?.status === 500) {
-                  return [];
-                }
-                return [];
-              }
-            })
+          // Only fetch samples for the active cycle to reduce API calls
+          const samplesResponse = await api.treatmentCycle.getCycleSamples(
+            cycleWithType.id
           );
-
-          // Extract successful results
-          const successfulSamples = allSamples
-            .filter((result) => result.status === "fulfilled")
-            .map((result) => (result as PromiseFulfilledResult<any[]>).value);
-
-          // Flatten and return unique samples
-          const flattened = successfulSamples.flat();
-          return flattened;
-        } catch {
+          return samplesResponse.data || [];
+        } catch (error: any) {
+          // If 500 error, API might not be implemented yet - return empty array
+          if (error?.response?.status === 500) {
+            return [];
+          }
           return [];
         }
       },
-      enabled: !!cycleWithType?.treatmentId,
+      enabled: !!cycleWithType?.id,
+      staleTime: 30000, // Cache for 30 seconds
+      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     });
 
     // Fetch all agreements for this treatment
@@ -452,26 +460,17 @@ function DoctorTreatmentCyclesComponent() {
         }
       },
       enabled: !!cycleWithType?.treatmentId,
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     });
 
     // Fetch all cycles for this treatment to determine progress
-    const { data: allCyclesData } = useQuery({
-      queryKey: ["treatment-cycles", "treatment", cycleWithType?.treatmentId],
-      queryFn: async () => {
-        if (!cycleWithType?.treatmentId) return [];
-        try {
-          const response = await api.treatmentCycle.getTreatmentCycles({
-            TreatmentId: cycleWithType.treatmentId,
-            Page: 1,
-            Size: 100, // Get all cycles for the treatment
-          });
-          return response.data || [];
-        } catch {
-          return [];
-        }
-      },
-      enabled: !!cycleWithType?.treatmentId,
-    });
+    // Use cached cycles data if available from parent query
+    const allCyclesData = useMemo(() => {
+      if (!cycleWithType?.treatmentId) return [];
+      const cycles = cyclesData?.data || [];
+      return cycles.filter((c) => c.treatmentId === cycleWithType.treatmentId);
+    }, [cyclesData?.data, cycleWithType?.treatmentId]);
 
     const patientName =
       getFullNameFromObject(userDetails) ||
@@ -673,7 +672,9 @@ function DoctorTreatmentCyclesComponent() {
             <div className="mt-6">
               <HorizontalTreatmentTimeline
                 cycle={cycleWithType}
-                allCycles={allCyclesData || patient.allCycles}
+                allCycles={
+                  allCyclesData.length > 0 ? allCyclesData : patient.allCycles
+                }
                 onStepClick={(step) => {
                   navigate({
                     to: "/doctor/treatment-cycles/$cycleId",
@@ -703,7 +704,7 @@ function DoctorTreatmentCyclesComponent() {
         )}
       </>
     );
-  }
+  });
 
   return (
     <ProtectedRoute allowedRoles={["Doctor"]}>

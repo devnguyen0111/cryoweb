@@ -1398,6 +1398,12 @@ export function CycleUpdateModal({
       queryClient.invalidateQueries({
         queryKey: ["doctor", "treatment-cycle", currentCycle.id],
       });
+      // Invalidate current step query to refresh timeline
+      if (currentCycle.treatmentId) {
+        queryClient.invalidateQueries({
+          queryKey: ["treatment-current-step", currentCycle.treatmentId],
+        });
+      }
     },
     onError: (error: any) => {
       toast.error(
@@ -1464,6 +1470,45 @@ export function CycleUpdateModal({
 
     if (treatmentType !== "IUI") return false;
 
+    // CRITICAL: Check if there's already a cycle at step5_post_iui (Post-Insemination Follow-Up)
+    // If yes, it means IUI Procedure has already been completed, so don't show the form
+    const allCycles = enhancedAllCyclesData || [];
+    const hasPostIUICycle = allCycles.some((c) => {
+      const cycleStatus = normalizeTreatmentCycleStatus(c.status);
+      // Check if cycle is at step5_post_iui
+      const cycleStep = c.currentStep as IUIStep | undefined;
+      const isStep5PostIUI = cycleStep === "step5_post_iui";
+      
+      // Also check stepType
+      const stepTypeStr = c.stepType
+        ? String(c.stepType).toUpperCase()
+        : "";
+      const isStepTypePostIUI =
+        stepTypeStr === "IUI_POSTIUI" ||
+        stepTypeStr.includes("POSTIUI") ||
+        stepTypeStr.includes("POST_IUI");
+      
+      // Also check cycleName
+      const cycleNameLower = c.cycleName?.toLowerCase() || "";
+      const isCycleNamePostIUI =
+        cycleNameLower.includes("post-insemination") ||
+        cycleNameLower.includes("post-iui") ||
+        (cycleNameLower.includes("post") &&
+          cycleNameLower.includes("follow-up")) ||
+        (cycleNameLower.includes("post") && cycleNameLower.includes("monitoring"));
+
+      return (
+        (isStep5PostIUI || isStepTypePostIUI || isCycleNamePostIUI) &&
+        cycleStatus !== "Cancelled" &&
+        cycleStatus !== "Failed"
+      );
+    });
+
+    // If there's already a Post-IUI cycle, don't show IUI Procedure form
+    if (hasPostIUICycle) {
+      return false;
+    }
+
     // Check if currentStep is step4_iui_procedure
     const currentStep = currentCycle.currentStep as IUIStep | undefined;
     const isStep4IUIProcedure = currentStep === "step4_iui_procedure";
@@ -1490,6 +1535,7 @@ export function CycleUpdateModal({
     // 2. Either currentStep is step4_iui_procedure OR stepType indicates IUI_Procedure
     // 3. Cycle has started (InProgress) OR has a startDate (some cycles might have startDate but status not updated)
     // 4. Not completed or cancelled
+    // 5. No Post-IUI cycle exists yet (checked above)
     const hasStartedOrHasStartDate =
       hasStarted || (currentCycle.startDate && !isCompleted && !isCancelled);
 
@@ -1517,6 +1563,7 @@ export function CycleUpdateModal({
         startDate: currentCycle.startDate,
         isCompleted,
         isCancelled,
+        hasPostIUICycle,
         result,
         cycleId: currentCycle.id,
       });
@@ -1534,6 +1581,7 @@ export function CycleUpdateModal({
     isCompleted,
     isCancelled,
     currentCycle.id,
+    enhancedAllCyclesData,
   ]);
 
   // Memoize handler to prevent unnecessary re-renders

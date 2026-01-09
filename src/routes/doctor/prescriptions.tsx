@@ -47,7 +47,6 @@ type PrescriptionSearchState = {
   medicalRecordId?: string;
 };
 
-
 export const Route = createFileRoute("/doctor/prescriptions")({
   component: DoctorPrescriptionComponent,
   validateSearch: (
@@ -266,7 +265,6 @@ function DoctorPrescriptionComponent() {
   const patientQueries = useQueries({
     queries: patientIds.map((patientId) => ({
       queryKey: ["doctor", "patient", patientId, "prescriptions"],
-      staleTime: 60000, // Cache for 1 minute
       gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
       queryFn: async (): Promise<Patient | PatientDetailResponse | null> => {
         try {

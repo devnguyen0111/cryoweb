@@ -241,34 +241,41 @@ function EmbryoCultureComponent() {
   }, [userDetailsQueries, patientIds]);
 
   // Fetch embryos for cycles in culture
+  // Optimized: Fetch all embryos once, then group by cycleId instead of fetching multiple times
   const { data: embryosData, isLoading: embryosLoading } = useQuery({
     queryKey: ["embryo-culture-embryos", cyclesInCulture.map((c) => c.id)],
     enabled: cyclesInCulture.length > 0,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async () => {
-      const results: Record<string, LabSampleDetailResponse[]> = {};
+      try {
+        // Fetch all embryos once instead of fetching for each cycle
+        const response = await api.sample.getAllDetailSamples({
+          SampleType: "Embryo",
+          Page: 1,
+          Size: 1000, // Get more to cover all cycles
+        });
 
-      await Promise.all(
-        cyclesInCulture.map(async (cycle) => {
-          try {
-            const response = await api.sample.getAllDetailSamples({
-              SampleType: "Embryo",
-              Page: 1,
-              Size: 100,
-            });
+        const allEmbryos = response.data ?? [];
+        const cycleIds = new Set(cyclesInCulture.map((c) => c.id));
 
-            // Filter embryos for this cycle
-            const cycleEmbryos = (response.data ?? []).filter(
-              (embryo) => embryo.treatmentCycleId === cycle.id
-            );
+        // Group embryos by cycleId
+        const results: Record<string, LabSampleDetailResponse[]> = {};
+        cyclesInCulture.forEach((cycle) => {
+          results[cycle.id] = allEmbryos.filter(
+            (embryo) => embryo.treatmentCycleId === cycle.id
+          );
+        });
 
-            results[cycle.id] = cycleEmbryos;
-          } catch (error) {
-            results[cycle.id] = [];
-          }
-        })
-      );
-
-      return results;
+        return results;
+      } catch (error) {
+        // Return empty results for all cycles on error
+        const results: Record<string, LabSampleDetailResponse[]> = {};
+        cyclesInCulture.forEach((cycle) => {
+          results[cycle.id] = [];
+        });
+        return results;
+      }
     },
   });
 

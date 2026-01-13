@@ -19,7 +19,7 @@ const tabs = [
   { id: "overview", label: "Overview" },
   { id: "medical", label: "Medical History" },
   { id: "treatments", label: "Treatment Cycles" },
-  { id: "encounters", label: "Encounters" },
+  { id: "encounters", label: "Treatments" },
   { id: "appointments", label: "Appointments" },
   { id: "documents", label: "Documents" },
 ] as const;
@@ -285,7 +285,7 @@ function DoctorPatientProfile() {
       value: completedCycles,
     },
     {
-      label: "Encounters recorded",
+      label: "Treatments recorded",
       value: treatments.length,
     },
   ];
@@ -423,7 +423,7 @@ function DoctorPatientProfile() {
                     })
                   }
                 >
-                  Create encounter
+                  Create treatment
                 </Button>
                 <Button
                   variant="outline"
@@ -621,7 +621,7 @@ function DoctorPatientProfile() {
                     </p>
                   </div>
                   <p className="text-xs text-gray-500">
-                    * Information is synced automatically from encounters,
+                    * Information is synced automatically from treatments,
                     treatment notes and prescriptions.
                   </p>
                 </CardContent>
@@ -764,7 +764,7 @@ function DoctorPatientProfile() {
             <Card>
               <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <CardTitle>Encounter history</CardTitle>
+                  <CardTitle>Treatment history</CardTitle>
                   <p className="text-sm text-gray-500">
                     A chronological view of visits, diagnoses and care plans.
                   </p>
@@ -779,7 +779,7 @@ function DoctorPatientProfile() {
                     })
                   }
                 >
-                  Add encounter
+                  Add treatment
                 </Button>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-gray-700">
@@ -794,7 +794,7 @@ function DoctorPatientProfile() {
                           <p className="text-base font-semibold text-gray-900">
                             {treatment.treatmentName ||
                               treatment.treatmentType ||
-                              "Encounter"}
+                              "Treatment"}
                           </p>
                           <p className="text-xs text-gray-500">
                             {formatDate(treatment.startDate)} →{" "}
@@ -815,8 +815,8 @@ function DoctorPatientProfile() {
                   ))
                 ) : (
                   <p className="text-sm text-gray-500">
-                    No encounters have been recorded yet. Create the first
-                    encounter for this patient to kick off their clinical
+                    No treatments have been recorded yet. Create the first
+                    treatment for this patient to kick off their clinical
                     journey.
                   </p>
                 )}

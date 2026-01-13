@@ -64,6 +64,9 @@ function DoctorAppointmentsComponent() {
     setIsRefreshing(true);
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["doctor", "appointments"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "patient"],
+      }),
     ]);
     setIsRefreshing(false);
   };
@@ -136,8 +139,7 @@ function DoctorAppointmentsComponent() {
   }, [data?.data]);
 
   // Fetch patient data for all appointments
-  // Note: useQueries doesn't work well with custom hooks, so we keep the query here
-  // but use the same pattern as usePatientDetails
+  // Optimized: Batch fetch all patients in parallel using useQueries
   const patientQueries = useQueries({
     queries: patientIds.map((patientId) => ({
       queryKey: ["doctor", "patient", patientId, "appointment-list"],
@@ -155,6 +157,7 @@ function DoctorAppointmentsComponent() {
           }
         }
       },
+      enabled: !!patientId && patientIds.length > 0,
       retry: false,
       staleTime: 60000, // Cache for 1 minute
       gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
@@ -306,7 +309,7 @@ function DoctorAppointmentsComponent() {
                 <h1 className="text-3xl font-bold">Appointment management</h1>
                 <p className="text-gray-600">
                   Monitor schedules, update statuses, and start patient
-                  encounters.
+                  treatments.
                 </p>
               </div>
               <Button
@@ -593,7 +596,7 @@ function DoctorAppointmentsComponent() {
                                     })
                                   }
                                 >
-                                  Start encounter
+                                  Start treatment
                                 </Button>
                                 <select
                                   value={appointment.status || ""}

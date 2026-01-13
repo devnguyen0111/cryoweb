@@ -1335,12 +1335,12 @@ export function TreatmentDetailForm({
             Close
           </Button>
         ) : (
-          <Button
+            <Button
             type="button"
             variant="outline"
             onClick={() => navigate({ to: "/doctor/encounters" })}
           >
-            Back to Encounters
+            Back to Treatments
           </Button>
         )}
         {treatmentType === "IUI" && (

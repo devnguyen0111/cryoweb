@@ -36,7 +36,6 @@ import type {
   IUIStep,
   LabSampleDetailResponse,
   LabSampleEmbryo,
-  Relationship,
 } from "@/api/types";
 import { HorizontalTreatmentTimeline } from "./HorizontalTreatmentTimeline";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
@@ -58,6 +57,15 @@ import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { usePatientDetails } from "@/hooks/usePatientDetails";
 import { formatDateForInput } from "@/utils/date-helpers";
 import { isPatientDetailResponse } from "@/utils/patient-helpers";
+import {
+  inferTreatmentType,
+  isIVFCycle3,
+  getPartnerPatientId,
+  filterQualityCheckedSamples,
+  safeApiCall,
+  createEmptyDataResponse,
+  QUERY_CONFIG,
+} from "./cycle-update-helpers";
 
 // Component to display prescription with full details
 function PrescriptionCard({
@@ -206,6 +214,12 @@ interface CycleUpdateModalProps {
   cycle: TreatmentCycle;
   isOpen: boolean;
   onClose: () => void;
+  // Optional cached data to avoid refetching
+  treatment?: any; // Treatment data from parent
+  allCycles?: TreatmentCycle[]; // All cycles for this treatment from parent
+  doctorProfile?: any; // Doctor profile from parent
+  currentUser?: any; // Current user from parent
+  patientName?: string; // Patient name from parent
 }
 
 type PrescriptionFormData = {
@@ -236,8 +250,13 @@ export function CycleUpdateModal({
   cycle,
   isOpen,
   onClose,
+  treatment: cachedTreatment,
+  allCycles: cachedAllCycles,
+  doctorProfile: cachedDoctorProfile,
+  currentUser: cachedUser,
+  patientName: cachedPatientName,
 }: CycleUpdateModalProps) {
-  const { user } = useAuth();
+  const { user: authUser } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabType>("assessment");
   const [prescriptionViewMode, setPrescriptionViewMode] = useState<
@@ -260,7 +279,13 @@ export function CycleUpdateModal({
   >(null);
   const [showFertilizationModal, setShowFertilizationModal] = useState(false);
   const [showEmbryoTransferForm, setShowEmbryoTransferForm] = useState(false);
-  const { data: doctorProfile } = useDoctorProfile();
+
+  // Use cached doctorProfile if provided, otherwise fetch
+  const { data: fetchedDoctorProfile } = useDoctorProfile();
+  const doctorProfile = cachedDoctorProfile || fetchedDoctorProfile;
+
+  // Use cached user if provided, otherwise use auth user
+  const user = cachedUser || authUser;
 
   // Reset selectedSpermSampleId when modal closes or cycle changes
   useEffect(() => {
@@ -269,151 +294,180 @@ export function CycleUpdateModal({
     }
   }, [isOpen, cycle.id]);
 
+  // Memoize cycle ID and patient ID early to ensure they're available for queries
+  const cycleId = useMemo(() => cycle.id, [cycle.id]);
+  const initialPatientId = useMemo(() => cycle.patientId, [cycle.patientId]);
+
   // Fetch latest cycle details from API
   const { data: cycleDetails } = useQuery({
-    queryKey: ["doctor", "treatment-cycle", cycle.id],
+    queryKey: ["doctor", "treatment-cycle", cycleId],
     queryFn: async () => {
-      const response = await api.treatmentCycle.getTreatmentCycleById(cycle.id);
+      const response = await api.treatmentCycle.getTreatmentCycleById(cycleId);
       return response.data;
     },
-    enabled: isOpen && !!cycle.id,
-    staleTime: 30000, // Cache for 30 seconds to reduce unnecessary refetches
+    enabled: isOpen && !!cycleId,
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
   });
 
+  // Use fallback pattern for current cycle
   const rawCurrentCycle = cycleDetails || cycle;
 
-  // Fetch treatment to get doctorId and treatmentType
-  const { data: treatmentData } = useQuery({
-    queryKey: ["treatment", rawCurrentCycle.treatmentId],
-    queryFn: async () => {
-      if (!rawCurrentCycle.treatmentId) return null;
-      const response = await api.treatment.getTreatmentById(
-        rawCurrentCycle.treatmentId
-      );
-      return response.data;
-    },
-    enabled: !!rawCurrentCycle.treatmentId && isOpen,
-  });
-
-  // Fetch all cycles for this treatment to infer treatmentType if needed
-  const { data: allCyclesData } = useQuery({
-    queryKey: ["treatment-cycles", "treatment", rawCurrentCycle.treatmentId],
-    queryFn: async () => {
-      if (!rawCurrentCycle.treatmentId) return [];
-      try {
-        const response = await api.treatmentCycle.getTreatmentCycles({
-          TreatmentId: rawCurrentCycle.treatmentId,
-          Page: 1,
-          Size: 100,
-        });
-        return Array.isArray(response?.data) ? response.data : [];
-      } catch {
-        return [];
-      }
-    },
-    enabled: !!rawCurrentCycle.treatmentId && isOpen,
-  });
-
-  // Helper function to infer treatmentType for a cycle
-  const inferTreatmentType = useCallback(
-    (cycle: TreatmentCycle): "IUI" | "IVF" | undefined => {
-      // First, try cycle.treatmentType
-      if (cycle.treatmentType === "IUI" || cycle.treatmentType === "IVF") {
-        return cycle.treatmentType;
-      }
-      // Then try treatmentData?.treatmentType
-      if (treatmentData?.treatmentType) {
-        const type = String(treatmentData.treatmentType).toUpperCase();
-        if (type === "IUI") return "IUI";
-        if (type === "IVF") return "IVF";
-      }
-      // Try to infer from cycleName if available
-      if (cycle.cycleName) {
-        const cycleNameUpper = cycle.cycleName.toUpperCase();
-        if (cycleNameUpper.includes("IVF")) {
-          return "IVF";
-        } else if (cycleNameUpper.includes("IUI")) {
-          return "IUI";
-        }
-      }
-      return undefined;
-    },
-    [treatmentData]
+  // Memoize treatment ID to optimize dependencies
+  const currentTreatmentId = useMemo(
+    () => rawCurrentCycle.treatmentId,
+    [rawCurrentCycle.treatmentId]
   );
 
-  // Ensure currentCycle has treatmentType (similar to CycleUpdateForm)
+  // Use cached treatment if provided, otherwise fetch
+  const { data: fetchedTreatmentData } = useQuery({
+    queryKey: ["treatment", currentTreatmentId],
+    queryFn: async () =>
+      safeApiCall(
+        async () => {
+          const response = await api.treatment.getTreatmentById(
+            currentTreatmentId!
+          );
+          return response.data;
+        },
+        null,
+        `[CycleUpdateModal] Failed to fetch treatment ${currentTreatmentId}`
+      ),
+    enabled: !!currentTreatmentId && isOpen && !cachedTreatment,
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
+  });
+
+  // Use cached treatment or fetched treatment
+  const treatmentData = cachedTreatment || fetchedTreatmentData;
+
+  // Memoize patient ID - try multiple sources:
+  // 1. cycleDetails.patientId (from API)
+  // 2. cycle.patientId (from prop)
+  // 3. treatmentData.patientId (from treatment - most reliable)
+  const patientId = useMemo(
+    () =>
+      rawCurrentCycle.patientId ||
+      initialPatientId ||
+      treatmentData?.patientId ||
+      undefined,
+    [rawCurrentCycle.patientId, initialPatientId, treatmentData?.patientId]
+  );
+
+  // Use cached allCycles if provided, otherwise fetch
+  const { data: fetchedAllCyclesData } = useQuery({
+    queryKey: ["treatment-cycles", "treatment", currentTreatmentId],
+    queryFn: async () =>
+      safeApiCall(
+        async () => {
+          const response = await api.treatmentCycle.getTreatmentCycles({
+            TreatmentId: currentTreatmentId!,
+            Page: 1,
+            Size: 100,
+          });
+          return Array.isArray(response?.data) ? response.data : [];
+        },
+        [],
+        `[CycleUpdateModal] Failed to fetch cycles for treatment ${currentTreatmentId}`
+      ),
+    enabled: !!currentTreatmentId && isOpen && !cachedAllCycles,
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
+  });
+
+  // Use cached allCycles or fetched allCycles
+  const allCyclesData = cachedAllCycles || fetchedAllCyclesData;
+
+  // Memoize treatment type for inference
+  const treatmentTypeFromData = useMemo(
+    () => treatmentData?.treatmentType,
+    [treatmentData?.treatmentType]
+  );
+
+  // Ensure currentCycle has treatmentType with optimized inference
   const currentCycle = useMemo(() => {
-    let treatmentType = inferTreatmentType(rawCurrentCycle);
+    let inferredType = inferTreatmentType(
+      rawCurrentCycle,
+      treatmentTypeFromData
+    );
 
     // Try to infer from allCyclesData if still not found
     if (
-      !treatmentType &&
+      !inferredType &&
       Array.isArray(allCyclesData) &&
       allCyclesData.length > 0
     ) {
       const cycleWithType = allCyclesData.find(
         (c) => c.treatmentType === "IUI" || c.treatmentType === "IVF"
       );
-      if (cycleWithType) {
-        if (
-          cycleWithType.treatmentType === "IUI" ||
-          cycleWithType.treatmentType === "IVF"
-        ) {
-          treatmentType = cycleWithType.treatmentType;
-        }
+      if (
+        cycleWithType?.treatmentType === "IUI" ||
+        cycleWithType?.treatmentType === "IVF"
+      ) {
+        inferredType = cycleWithType.treatmentType;
       }
     }
 
     return {
       ...rawCurrentCycle,
-      treatmentType: treatmentType,
+      treatmentType: inferredType,
     };
-  }, [rawCurrentCycle, treatmentData, allCyclesData, inferTreatmentType]);
+  }, [rawCurrentCycle, treatmentTypeFromData, allCyclesData]);
 
-  // Enhance allCyclesData with treatmentType to prevent "Treatment type not specified" error
+  // Enhance allCyclesData with treatmentType
   const enhancedAllCyclesData = useMemo(() => {
-    // Ensure allCyclesData is an array before using .map()
     if (!Array.isArray(allCyclesData) || allCyclesData.length === 0) {
       return [currentCycle];
     }
     return allCyclesData.map((cycle) => {
-      const treatmentType = inferTreatmentType(cycle);
+      const treatmentType =
+        inferTreatmentType(cycle, treatmentTypeFromData) ||
+        currentCycle.treatmentType;
       return {
         ...cycle,
-        treatmentType: treatmentType || currentCycle.treatmentType,
+        treatmentType,
       };
     });
-  }, [allCyclesData, currentCycle, inferTreatmentType]);
+  }, [allCyclesData, currentCycle, treatmentTypeFromData]);
+
+  // Memoize doctor ID to optimize dependencies
+  const doctorId = useMemo(
+    () => treatmentData?.doctorId || currentCycle.doctorId,
+    [treatmentData?.doctorId, currentCycle.doctorId]
+  );
 
   // Fetch primary doctor details
-  const doctorId = treatmentData?.doctorId || currentCycle.doctorId;
   const { data: primaryDoctor } = useQuery({
     queryKey: ["doctor", doctorId],
-    queryFn: async () => {
-      if (!doctorId) return null;
-      try {
-        const response = await api.doctor.getDoctorById(doctorId);
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
+    queryFn: async () =>
+      safeApiCall(
+        async () => {
+          const response = await api.doctor.getDoctorById(doctorId!);
+          return response.data;
+        },
+        null,
+        `[CycleUpdateModal] Failed to fetch doctor ${doctorId}`
+      ),
     enabled: !!doctorId && isOpen,
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
   });
 
   // Fetch user details for primary doctor to get firstName/lastName
   const { data: primaryDoctorUserDetails } = useQuery({
     queryKey: ["user-details", doctorId, "primary-doctor"],
-    queryFn: async () => {
-      if (!doctorId) return null;
-      try {
-        const response = await api.user.getUserDetails(doctorId);
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
+    queryFn: async () =>
+      safeApiCall(
+        async () => {
+          const response = await api.user.getUserDetails(doctorId!);
+          return response.data;
+        },
+        null,
+        `[CycleUpdateModal] Failed to fetch user details for doctor ${doctorId}`
+      ),
     enabled: !!doctorId && isOpen,
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
   });
 
   // Prescription Form
@@ -444,163 +498,161 @@ export function CycleUpdateModal({
     name: "medications",
   });
 
-  // Get patient details
+  // Get patient details - patientId is already memoized above
   const { data: patientData } = usePatientDetails(
-    currentCycle.patientId,
-    !!currentCycle.patientId && isOpen
+    patientId,
+    !!patientId && isOpen
   );
 
   // Get user details for patient (has fullName, dob, etc.)
-  const accountId = patientData?.accountId || currentCycle.patientId;
+  // Use patientId directly first, then try accountId from patientData
+  const accountId = useMemo(
+    () => patientData?.accountId || patientId,
+    [patientData?.accountId, patientId]
+  );
+
+  // Fetch user details - try both accountId and patientId to ensure we get the data
   const { data: userDetails } = useQuery({
-    queryKey: ["user-details", accountId, "cycle-update-modal"],
+    queryKey: ["user-details", accountId || patientId, "cycle-update-modal"],
     queryFn: async () => {
-      if (!accountId) return null;
-      try {
-        const response = await api.user.getUserDetails(accountId);
-        return response.data ?? null;
-      } catch {
-        return null;
-      }
+      const targetId = accountId || patientId;
+      if (!targetId) return null;
+
+      return safeApiCall(
+        async () => {
+          const response = await api.user.getUserDetails(targetId);
+          return response.data ?? null;
+        },
+        null,
+        `[CycleUpdateModal] Failed to fetch user details for patient ${targetId}`
+      );
     },
-    enabled: !!accountId && isOpen,
+    enabled: !!(accountId || patientId) && isOpen,
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
   });
+
+  // Debug logging in development
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development" && isOpen) {
+      console.log("[CycleUpdateModal] Data loading state:", {
+        patientId,
+        accountId,
+        hasPatientData: !!patientData,
+        hasUserDetails: !!userDetails,
+        patientDataAccountId: patientData?.accountId,
+        userDetailsName: userDetails
+          ? getFullNameFromObject(userDetails)
+          : null,
+      });
+    }
+  }, [isOpen, patientId, accountId, patientData, userDetails]);
 
   // Get appointment history
   const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
-    queryKey: ["appointments", "patient-history", currentCycle.patientId],
+    queryKey: ["appointments", "patient-history", patientId],
     queryFn: async () => {
-      if (!currentCycle.patientId) return { data: [] };
-      const response = await api.appointment.getAppointmentHistoryByPatient(
-        currentCycle.patientId,
+      if (!patientId) return { data: [] };
+      return safeApiCall(
+        async () => {
+          const response = await api.appointment.getAppointmentHistoryByPatient(
+            patientId,
+            {
+              Size: 50,
+              Sort: "AppointmentDate",
+              Order: "desc",
+            }
+          );
+          return response;
+        },
         {
-          Size: 50,
-          Sort: "AppointmentDate",
-          Order: "desc",
-        }
+          code: 200,
+          message: "",
+          data: [],
+          metaData: {
+            pageNumber: 1,
+            pageSize: 50,
+            totalCount: 0,
+            totalPages: 0,
+            hasPrevious: false,
+            hasNext: false,
+          },
+        },
+        `[CycleUpdateModal] Failed to fetch appointments for patient ${patientId}`
       );
-      return response;
     },
-    enabled: !!currentCycle.patientId && isOpen,
+    enabled: !!patientId && isOpen,
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
   });
 
   // Get medical records
   const { data: medicalRecordsData } = useQuery({
-    queryKey: [
-      "medical-records",
-      "patient",
-      currentCycle.patientId,
-      "cycle",
-      currentCycle.id,
-    ],
-    queryFn: async () => {
-      if (!currentCycle.patientId) return [];
-      try {
-        const response = await api.medicalRecord.getMedicalRecords({
-          PatientId: currentCycle.patientId,
-          Page: 1,
-          Size: 100,
-        });
-        return response.data || [];
-      } catch {
-        return [];
-      }
-    },
-    enabled: !!currentCycle.patientId && isOpen,
+    queryKey: ["medical-records", "patient", patientId, "cycle", cycleId],
+    queryFn: async () =>
+      safeApiCall(
+        async () => {
+          const response = await api.medicalRecord.getMedicalRecords({
+            PatientId: patientId!,
+            Page: 1,
+            Size: 100,
+          });
+          return response.data || [];
+        },
+        [],
+        `[CycleUpdateModal] Failed to fetch medical records for patient ${patientId}`
+      ),
+    enabled: !!patientId && isOpen,
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
   });
 
   // Check if this is an IVF cycle
   const isIVFCycle = useMemo(() => {
     return (
-      currentCycle.treatmentType === "IVF" ||
-      treatmentData?.treatmentType === "IVF"
+      currentCycle.treatmentType === "IVF" || treatmentTypeFromData === "IVF"
     );
-  }, [currentCycle.treatmentType, treatmentData?.treatmentType]);
+  }, [currentCycle.treatmentType, treatmentTypeFromData]);
 
   // Check if this is IVF cycle 3 (Oocyte Retrieval and Sperm Collection)
-  const isIVFCycle3 = useMemo(() => {
-    if (currentCycle.treatmentType !== "IVF") return false;
+  const isCycle3 = useMemo(
+    () => isIVFCycle3(currentCycle),
+    [currentCycle, isIVFCycle]
+  );
 
-    // Check by cycleNumber
-    if (currentCycle.cycleNumber === 3) return true;
-
-    // Check by stepType
-    const stepTypeStr = currentCycle.stepType
-      ? String(currentCycle.stepType).toUpperCase()
-      : "";
-    if (stepTypeStr === "IVF_OPU") return true;
-
-    // Check by currentStep
-    const currentStep = currentCycle.currentStep as string | undefined;
-    if (currentStep === "step4_opu") return true;
-
-    // Check by cycleName
-    const cycleNameLower = currentCycle.cycleName?.toLowerCase() || "";
-    if (
-      cycleNameLower.includes("oocyte retrieval") ||
-      cycleNameLower.includes("sperm collection") ||
-      (cycleNameLower.includes("opu") && cycleNameLower.includes("cycle"))
-    ) {
-      return true;
-    }
-
-    return false;
-  }, [currentCycle]);
-
-  // Fetch ALL sperm samples of patient that have been quality checked (for validation)
   // Fetch relationships to get partner patient ID for sperm samples (IVF only)
   const { data: relationshipsResponse } = useQuery({
-    queryKey: [
-      "doctor",
-      "patient",
-      currentCycle.patientId,
-      "relationships",
-      "cycle-update",
-    ],
-    queryFn: async () => {
-      if (!currentCycle.patientId) return [];
-      try {
-        const response = await api.relationship.getRelationships(
-          currentCycle.patientId
-        );
-        return response.data ?? [];
-      } catch (error: any) {
-        if (
-          error?.response?.status === 404 ||
-          error?.response?.status === 403
-        ) {
-          return [];
-        }
-        console.warn(
-          "[CycleUpdateModal] Failed to fetch relationships:",
-          error
-        );
-        return [];
-      }
-    },
-    enabled: isOpen && !!currentCycle.patientId && isIVFCycle,
-    retry: false,
+    queryKey: ["doctor", "patient", patientId, "relationships", "cycle-update"],
+    queryFn: async () =>
+      safeApiCall(
+        async () => {
+          const response = await api.relationship.getRelationships(patientId!);
+          return response.data ?? [];
+        },
+        [],
+        `[CycleUpdateModal] Failed to fetch relationships for patient ${patientId}`
+      ),
+    enabled: isOpen && !!patientId && isIVFCycle,
+    retry: false, // Don't retry on 404/403
+    staleTime: QUERY_CONFIG.STALE_TIME,
   });
 
   const relationships = relationshipsResponse ?? [];
 
-  // Get active partner relationship (Married or Unmarried) - for IVF cycles
-  const partnerRelationship: Relationship | undefined = isIVFCycle
-    ? relationships.find(
-        (rel: Relationship) =>
-          (rel.relationshipType === "Married" ||
-            rel.relationshipType === "Unmarried") &&
-          rel.isActive !== false
-      )
-    : undefined;
-
   // Get partner patient ID from relationship - for IVF cycles
-  const partnerPatientId =
-    isIVFCycle && partnerRelationship
-      ? partnerRelationship.patient1Id === currentCycle.patientId
-        ? partnerRelationship.patient2Id
-        : partnerRelationship.patient1Id
-      : null;
+  const partnerPatientId = useMemo(
+    () =>
+      isIVFCycle && patientId
+        ? getPartnerPatientId(relationships, patientId)
+        : null,
+    [isIVFCycle, relationships, patientId]
+  );
+
+  // Memoize patient IDs for samples
+  const spermPatientId = useMemo(
+    () => (isIVFCycle ? partnerPatientId || patientId : patientId),
+    [isIVFCycle, partnerPatientId, patientId]
+  );
 
   // For IVF cycle 3 (Oocyte Retrieval and Sperm Collection), use /api/labsample/fertilize
   // For other cycles, use the regular getAllDetailSamples API
@@ -609,86 +661,79 @@ export function CycleUpdateModal({
       queryKey: [
         "fertilize-samples",
         isIVFCycle ? "partner" : "patient",
-        isIVFCycle
-          ? partnerPatientId || currentCycle.patientId
-          : currentCycle.patientId,
-        currentCycle.patientId,
+        spermPatientId,
+        patientId,
         "cycle3",
       ],
       queryFn: async () => {
-        // For IVF cycle 3: use fertilize API which returns both sperm and oocyte
-        if (isIVFCycle3) {
-          // For IVF: use partner patient ID for sperm, main patient ID for oocyte
-          if (!currentCycle.patientId) {
-            return { sperm: [], oocyte: [] };
-          }
-          const spermPatientId: string =
-            partnerPatientId || currentCycle.patientId;
-          const oocytePatientId: string = currentCycle.patientId;
-
-          try {
-            // Fetch sperm samples from partner (or main patient if no partner)
-            const spermResponse = await api.sample.getFertilizeSamples({
-              PatientId: spermPatientId,
-              SampleType: "Sperm",
-              Page: 1,
-              Size: 100,
-              Sort: "collectionDate",
-              Order: "desc",
-            });
-
-            // Fetch oocyte samples from main patient
-            const oocyteResponse = await api.sample.getFertilizeSamples({
-              PatientId: oocytePatientId,
-              SampleType: "Oocyte",
-              Page: 1,
-              Size: 100,
-              Sort: "collectionDate",
-              Order: "desc",
-            });
-
-            const spermSamples = spermResponse.data || [];
-            const oocyteSamples = oocyteResponse.data || [];
-
-            // Debug log
-            if (process.env.NODE_ENV === "development") {
-              console.log(
-                "[CycleUpdateModal] Fertilize samples fetched (cycle 3):",
-                {
-                  spermPatientId,
-                  oocytePatientId,
-                  spermCount: spermSamples.length,
-                  oocyteCount: oocyteSamples.length,
-                  spermMarked: spermSamples.filter(
-                    (s) => s.canFertilize === true
-                  ).length,
-                  oocyteMarked: oocyteSamples.filter(
-                    (s) => s.canFertilize === true
-                  ).length,
-                }
-              );
-            }
-
-            return {
-              sperm: spermSamples,
-              oocyte: oocyteSamples,
-            };
-          } catch (error) {
-            console.error("Error fetching fertilize samples:", error);
-            return { sperm: [], oocyte: [] };
-          }
+        if (!isCycle3 || !patientId) {
+          return { sperm: [], oocyte: [] };
         }
 
-        // For non-cycle-3, return empty (will use separate queries below)
-        return { sperm: [], oocyte: [] };
+        const spermPatientIdForQuery = spermPatientId || patientId;
+
+        const [spermResult, oocyteResult] = await Promise.all([
+          safeApiCall(
+            async () => {
+              const response = await api.sample.getFertilizeSamples({
+                PatientId: spermPatientIdForQuery,
+                SampleType: "Sperm",
+                Page: 1,
+                Size: 100,
+                Sort: "collectionDate",
+                Order: "desc",
+              });
+              return response.data || [];
+            },
+            [],
+            `[CycleUpdateModal] Failed to fetch sperm samples for ${spermPatientIdForQuery}`
+          ),
+          safeApiCall(
+            async () => {
+              const response = await api.sample.getFertilizeSamples({
+                PatientId: patientId,
+                SampleType: "Oocyte",
+                Page: 1,
+                Size: 100,
+                Sort: "collectionDate",
+                Order: "desc",
+              });
+              return response.data || [];
+            },
+            [],
+            `[CycleUpdateModal] Failed to fetch oocyte samples for ${patientId}`
+          ),
+        ]);
+
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            "[CycleUpdateModal] Fertilize samples fetched (cycle 3):",
+            {
+              spermPatientId: spermPatientIdForQuery,
+              oocytePatientId: patientId,
+              spermCount: spermResult.length,
+              oocyteCount: oocyteResult.length,
+              spermMarked: spermResult.filter((s) => s.canFertilize === true)
+                .length,
+              oocyteMarked: oocyteResult.filter((s) => s.canFertilize === true)
+                .length,
+            }
+          );
+        }
+
+        return {
+          sperm: spermResult,
+          oocyte: oocyteResult,
+        };
       },
       enabled:
-        isIVFCycle3 &&
-        !!currentCycle.patientId &&
+        isCycle3 &&
+        !!patientId &&
         isOpen &&
         (isIVFCycle ? !!partnerPatientId : true) &&
         (!isIVFCycle || !!relationshipsResponse),
-      staleTime: 30000,
+      staleTime: QUERY_CONFIG.STALE_TIME,
+      retry: QUERY_CONFIG.RETRY,
     });
 
   // For both IVF and IUI cycles (IUI needs it for step4_iui_procedure)
@@ -699,262 +744,238 @@ export function CycleUpdateModal({
     queryKey: [
       "sperm-samples",
       isIVFCycle ? "partner" : "patient",
-      isIVFCycle ? partnerPatientId : currentCycle.patientId,
+      spermPatientId,
       "quality-checked",
     ],
     queryFn: async () => {
-      // For IVF: use partner patient ID, for IUI: use main patient ID
-      const targetPatientId = isIVFCycle
-        ? partnerPatientId
-        : currentCycle.patientId;
+      if (!spermPatientId) return { data: [] };
 
-      if (!targetPatientId) return { data: [] };
-      try {
-        const response = await api.sample.getAllDetailSamples({
-          SampleType: "Sperm",
-          PatientId: targetPatientId,
-          Page: 1,
-          Size: 100,
-          Sort: "collectionDate",
-          Order: "desc",
-        });
-        const samples = response.data || [];
-        // Get ALL samples of patient that have been quality checked
-        // Statuses considered as quality checked: QualityChecked, Fertilized, CulturedEmbryo, Stored, Used, Frozen
-        const qualityCheckedStatuses = [
-          "QualityChecked",
-          "Fertilized",
-          "CulturedEmbryo",
-          "Stored",
-          "Used",
-          "Frozen",
-        ];
-        const filtered = samples.filter((sample) =>
-          qualityCheckedStatuses.includes(sample.status)
-        );
-
-        // Debug log
-        if (process.env.NODE_ENV === "development") {
-          console.log("[CycleUpdateModal] Sperm samples fetched:", {
-            targetPatientId: isIVFCycle
-              ? partnerPatientId
-              : currentCycle.patientId,
-            isIVFCycle,
-            total: samples.length,
-            qualityChecked: filtered.length,
-            markedForFertilization: filtered.filter(
-              (s) => s.canFertilize === true
-            ).length,
-            samples: filtered.map((s) => ({
-              id: s.id,
-              status: s.status,
-              canFertilize: s.canFertilize,
-            })),
+      const samples = await safeApiCall(
+        async () => {
+          const response = await api.sample.getAllDetailSamples({
+            SampleType: "Sperm",
+            PatientId: spermPatientId,
+            Page: 1,
+            Size: 100,
+            Sort: "collectionDate",
+            Order: "desc",
           });
-        }
+          return response.data || [];
+        },
+        [],
+        `[CycleUpdateModal] Failed to fetch sperm samples for ${spermPatientId}`
+      );
 
-        return { data: filtered };
-      } catch (error) {
-        console.error("Error fetching sperm samples:", error);
-        return { data: [] };
+      const filtered = filterQualityCheckedSamples(samples);
+
+      if (process.env.NODE_ENV === "development") {
+        console.log("[CycleUpdateModal] Sperm samples fetched:", {
+          targetPatientId: spermPatientId,
+          isIVFCycle,
+          total: samples.length,
+          qualityChecked: filtered.length,
+          markedForFertilization: filtered.filter(
+            (s) => s.canFertilize === true
+          ).length,
+        });
       }
+
+      return { data: filtered };
     },
     enabled:
-      !isIVFCycle3 && // Skip for cycle 3, use fertilize API instead
-      !!currentCycle.patientId &&
+      !isCycle3 && // Skip for cycle 3, use fertilize API instead
+      !!patientId &&
       isOpen &&
       (isIVFCycle ? !!partnerPatientId : true) && // For IVF, need partner; for IUI, just need patient
       (!isIVFCycle || !!relationshipsResponse), // For IVF, wait for relationships
-    staleTime: 30000, // Cache for 30 seconds to reduce unnecessary refetches
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
   });
 
   // Fetch ALL oocyte samples of patient that have been quality checked (for validation and display)
   // Skip this query for IVF cycle 3 (use fertilize API instead)
   const { data: oocyteSamplesData, isLoading: oocyteSamplesLoading } = useQuery(
     {
-      queryKey: [
-        "oocyte-samples",
-        "patient",
-        currentCycle.patientId,
-        "quality-checked",
-      ],
+      queryKey: ["oocyte-samples", "patient", patientId, "quality-checked"],
       queryFn: async () => {
-        if (!currentCycle.patientId) return { data: [] };
-        try {
-          const response = await api.sample.getAllDetailSamples({
-            SampleType: "Oocyte",
-            PatientId: currentCycle.patientId,
-            Page: 1,
-            Size: 100,
-            Sort: "collectionDate",
-            Order: "desc",
-          });
-          const samples = response.data || [];
-          // Get ALL samples of patient that have been quality checked
-          // Statuses considered as quality checked: QualityChecked, Fertilized, CulturedEmbryo, Stored, Used, Frozen
-          const qualityCheckedStatuses = [
-            "QualityChecked",
-            "Fertilized",
-            "CulturedEmbryo",
-            "Stored",
-            "Used",
-            "Frozen",
-          ];
-          const filtered = samples.filter((sample) =>
-            qualityCheckedStatuses.includes(sample.status)
-          );
+        if (!patientId) return { data: [] };
 
-          // Debug log
-          if (process.env.NODE_ENV === "development") {
-            console.log("[CycleUpdateModal] Oocyte samples fetched:", {
-              total: samples.length,
-              qualityChecked: filtered.length,
-              markedForFertilization: filtered.filter(
-                (s) => s.canFertilize === true
-              ).length,
-              samples: filtered.map((s) => ({
-                id: s.id,
-                status: s.status,
-                canFertilize: s.canFertilize,
-              })),
+        const samples = await safeApiCall(
+          async () => {
+            const response = await api.sample.getAllDetailSamples({
+              SampleType: "Oocyte",
+              PatientId: patientId,
+              Page: 1,
+              Size: 100,
+              Sort: "collectionDate",
+              Order: "desc",
             });
-          }
+            return response.data || [];
+          },
+          [],
+          `[CycleUpdateModal] Failed to fetch oocyte samples for ${patientId}`
+        );
 
-          return { data: filtered };
-        } catch (error) {
-          console.error("Error fetching oocyte samples:", error);
-          return { data: [] };
+        const filtered = filterQualityCheckedSamples(samples);
+
+        if (process.env.NODE_ENV === "development") {
+          console.log("[CycleUpdateModal] Oocyte samples fetched:", {
+            total: samples.length,
+            qualityChecked: filtered.length,
+            markedForFertilization: filtered.filter(
+              (s) => s.canFertilize === true
+            ).length,
+          });
         }
+
+        return { data: filtered };
       },
-      enabled: !isIVFCycle3 && !!currentCycle.patientId && isOpen, // Skip for cycle 3
-      staleTime: 30000, // Cache for 30 seconds to reduce unnecessary refetches
+      enabled: !isCycle3 && !!patientId && isOpen, // Skip for cycle 3
+      staleTime: QUERY_CONFIG.STALE_TIME,
+      retry: QUERY_CONFIG.RETRY,
     }
   );
 
   // For display in tabs, also fetch samples for current cycle (not filtered by quality check)
   // Skip for IVF cycle 3 (use fertilize API instead)
   const { data: cycleSpermSamplesData } = useQuery({
-    queryKey: ["cycle-samples", "sperm", currentCycle.id],
-    queryFn: async () => {
-      if (!currentCycle.id) return { data: [] };
-      try {
-        const response = await api.treatmentCycle.getCycleSamples(
-          currentCycle.id
-        );
-        const allSamples = response.data || [];
-        // Filter to only sperm samples
-        const spermSamples = allSamples.filter(
-          (sample) => sample.sampleType === "Sperm"
-        );
-        return { data: spermSamples };
-      } catch (error) {
-        console.error("Error fetching cycle sperm samples:", error);
-        return { data: [] };
-      }
-    },
-    enabled:
-      !isIVFCycle3 && !!currentCycle.id && isOpen && activeTab === "sperm",
+    queryKey: ["cycle-samples", "sperm", cycleId],
+    queryFn: async () =>
+      safeApiCall(
+        async () => {
+          const response = await api.treatmentCycle.getCycleSamples(cycleId!);
+          const allSamples = response.data || [];
+          // Filter to only sperm samples
+          const spermSamples = allSamples.filter(
+            (sample) => sample.sampleType === "Sperm"
+          );
+          return { data: spermSamples };
+        },
+        { data: [] },
+        `[CycleUpdateModal] Failed to fetch cycle sperm samples for ${cycleId}`
+      ),
+    enabled: !isCycle3 && !!cycleId && isOpen && activeTab === "sperm",
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
   });
 
   const { data: cycleOocyteSamplesData } = useQuery({
-    queryKey: [
-      "oocyte-samples",
-      "cycle",
-      currentCycle.id,
-      currentCycle.patientId,
-    ],
-    queryFn: async () => {
-      if (!currentCycle.patientId) return { data: [] };
-      try {
-        const response = await api.sample.getAllDetailSamples({
-          SampleType: "Oocyte",
-          PatientId: currentCycle.patientId,
-          Page: 1,
-          Size: 100,
-          Sort: "collectionDate",
-          Order: "desc",
-        });
-        const samples = response.data || [];
-        return {
-          data: samples.filter(
-            (sample) =>
-              !sample.treatmentCycleId ||
-              sample.treatmentCycleId === currentCycle.id
-          ),
-        };
-      } catch (error) {
-        console.error("Error fetching cycle oocyte samples:", error);
-        return { data: [] };
-      }
-    },
-    enabled:
-      !isIVFCycle3 &&
-      !!currentCycle.patientId &&
-      isOpen &&
-      activeTab === "oocyte",
+    queryKey: ["oocyte-samples", "cycle", cycleId, patientId],
+    queryFn: async () =>
+      safeApiCall(
+        async () => {
+          const response = await api.sample.getAllDetailSamples({
+            SampleType: "Oocyte",
+            PatientId: patientId!,
+            Page: 1,
+            Size: 100,
+            Sort: "collectionDate",
+            Order: "desc",
+          });
+          const samples = response.data || [];
+          return {
+            data: samples.filter(
+              (sample) =>
+                !sample.treatmentCycleId || sample.treatmentCycleId === cycleId
+            ),
+          };
+        },
+        { data: [] },
+        `[CycleUpdateModal] Failed to fetch cycle oocyte samples for ${patientId}`
+      ),
+    enabled: !isCycle3 && !!patientId && isOpen && activeTab === "oocyte",
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
   });
 
   // For validation: use all quality-checked samples of patient
   // For IVF cycle 3, use fertilize API data; otherwise use regular API data
-  const spermSamples = isIVFCycle3
-    ? fertilizeSamplesData?.sperm || []
-    : spermSamplesData?.data || [];
-  const oocyteSamples = isIVFCycle3
-    ? fertilizeSamplesData?.oocyte || []
-    : oocyteSamplesData?.data || [];
+  const spermSamples = useMemo(
+    () =>
+      isCycle3
+        ? fertilizeSamplesData?.sperm || []
+        : spermSamplesData?.data || [],
+    [isCycle3, fertilizeSamplesData?.sperm, spermSamplesData?.data]
+  );
+
+  const oocyteSamples = useMemo(
+    () =>
+      isCycle3
+        ? fertilizeSamplesData?.oocyte || []
+        : oocyteSamplesData?.data || [],
+    [isCycle3, fertilizeSamplesData?.oocyte, oocyteSamplesData?.data]
+  );
 
   // Combined loading state
-  const isLoadingSamples = isIVFCycle3
-    ? fertilizeSamplesLoading
-    : spermSamplesLoading || oocyteSamplesLoading;
+  const isLoadingSamples = useMemo(
+    () =>
+      isCycle3
+        ? fertilizeSamplesLoading
+        : spermSamplesLoading || oocyteSamplesLoading,
+    [
+      isCycle3,
+      fertilizeSamplesLoading,
+      spermSamplesLoading,
+      oocyteSamplesLoading,
+    ]
+  );
 
   // Fetch embryos for this cycle that have been transferred or frozen
   const { data: cycleEmbryosData, isLoading: cycleEmbryosLoading } = useQuery({
-    queryKey: ["embryos", "cycle", currentCycle.id, currentCycle.patientId],
-    queryFn: async () => {
-      if (!currentCycle.patientId) return [];
-      try {
-        const response = await api.sample.getSamples({
-          SampleType: "Embryo",
-          PatientId: currentCycle.patientId,
-          Page: 1,
-          Size: 100,
-        });
+    queryKey: ["embryos", "cycle", cycleId, patientId],
+    queryFn: async () =>
+      safeApiCall(
+        async () => {
+          const response = await api.sample.getSamples({
+            SampleType: "Embryo",
+            PatientId: patientId!,
+            Page: 1,
+            Size: 100,
+          });
 
-        const allEmbryos = response.data ?? [];
-        // Filter embryos for this cycle that have been transferred (Used) or frozen (Stored)
-        const cycleEmbryos = allEmbryos.filter((e) => {
-          // If treatmentCycleId exists, filter by it
-          if (e.treatmentCycleId) {
-            return (
-              e.treatmentCycleId === currentCycle.id &&
-              (e.status === "Used" || e.status === "Stored")
-            );
-          }
-          // If no treatmentCycleId, include all embryos with Used or Stored status for this patient
-          return e.status === "Used" || e.status === "Stored";
-        });
+          const allEmbryos = response.data ?? [];
+          // Filter embryos for this cycle that have been transferred (Used) or frozen (Stored)
+          const cycleEmbryos = allEmbryos.filter((e) => {
+            // If treatmentCycleId exists, filter by it
+            if (e.treatmentCycleId) {
+              return (
+                e.treatmentCycleId === cycleId &&
+                (e.status === "Used" || e.status === "Stored")
+              );
+            }
+            // If no treatmentCycleId, include all embryos with Used or Stored status for this patient
+            return e.status === "Used" || e.status === "Stored";
+          });
 
-        return cycleEmbryos;
-      } catch (error) {
-        console.error("Error fetching cycle embryos:", error);
-        return [];
-      }
-    },
-    enabled: !!currentCycle.patientId && isOpen,
-    staleTime: 30000,
+          return cycleEmbryos;
+        },
+        [],
+        `[CycleUpdateModal] Failed to fetch cycle embryos for ${patientId}`
+      ),
+    enabled: !!patientId && isOpen,
+    staleTime: QUERY_CONFIG.STALE_TIME,
+    retry: QUERY_CONFIG.RETRY,
   });
 
   const cycleEmbryos = cycleEmbryosData || [];
 
   // For display in tabs: use samples for current cycle
   // For IVF cycle 3, use fertilize API data; otherwise use regular queries
-  const cycleSpermSamples = isIVFCycle3
-    ? fertilizeSamplesData?.sperm || []
-    : cycleSpermSamplesData?.data || [];
-  const cycleOocyteSamples = isIVFCycle3
-    ? fertilizeSamplesData?.oocyte || []
-    : cycleOocyteSamplesData?.data || [];
+  const cycleSpermSamples = useMemo(
+    () =>
+      isCycle3
+        ? fertilizeSamplesData?.sperm || []
+        : cycleSpermSamplesData?.data || [],
+    [isCycle3, fertilizeSamplesData?.sperm, cycleSpermSamplesData?.data]
+  );
+
+  const cycleOocyteSamples = useMemo(
+    () =>
+      isCycle3
+        ? fertilizeSamplesData?.oocyte || []
+        : cycleOocyteSamplesData?.data || [],
+    [isCycle3, fertilizeSamplesData?.oocyte, cycleOocyteSamplesData?.data]
+  );
 
   // Filter medical records by cycle appointments
   const cycleAppointments = useMemo(() => {
@@ -987,70 +1008,74 @@ export function CycleUpdateModal({
     );
   }, [selectedAppointmentId, cycleMedicalRecords]);
 
+  // Memoize medical record IDs for prescriptions query
+  const medicalRecordIds = useMemo(
+    () => cycleMedicalRecords.map((r) => r.id),
+    [cycleMedicalRecords]
+  );
+
   // Fetch prescriptions for patient in cycle
   const { data: prescriptionsData, isLoading: prescriptionsLoading } = useQuery(
     {
       queryKey: [
         "prescriptions",
         "patient",
-        currentCycle.patientId,
+        patientId,
         "cycle",
-        currentCycle.id,
+        cycleId,
         selectedAppointmentId,
       ],
       queryFn: async () => {
-        if (!currentCycle.patientId)
-          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
-        try {
-          // Get medical record IDs from cycle
-          const medicalRecordIds = cycleMedicalRecords.map((r) => r.id);
-          if (medicalRecordIds.length === 0) {
-            return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
-          }
+        if (!patientId || medicalRecordIds.length === 0) {
+          return createEmptyDataResponse();
+        }
 
-          // Fetch prescriptions for all medical records in cycle
-          const allPrescriptions: any[] = [];
-          await Promise.all(
-            medicalRecordIds.map(async (medicalRecordId) => {
-              try {
+        // Fetch prescriptions for all medical records in cycle
+        const allPrescriptions: any[] = [];
+        await Promise.all(
+          medicalRecordIds.map(async (medicalRecordId) => {
+            const prescriptions = await safeApiCall(
+              async () => {
                 const response = await api.prescription.getPrescriptions({
                   MedicalRecordId: medicalRecordId,
                   Page: 1,
                   Size: 100,
                 });
-                if (response.data) {
-                  allPrescriptions.push(...response.data);
-                }
-              } catch (error) {
-                console.warn(
-                  `Failed to fetch prescriptions for medical record ${medicalRecordId}:`,
-                  error
-                );
-              }
-            })
-          );
-
-          // Filter by selected appointment if provided
-          let filtered = allPrescriptions;
-          if (selectedAppointmentId && selectedMedicalRecord) {
-            filtered = allPrescriptions.filter(
-              (p) => p.medicalRecordId === selectedMedicalRecord.id
+                return response.data || [];
+              },
+              [],
+              `[CycleUpdateModal] Failed to fetch prescriptions for medical record ${medicalRecordId}`
             );
-          }
+            allPrescriptions.push(...prescriptions);
+          })
+        );
 
-          return {
-            data: filtered,
-            metaData: { totalCount: filtered.length, totalPages: 1 },
-          };
-        } catch {
-          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        // Filter by selected appointment if provided
+        let filtered = allPrescriptions;
+        if (selectedAppointmentId && selectedMedicalRecord) {
+          filtered = allPrescriptions.filter(
+            (p) => p.medicalRecordId === selectedMedicalRecord.id
+          );
         }
+
+        return {
+          data: filtered,
+          metaData: { totalCount: filtered.length, totalPages: 1 },
+        };
       },
-      enabled: !!currentCycle.patientId && !!currentCycle.id && isOpen,
+      enabled: !!patientId && !!cycleId && isOpen,
+      staleTime: QUERY_CONFIG.STALE_TIME,
+      retry: QUERY_CONFIG.RETRY,
     }
   );
 
   const prescriptions = prescriptionsData?.data || [];
+
+  // Memoize appointment IDs for service requests filtering
+  const cycleAppointmentIds = useMemo(
+    () => cycleAppointments.map((apt) => apt.id),
+    [cycleAppointments]
+  );
 
   // Fetch service requests for patient in cycle
   const { data: serviceRequestsData, isLoading: serviceRequestsLoading } =
@@ -1058,47 +1083,49 @@ export function CycleUpdateModal({
       queryKey: [
         "service-requests",
         "patient",
-        currentCycle.patientId,
+        patientId,
         "cycle",
-        currentCycle.id,
+        cycleId,
         selectedAppointmentId,
       ],
       queryFn: async () => {
-        if (!currentCycle.patientId)
-          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
-        try {
-          const response = await api.serviceRequest.getServiceRequests({
-            patientId: currentCycle.patientId,
-            pageNumber: 1,
-            pageSize: 100,
-          });
-          const allRequests = response.data || [];
+        if (!patientId) return createEmptyDataResponse();
 
-          // Filter by cycle appointments
-          const cycleAppointmentIds = cycleAppointments.map((apt) => apt.id);
-          let filtered = allRequests.filter((request) => {
-            return (
-              request.appointmentId &&
-              cycleAppointmentIds.includes(request.appointmentId)
-            );
-          });
+        const allRequests = await safeApiCall(
+          async () => {
+            const response = await api.serviceRequest.getServiceRequests({
+              patientId,
+              pageNumber: 1,
+              pageSize: 100,
+            });
+            return response.data || [];
+          },
+          [],
+          `[CycleUpdateModal] Failed to fetch service requests for patient ${patientId}`
+        );
 
-          // Filter by selected appointment if provided
-          if (selectedAppointmentId) {
-            filtered = filtered.filter(
-              (request) => request.appointmentId === selectedAppointmentId
-            );
-          }
+        // Filter by cycle appointments
+        let filtered = allRequests.filter(
+          (request) =>
+            request.appointmentId &&
+            cycleAppointmentIds.includes(request.appointmentId)
+        );
 
-          return {
-            data: filtered,
-            metaData: { totalCount: filtered.length, totalPages: 1 },
-          };
-        } catch {
-          return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        // Filter by selected appointment if provided
+        if (selectedAppointmentId) {
+          filtered = filtered.filter(
+            (request) => request.appointmentId === selectedAppointmentId
+          );
         }
+
+        return {
+          data: filtered,
+          metaData: { totalCount: filtered.length, totalPages: 1 },
+        };
       },
-      enabled: !!currentCycle.patientId && !!currentCycle.id && isOpen,
+      enabled: !!patientId && !!cycleId && isOpen,
+      staleTime: QUERY_CONFIG.STALE_TIME,
+      retry: QUERY_CONFIG.RETRY,
     });
 
   const serviceRequests = serviceRequestsData?.data || [];
@@ -1391,7 +1418,7 @@ export function CycleUpdateModal({
   // Validate that cycle 3 has quality-checked samples if any samples exist
   // Only validate if there are samples - if no samples exist, allow completion
   const canCompleteCycle3 = useMemo(() => {
-    if (!isIVFCycle3) return true; // Not cycle 3, no validation needed
+    if (!isCycle3) return true; // Not cycle 3, no validation needed
 
     // If no samples exist at all, allow completion (samples might not be collected yet)
     const hasAnySpermSamples = spermSamples.length > 0;
@@ -1410,7 +1437,7 @@ export function CycleUpdateModal({
 
     // If only one type exists, we still need both for cycle 3
     return false;
-  }, [isIVFCycle3, spermSamples, oocyteSamples]);
+  }, [isCycle3, spermSamples, oocyteSamples]);
 
   // Check if cycle can be completed (simple version - just check if started)
   // For IVF cycle 3, also check that samples are processed
@@ -1433,7 +1460,7 @@ export function CycleUpdateModal({
   const completeCycleMutation = useMutation({
     mutationFn: async () => {
       // Validate IVF cycle 3 before completing
-      if (isIVFCycle3 && !canCompleteCycle3) {
+      if (isCycle3 && !canCompleteCycle3) {
         const missingSamples: string[] = [];
         if (spermSamples.length === 0) {
           missingSamples.push("sperm");
@@ -1888,17 +1915,53 @@ export function CycleUpdateModal({
     },
   });
 
-  if (!isOpen) return null;
-
   // Patient information - merge patientData with userDetails
-  const patientName =
-    getFullNameFromObject(userDetails) ||
-    getFullNameFromObject(patientData) ||
-    userDetails?.userName ||
-    (isPatientDetailResponse(patientData)
-      ? patientData.accountInfo?.username
-      : null) ||
-    "Unknown Patient";
+  // Try multiple sources to get patient name
+  // NOTE: Must be before early return to follow Rules of Hooks
+  // Priority: cachedPatientName > userDetails > patientData > fallbacks
+  const patientName = useMemo(() => {
+    // First try cached patient name from parent (fastest, no API call)
+    if (cachedPatientName) return cachedPatientName;
+
+    // Then try userDetails (most reliable for firstName/lastName)
+    const nameFromUserDetails = getFullNameFromObject(userDetails);
+    if (nameFromUserDetails) return nameFromUserDetails;
+
+    // Then try patientData
+    const nameFromPatientData = getFullNameFromObject(patientData);
+    if (nameFromPatientData) return nameFromPatientData;
+
+    // Try userName from userDetails
+    if (userDetails?.userName) return userDetails.userName;
+
+    // Try accountInfo.username from patientData
+    if (
+      isPatientDetailResponse(patientData) &&
+      patientData.accountInfo?.username
+    ) {
+      return patientData.accountInfo.username;
+    }
+
+    // Try patientCode as last resort
+    if (patientData?.patientCode) return `Patient ${patientData.patientCode}`;
+
+    // Debug in development
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[CycleUpdateModal] Could not determine patient name:", {
+        cachedPatientName,
+        patientId,
+        accountId,
+        hasUserDetails: !!userDetails,
+        hasPatientData: !!patientData,
+        userDetailsKeys: userDetails ? Object.keys(userDetails) : [],
+        patientDataKeys: patientData ? Object.keys(patientData) : [],
+      });
+    }
+
+    return "Unknown Patient";
+  }, [cachedPatientName, userDetails, patientData, patientId, accountId]);
+
+  if (!isOpen) return null;
   const patientCode = patientData?.patientCode || "";
 
   // Calculate age from dateOfBirth
@@ -2543,7 +2606,7 @@ export function CycleUpdateModal({
                               Complete Treatment Cycle
                             </p>
                             <p className="text-xs text-gray-600">
-                              {isIVFCycle3 && !canCompleteCycle3 ? (
+                              {isCycle3 && !canCompleteCycle3 ? (
                                 <span className="text-amber-700">
                                   Waiting for lab to return sperm and oocyte
                                   sample data. Both samples must be quality
@@ -2557,7 +2620,7 @@ export function CycleUpdateModal({
                           <Button
                             onClick={() => {
                               // Validate IVF cycle 3 before showing confirmation
-                              if (isIVFCycle3 && !canCompleteCycle3) {
+                              if (isCycle3 && !canCompleteCycle3) {
                                 const missingSamples: string[] = [];
                                 const hasAnySpermSamples =
                                   spermSamples.length > 0;
@@ -3336,7 +3399,7 @@ export function CycleUpdateModal({
                   <CardTitle>Sperm Samples</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {(isIVFCycle3 ? isLoadingSamples : spermSamplesLoading) ? (
+                  {(isCycle3 ? isLoadingSamples : spermSamplesLoading) ? (
                     <div className="py-12 text-center text-gray-500">
                       Loading sperm samples...
                     </div>
@@ -3500,7 +3563,7 @@ export function CycleUpdateModal({
                   <CardTitle>Oocyte Samples</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {(isIVFCycle3 ? isLoadingSamples : oocyteSamplesLoading) ? (
+                  {(isCycle3 ? isLoadingSamples : oocyteSamplesLoading) ? (
                     <div className="py-12 text-center text-gray-500">
                       Loading oocyte samples...
                     </div>
@@ -4093,7 +4156,7 @@ export function CycleUpdateModal({
               undefined
             }
             layout="modal"
-            defaultPatientId={currentCycle.patientId}
+            defaultPatientId={patientId}
             disablePatientSelection={true}
             defaultAppointmentDate={formatDateForInput(new Date())}
             defaultAppointmentType="Consultation"
@@ -4149,10 +4212,10 @@ export function CycleUpdateModal({
       )}
 
       {/* Fertilization Modal */}
-      {showFertilizationModal && currentCycle.patientId && (
+      {showFertilizationModal && patientId && (
         <FertilizationModal
-          cycleId={currentCycle.id}
-          patientId={currentCycle.patientId}
+          cycleId={cycleId}
+          patientId={patientId}
           isOpen={showFertilizationModal}
           onClose={() => setShowFertilizationModal(false)}
           onSuccess={() => {
@@ -4195,7 +4258,7 @@ export function CycleUpdateModal({
               });
             }
             // Invalidate fertilize samples query for IVF cycle 3
-            if (isIVFCycle3) {
+            if (isCycle3) {
               queryClient.invalidateQueries({
                 queryKey: ["fertilize-samples"],
               });
@@ -4214,9 +4277,9 @@ export function CycleUpdateModal({
           setShowCreateMedicalRecordModal(false);
           setSelectedAppointmentId(null);
         }}
-        defaultPatientId={currentCycle.patientId}
+        defaultPatientId={patientId}
         defaultAppointmentId={selectedAppointmentId || undefined}
-        defaultTreatmentCycleId={currentCycle.id}
+        defaultTreatmentCycleId={cycleId}
         onCreated={() => {
           toast.success("Medical note created successfully");
           setShowCreateMedicalRecordModal(false);

@@ -52,9 +52,14 @@ function QualityCheckComponent() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await queryClient.invalidateQueries({
-      queryKey: ["quality-check-samples"],
-    });
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["quality-check-samples"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "patient", undefined, "quality-check"],
+      }),
+    ]);
     setIsRefreshing(false);
   };
 
@@ -165,6 +170,7 @@ function QualityCheckComponent() {
   }, [qualityCheckedSamples]);
 
   // Fetch patient data for all samples
+  // Optimized: Batch fetch all patients in parallel
   const patientQueries = useQueries({
     queries: patientIds.map((patientId) => ({
       queryKey: ["doctor", "patient", patientId, "quality-check"],
@@ -189,6 +195,7 @@ function QualityCheckComponent() {
           return null;
         }
       },
+      enabled: !!patientId && patientIds.length > 0,
       retry: false,
       staleTime: 60000, // Cache for 1 minute
       gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes

@@ -287,7 +287,7 @@ function DoctorPrescriptionComponent() {
           return null;
         }
       },
-      enabled: patientIds.length > 0,
+      enabled: !!patientId && patientIds.length > 0,
       retry: false,
       staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     })),

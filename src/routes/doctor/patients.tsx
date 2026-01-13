@@ -94,6 +94,12 @@ function DoctorPatientsComponent() {
     setIsRefreshing(true);
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["doctor", "patients"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "patients", undefined, "cycle-snapshot"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "patients", undefined, "user-details"],
+      }),
     ]);
     setIsRefreshing(false);
   };
@@ -151,7 +157,7 @@ function DoctorPatientsComponent() {
   const cycleSnapshots = useQueries({
     queries: patients.map((patient) => ({
       queryKey: ["doctor", "patients", patient.id, "cycle-snapshot"],
-      enabled: Boolean(patient.id),
+      enabled: Boolean(patient.id) && patients.length > 0,
       retry: false,
       staleTime: 30000, // Cache for 30 seconds
       gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
@@ -189,7 +195,8 @@ function DoctorPatientsComponent() {
   const userDetailsQueries = useQueries({
     queries: patients.map((patient) => ({
       queryKey: ["doctor", "patients", patient.id, "user-details"],
-      enabled: Boolean(patient.id || patient.accountId),
+      enabled:
+        Boolean(patient.id || patient.accountId) && patients.length > 0,
       retry: false,
       staleTime: 60000, // Cache for 1 minute
       gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
@@ -465,7 +472,7 @@ function DoctorPatientsComponent() {
               </h1>
               <p className="mt-1 text-sm text-gray-600">
                 Review demographics, treatment status, and jump straight into
-                encounters or prescriptions.
+                treatments or prescriptions.
               </p>
             </div>
             <div className="flex gap-2">
@@ -1122,7 +1129,7 @@ function DoctorPatientsComponent() {
                           }
                           className="w-full"
                         >
-                          Create encounter
+                          Create treatment
                         </Button>
                         <Button
                           variant="outline"

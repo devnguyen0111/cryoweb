@@ -66,6 +66,9 @@ function DoctorMedicalRecordsComponent() {
       queryClient.invalidateQueries({
         queryKey: ["doctor", "medical-records"],
       }),
+      queryClient.invalidateQueries({
+        queryKey: ["appointment-detail", "for-medical-records"],
+      }),
     ]);
     setIsRefreshing(false);
   };

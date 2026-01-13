@@ -558,7 +558,7 @@ export function TreatmentPlanForm({
       }
 
       // If treatmentId was provided (updating existing), don't show signature step
-      // Signature will be handled by parent component (CreateEncounterForm)
+      // Signature will be handled by parent component (CreateTreatmentForm)
       if (
         result.treatment?.id &&
         result.agreement?.id &&

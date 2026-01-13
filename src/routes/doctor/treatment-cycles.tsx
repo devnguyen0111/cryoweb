@@ -26,10 +26,6 @@ import {
   type PaginatedResponse,
   type TreatmentCycle,
 } from "@/api/types";
-import { getLast4Chars } from "@/utils/id-helpers";
-import { getFullNameFromObject } from "@/utils/name-helpers";
-import { usePatientDetails } from "@/hooks/usePatientDetails";
-import { isPatientDetailResponse } from "@/utils/patient-helpers";
 import { createEmptyPaginatedResponse } from "@/utils/api-helpers";
 
 export const Route = createFileRoute("/doctor/treatment-cycles")({
@@ -39,9 +35,8 @@ export const Route = createFileRoute("/doctor/treatment-cycles")({
 
 interface PatientInTreatment {
   patientId: string;
-  treatmentId: string; // Add treatmentId to distinguish between different treatments
+  treatmentId: string;
   patientName: string;
-  patientCode?: string;
   treatmentType: "IUI" | "IVF" | null;
   activeCycle: TreatmentCycle | null;
   allCycles: TreatmentCycle[];
@@ -51,12 +46,9 @@ function DoctorTreatmentCyclesComponent() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const search = Route.useSearch();
+  const search = Route.useSearch() as { patientId?: string };
   const [treatmentTypeFilter, setTreatmentTypeFilter] = useState<string>("");
-  const searchParams = search as { patientId?: string };
-  const [searchTerm, setSearchTerm] = useState<string>(
-    searchParams.patientId || ""
-  );
+  const [searchTerm, setSearchTerm] = useState<string>(search.patientId || "");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const doctorId = user?.id ?? null;
@@ -138,40 +130,95 @@ function DoctorTreatmentCyclesComponent() {
     },
   });
 
-  // Fetch treatments to get patientId for cycles
-  const uniqueTreatmentIds = useMemo(() => {
+  // Check if we need to fetch treatments
+  // Only fetch if there are cycles missing patientId or treatmentType
+  const needsTreatments = useMemo(() => {
+    const cycles = cyclesData?.data || [];
+    return cycles.some(
+      (cycle) => !cycle.patientId || (!cycle.treatmentType && cycle.treatmentId)
+    );
+  }, [cyclesData?.data]);
+
+  // Extract unique treatment IDs from cycles that need treatment data
+  const uniqueTreatmentIdsFromCycles = useMemo(() => {
+    if (!needsTreatments) return [];
     const cycles = cyclesData?.data || [];
     return Array.from(
       new Set(cycles.map((c) => c.treatmentId).filter(Boolean))
     );
-  }, [cyclesData?.data]);
+  }, [cyclesData?.data, needsTreatments]);
 
-  const { data: treatmentsData } = useQuery({
-    queryKey: ["treatments", "for-cycles", uniqueTreatmentIds],
-    enabled: uniqueTreatmentIds.length > 0,
+  // Only fetch treatments if we actually need them (cycles missing patientId or treatmentType)
+  // This significantly speeds up the page load when cycles already have all needed data
+  const { data: allTreatmentsData } = useQuery({
+    queryKey: ["treatments", "doctor", doctorId],
+    enabled: !!doctorId && needsTreatments, // Only fetch if needed
     staleTime: 60000, // Cache for 1 minute
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    retry: false, // No retry to speed up
     queryFn: async () => {
-      const treatments = await Promise.all(
-        uniqueTreatmentIds.map(async (treatmentId) => {
-          try {
-            const response = await api.treatment.getTreatmentById(treatmentId);
-            return response.data;
-          } catch {
-            return null;
-          }
-        })
-      );
-      return treatments.filter(Boolean);
+      try {
+        const response = await api.treatment.getTreatments({
+          doctorId: doctorId!,
+          pageNumber: 1,
+          pageSize: 200, // Get enough to cover all treatments
+        });
+        return response.data || [];
+      } catch (error) {
+        console.error("Failed to fetch treatments:", error);
+        return [];
+      }
     },
   });
 
-  // Create treatmentId -> patientId map
+  // Filter to only treatments we need (based on treatmentIds from cycles)
+  const treatmentsData = useMemo(() => {
+    if (!allTreatmentsData || uniqueTreatmentIdsFromCycles.length === 0) {
+      return [];
+    }
+    const treatmentIdsSet = new Set(uniqueTreatmentIdsFromCycles);
+    return allTreatmentsData.filter(
+      (treatment) => treatment?.id && treatmentIdsSet.has(treatment.id)
+    );
+  }, [allTreatmentsData, uniqueTreatmentIdsFromCycles]);
+
+  // Create treatmentId -> patientId map for fast lookup
+  // Also create treatmentId -> treatment map for quick access
   const treatmentToPatientMap = useMemo(() => {
     const map = new Map<string, string>();
     treatmentsData?.forEach((treatment) => {
-      if (treatment?.patientId) {
+      if (treatment?.patientId && treatment?.id) {
         map.set(treatment.id, treatment.patientId);
+      }
+    });
+    return map;
+  }, [treatmentsData]);
+
+  // Create treatment lookup map for faster access
+  const treatmentMap = useMemo(() => {
+    const map = new Map<string, any>();
+    treatmentsData?.forEach((treatment) => {
+      if (treatment?.id) {
+        map.set(treatment.id, treatment);
+      }
+    });
+    return map;
+  }, [treatmentsData]);
+
+  // Extract patientName from treatment agreements (if available)
+  // This avoids needing to fetch patient details just for the name
+  const treatmentToPatientNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    treatmentsData?.forEach((treatment) => {
+      if (treatment?.id) {
+        // Check if treatment has agreements array (may not be in type definition)
+        const agreements = (treatment as any)?.agreements;
+        if (agreements && Array.isArray(agreements) && agreements.length > 0) {
+          const patientName = agreements[0]?.patientName;
+          if (patientName) {
+            map.set(treatment.id, patientName);
+          }
+        }
       }
     });
     return map;
@@ -185,7 +232,8 @@ function DoctorTreatmentCyclesComponent() {
     const patientMap = new Map<string, PatientInTreatment>();
 
     cycles.forEach((cycle) => {
-      // Get patientId from cycle or from treatment map
+      // Get patientId from cycle (preferred) or from treatment map (fallback)
+      // Most cycles should have patientId, so we avoid waiting for treatments
       const patientId =
         cycle.patientId || treatmentToPatientMap.get(cycle.treatmentId);
       if (!patientId || !cycle.treatmentId) return;
@@ -199,7 +247,6 @@ function DoctorTreatmentCyclesComponent() {
           patientId,
           treatmentId: cycle.treatmentId,
           patientName: "Loading...",
-          patientCode: undefined,
           treatmentType: cycle.treatmentType || null,
           activeCycle: null,
           allCycles: [],
@@ -209,12 +256,11 @@ function DoctorTreatmentCyclesComponent() {
       const patient = patientMap.get(compositeKey)!;
       patient.allCycles.push(cycle);
 
-      // Get treatment type from cycle or treatment
+      // Get treatment type from cycle (preferred) or treatment (fallback)
+      // Most cycles should have treatmentType, so we avoid waiting for treatments
       let cycleTreatmentType = cycle.treatmentType;
-      if (!cycleTreatmentType) {
-        const treatment = treatmentsData?.find(
-          (t) => t && t.id === cycle.treatmentId
-        );
+      if (!cycleTreatmentType && cycle.treatmentId && treatmentMap.size > 0) {
+        const treatment = treatmentMap.get(cycle.treatmentId);
         if (treatment?.treatmentType) {
           // Only use if it's IUI or IVF
           if (
@@ -280,73 +326,78 @@ function DoctorTreatmentCyclesComponent() {
     });
 
     return Array.from(patientMap.values());
-  }, [cyclesData?.data, treatmentToPatientMap, treatmentsData]);
+  }, [cyclesData?.data, treatmentToPatientMap, treatmentMap]);
+
+  // Update patient names from treatment agreements (no need to fetch patient details)
+  const patientsWithDetails = useMemo(() => {
+    return patientsInTreatment.map((patient) => {
+      // Get patientName from treatment agreements (fastest, no API call needed)
+      const patientNameFromAgreement = treatmentToPatientNameMap.get(
+        patient.treatmentId
+      );
+
+      // Use patientName from agreement or fallback
+      const actualPatientName =
+        patientNameFromAgreement || patient.patientName || "Unknown";
+
+      return {
+        ...patient,
+        patientName: actualPatientName,
+      };
+    });
+  }, [patientsInTreatment, treatmentToPatientNameMap]);
 
   // Filter patients based on search and treatment type
   // Optimized: Pre-compute lowercase values and use early returns
   const filteredPatients = useMemo(() => {
     if (!treatmentTypeFilter && !searchTerm) {
-      return patientsInTreatment;
+      return patientsWithDetails;
     }
 
     const searchLower = searchTerm ? searchTerm.toLowerCase() : null;
 
-    return patientsInTreatment.filter((p) => {
+    return patientsWithDetails.filter((p) => {
       // Filter by treatment type first (faster check)
       if (treatmentTypeFilter && p.treatmentType !== treatmentTypeFilter) {
         return false;
       }
 
-      // Filter by search term
+      // Filter by search term (only by name and id, no patientCode)
       if (searchLower) {
         const nameMatch = p.patientName.toLowerCase().includes(searchLower);
-        const codeMatch = p.patientCode?.toLowerCase().includes(searchLower);
         const idMatch = p.patientId.toLowerCase().includes(searchLower);
 
-        if (!nameMatch && !codeMatch && !idMatch) {
+        if (!nameMatch && !idMatch) {
           return false;
         }
       }
 
       return true;
     });
-  }, [patientsInTreatment, treatmentTypeFilter, searchTerm]);
+  }, [patientsWithDetails, treatmentTypeFilter, searchTerm]);
 
-  // Component to fetch and display patient info
-  // Memoized to prevent unnecessary re-renders
+  // Memoized component to prevent unnecessary re-renders
   const PatientCard = memo(function PatientCard({
     patient,
+    treatmentToPatientNameMap,
+    doctorProfile,
+    user,
   }: {
     patient: PatientInTreatment;
+    treatmentToPatientNameMap: Map<string, string>;
+    doctorProfile?: any;
+    user?: any;
   }) {
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
     const [isCycleDetailModalOpen, setIsCycleDetailModalOpen] = useState(false);
     const activeCycle = patient.activeCycle;
 
-    // Fetch treatment to ensure we have treatmentType for the cycle
-    // Use cached treatment data if available from parent query
-    const treatmentFromCache = useMemo(() => {
-      return treatmentsData?.find((t) => t?.id === activeCycle?.treatmentId);
-    }, [treatmentsData, activeCycle?.treatmentId]);
-
-    const { data: cycleTreatment } = useQuery({
-      queryKey: ["treatment", activeCycle?.treatmentId],
-      queryFn: async () => {
-        if (!activeCycle?.treatmentId) return null;
-        try {
-          const response = await api.treatment.getTreatmentById(
-            activeCycle.treatmentId
-          );
-          return response.data;
-        } catch {
-          return null;
-        }
-      },
-      enabled: !!activeCycle?.treatmentId && !treatmentFromCache,
-      staleTime: 60000, // Cache for 1 minute
-      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-      initialData: treatmentFromCache || undefined,
-    });
+    // Get treatment from cache for faster lookup
+    const cycleTreatment = useMemo(() => {
+      if (!activeCycle?.treatmentId || treatmentMap.size === 0)
+        return undefined;
+      return treatmentMap.get(activeCycle.treatmentId);
+    }, [treatmentMap, activeCycle?.treatmentId]);
 
     // Ensure activeCycle has treatmentType
     const cycleWithType = useMemo(() => {
@@ -365,152 +416,22 @@ function DoctorTreatmentCyclesComponent() {
       return activeCycle;
     }, [activeCycle, cycleTreatment]);
 
-    const { data: patientDetails } = usePatientDetails(patient.patientId);
-
-    const { data: userDetails } = useQuery({
-      queryKey: ["user-details", patient.patientId],
-      queryFn: async () => {
-        try {
-          const response = await api.user.getUserDetails(patient.patientId);
-          return response.data;
-        } catch {
-          return null;
-        }
-      },
-      enabled: !!patient.patientId,
-      staleTime: 60000, // Cache for 1 minute
-      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-    });
-
-    // Fetch all appointments for this patient (for the entire treatment)
-    const { data: appointmentsData } = useQuery({
-      queryKey: ["appointments", "patient", patient.patientId],
-      queryFn: async () => {
-        if (!patient.patientId) return [];
-        try {
-          const response = await api.appointment.getAppointments({
-            patientId: patient.patientId,
-            pageNumber: 1,
-            pageSize: 100, // Get all appointments
-          });
-          const appointments = response.data || [];
-          // Filter appointments to ensure they belong to this specific patient
-          // This prevents counting appointments from other patients if API doesn't filter correctly
-          return appointments.filter((apt) => {
-            // Check multiple possible field names for patientId
-            const aptPatientId =
-              apt.patientId ||
-              (apt as any).patientID ||
-              (apt as any).PatientId ||
-              (apt as any).PatientID ||
-              (apt as any).patient?.id ||
-              (apt as any).patient?.patientId ||
-              (apt as any).patientAccountId ||
-              (apt as any).patientAccountID;
-            return aptPatientId === patient.patientId;
-          });
-        } catch {
-          return [];
-        }
-      },
-      enabled: !!patient.patientId,
-      staleTime: 30000, // Cache for 30 seconds
-      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
-    });
-
-    // Fetch all lab samples for all cycles in this treatment
-    // Optimized: Only fetch samples for active cycle, not all cycles
-    const { data: samplesData } = useQuery({
-      queryKey: ["samples", "cycle", cycleWithType?.id],
-      queryFn: async () => {
-        if (!cycleWithType?.id) return [];
-        try {
-          // Only fetch samples for the active cycle to reduce API calls
-          const samplesResponse = await api.treatmentCycle.getCycleSamples(
-            cycleWithType.id
-          );
-          return samplesResponse.data || [];
-        } catch (error: any) {
-          // If 500 error, API might not be implemented yet - return empty array
-          if (error?.response?.status === 500) {
-            return [];
-          }
-          return [];
-        }
-      },
-      enabled: !!cycleWithType?.id,
-      staleTime: 30000, // Cache for 30 seconds
-      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
-    });
-
-    // Fetch all agreements for this treatment
-    const { data: agreementsData } = useQuery({
-      queryKey: ["agreements", "treatment", cycleWithType?.treatmentId],
-      queryFn: async () => {
-        if (!cycleWithType?.treatmentId) return [];
-        try {
-          const response = await api.agreement.getAgreements({
-            TreatmentId: cycleWithType.treatmentId,
-            Page: 1,
-            Size: 100, // Get all agreements
-          });
-          return response.data || [];
-        } catch {
-          return [];
-        }
-      },
-      enabled: !!cycleWithType?.treatmentId,
-      staleTime: 60000, // Cache for 1 minute
-      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-    });
-
-    // Fetch all cycles for this treatment to determine progress
-    // Use cached cycles data if available from parent query
+    // Get all cycles for this treatment from cached data
     const allCyclesData = useMemo(() => {
       if (!cycleWithType?.treatmentId) return [];
-      const cycles = cyclesData?.data || [];
-      return cycles.filter((c) => c.treatmentId === cycleWithType.treatmentId);
+      return (cyclesData?.data || []).filter(
+        (c) => c.treatmentId === cycleWithType.treatmentId
+      );
     }, [cyclesData?.data, cycleWithType?.treatmentId]);
 
+    // Get patientName from treatment agreements
     const patientName =
-      getFullNameFromObject(userDetails) ||
-      getFullNameFromObject(patientDetails) ||
-      userDetails?.userName ||
-      (isPatientDetailResponse(patientDetails)
-        ? patientDetails.accountInfo?.username
-        : null) ||
+      treatmentToPatientNameMap.get(patient.treatmentId) ||
       patient.patientName ||
       "Unknown";
-    const patientCode = patientDetails?.patientCode || patient.patientCode;
-    const shortId = patientCode || `P-${getLast4Chars(patient.patientId)}`;
 
-    // Get age from userDetails
-    const age = userDetails?.age;
-
-    // Get phone number
-    const phone =
-      (isPatientDetailResponse(patientDetails)
-        ? patientDetails.accountInfo?.phone
-        : null) ||
-      userDetails?.phone ||
-      userDetails?.phoneNumber ||
-      patientDetails?.phoneNumber ||
-      null;
-
-    // Format phone number
-    const formattedPhone = phone
-      ? phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
-      : null;
-
-    // Always show patient card, even if all cycles are cancelled/completed/failed
-    // This allows viewing cancelled treatments
-    if (!activeCycle) {
-      return null; // Only hide if truly no cycles exist
-    }
-
-    if (!cycleWithType) {
-      // If cycleWithType is null, still try to render with activeCycle
-      // This handles cases where treatment data might not be available
+    // Only render if we have active cycle and cycle with type
+    if (!activeCycle || !cycleWithType) {
       return null;
     }
 
@@ -522,10 +443,6 @@ function DoctorTreatmentCyclesComponent() {
           year: "numeric",
         })
       : null;
-
-    const appointmentsCount = appointmentsData?.length || 0;
-    const samplesCount = samplesData?.length || 0;
-    const agreementsCount = agreementsData?.length || 0;
 
     // Determine treatment status based on all cycles
     const treatmentStatus = useMemo(() => {
@@ -562,21 +479,11 @@ function DoctorTreatmentCyclesComponent() {
             {/* Patient Header Section */}
             <div className="mb-6 flex items-start justify-between">
               <div className="flex items-center gap-4">
-                {/* Avatar */}
-                <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 text-2xl font-bold text-blue-600">
-                  {(isPatientDetailResponse(patientDetails)
-                    ? patientDetails.accountInfo?.username?.charAt(0)
-                    : null) || patientName.charAt(0).toUpperCase()}
-                </div>
-
                 {/* Patient Info */}
                 <div>
                   <div className="flex items-center gap-3">
                     <h2 className="text-2xl font-bold text-gray-900">
                       {patientName}
-                      {age && (
-                        <span className="ml-2 text-gray-600">| Age: {age}</span>
-                      )}
                     </h2>
                     {cycleWithType.treatmentType && (
                       <span
@@ -607,24 +514,12 @@ function DoctorTreatmentCyclesComponent() {
                       </span>
                     )}
                   </div>
-                  <div className="mt-1 space-y-0.5 text-sm text-gray-600">
-                    <div>
-                      <span className="font-medium">PatientCode: </span>
-                      {shortId}
+                  {startDate && (
+                    <div className="mt-1 text-sm text-gray-600">
+                      <span className="font-medium">Started: </span>
+                      {startDate}
                     </div>
-                    {formattedPhone && (
-                      <div>
-                        <span className="font-medium">Phone: </span>
-                        {formattedPhone}
-                      </div>
-                    )}
-                    {startDate && (
-                      <div>
-                        <span className="font-medium">Started: </span>
-                        {startDate}
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -643,28 +538,6 @@ function DoctorTreatmentCyclesComponent() {
                 <Button size="sm" onClick={() => setIsUpdateModalOpen(true)}>
                   Update Record
                 </Button>
-              </div>
-            </div>
-
-            {/* Summary Stats */}
-            <div className="mb-6 flex gap-4">
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2">
-                <div className="text-xs text-gray-500">Appointments</div>
-                <div className="text-lg font-semibold text-gray-900">
-                  {appointmentsCount}
-                </div>
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2">
-                <div className="text-xs text-gray-500">Lab Samples</div>
-                <div className="text-lg font-semibold text-gray-900">
-                  {samplesCount}
-                </div>
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2">
-                <div className="text-xs text-gray-500">Agreements</div>
-                <div className="text-lg font-semibold text-gray-900">
-                  {agreementsCount}
-                </div>
               </div>
             </div>
 
@@ -694,11 +567,23 @@ function DoctorTreatmentCyclesComponent() {
               cycle={cycleWithType}
               isOpen={isUpdateModalOpen}
               onClose={() => setIsUpdateModalOpen(false)}
+              // Pass cached data to avoid refetching
+              treatment={treatmentMap.get(cycleWithType.treatmentId)}
+              allCycles={
+                allCyclesData.length > 0 ? allCyclesData : patient.allCycles
+              }
+              // Pass doctor profile and user to avoid refetching
+              doctorProfile={doctorProfile}
+              currentUser={user}
+              // Pass patient name to avoid fetching
+              patientName={patientName}
             />
             <TreatmentCycleDetailModal
               cycle={cycleWithType}
               isOpen={isCycleDetailModalOpen}
               onClose={() => setIsCycleDetailModalOpen(false)}
+              // Pass cached data to avoid refetching
+              treatment={treatmentMap.get(cycleWithType.treatmentId)}
             />
           </>
         )}
@@ -767,7 +652,7 @@ function DoctorTreatmentCyclesComponent() {
                     Search
                   </label>
                   <Input
-                    placeholder="By patient name or patient code"
+                    placeholder="By patient name"
                     value={searchTerm}
                     onChange={(event) => {
                       setSearchTerm(event.target.value);
@@ -801,12 +686,23 @@ function DoctorTreatmentCyclesComponent() {
                 Loading patients...
               </div>
             ) : filteredPatients.length > 0 ? (
-              filteredPatients.map((patient) => (
-                <PatientCard
-                  key={`${patient.patientId}_${patient.treatmentId}`}
-                  patient={patient}
-                />
-              ))
+              filteredPatients.map((patient) => {
+                return (
+                  <PatientCard
+                    key={`${patient.patientId}_${patient.treatmentId}`}
+                    patient={patient}
+                    treatmentToPatientNameMap={treatmentToPatientNameMap}
+                    doctorProfile={doctorProfile}
+                    user={user}
+                  />
+                );
+              })
+            ) : cyclesData?.data && cyclesData.data.length > 0 ? (
+              // If we have cycles but no filtered patients, show loading state
+              // This handles the case where treatments are still loading
+              <div className="py-12 text-center text-gray-500">
+                Loading patient information...
+              </div>
             ) : (
               <div className="py-12 text-center">
                 <div className="mx-auto max-w-md">

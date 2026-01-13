@@ -6,9 +6,7 @@
  */
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/utils/cn";
-import { api } from "@/api/client";
 import {
   normalizeTreatmentCycleStatus,
   type TreatmentCycle,
@@ -337,36 +335,10 @@ export function HorizontalTreatmentTimeline({
   const isIUI = normalizedTreatmentType === "IUI";
   const steps = isIVF ? IVF_STEPS : isIUI ? IUI_STEPS : [];
 
-  // Fetch current step from backend API (most accurate source)
-  const { data: currentStepFromApi } = useQuery({
-    queryKey: [
-      "treatment-current-step",
-      cycle.treatmentId,
-      normalizedTreatmentType,
-    ],
-    queryFn: async () => {
-      if (!cycle.treatmentId || !normalizedTreatmentType) return null;
-      try {
-        if (isIUI) {
-          const response = await api.treatmentIUI.getCurrentStep(
-            cycle.treatmentId
-          );
-          return response.data ?? null;
-        } else if (isIVF) {
-          const response = await api.treatmentIVF.getCurrentStep(
-            cycle.treatmentId
-          );
-          return response.data ?? null;
-        }
-        return null;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!cycle.treatmentId && !!normalizedTreatmentType,
-    staleTime: 60000, // Cache for 1 minute (increased from 30 seconds)
-    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
-  });
+  // Disabled: No longer fetch current step from API to improve performance
+  // We use cycle data (stepType, cycleName, status) to determine current step instead
+  // This eliminates N API calls (one per patient card) and significantly speeds up page load
+  const currentStepFromApi = null;
 
   // Helper to convert step number from API to step ID
   // API returns 0-based index (0 = first step, 1 = second step, 2 = third step, etc.)

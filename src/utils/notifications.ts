@@ -276,13 +276,13 @@ export async function sendServiceRequestNotification(
 }
 
 /**
- * Send encounter/medical record notification
+ * Send treatment/medical record notification
  */
-export async function sendEncounterNotification(
+export async function sendTreatmentNotification(
   patientId: string,
   _action: "created",
-  encounterData: {
-    encounterId?: string;
+  treatmentData: {
+    treatmentId?: string;
     appointmentId?: string;
     diagnosis?: string;
   },
@@ -290,7 +290,7 @@ export async function sendEncounterNotification(
 ): Promise<void> {
   const title = "New Medical Record Created";
   const content = `A new medical record has been created for you${
-    encounterData.diagnosis ? `. Diagnosis: ${encounterData.diagnosis}` : ""
+    treatmentData.diagnosis ? `. Diagnosis: ${treatmentData.diagnosis}` : ""
   }`;
 
   await sendPatientNotification({
@@ -299,11 +299,14 @@ export async function sendEncounterNotification(
     content,
     type: "Treatment" as NotificationType,
     userId,
-    relatedEntityType: encounterData.encounterId
-      ? "Encounter"
+    relatedEntityType: treatmentData.treatmentId
+      ? "Treatment"
       : "MedicalRecord",
     relatedEntityId:
-      encounterData.encounterId || encounterData.appointmentId || undefined,
+      treatmentData.treatmentId || treatmentData.appointmentId || undefined,
     isImportant: false,
   });
 }
+
+// Backward compatibility alias
+export const sendEncounterNotification = sendTreatmentNotification;

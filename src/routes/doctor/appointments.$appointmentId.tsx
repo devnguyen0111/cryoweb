@@ -565,7 +565,7 @@ function DoctorAppointmentDetailsComponent() {
                             />
                           </svg>
                           <span>
-                            Close the encounter notes before 18:00 on the same
+                            Close the treatment notes before 18:00 on the same
                             day
                           </span>
                         </li>
@@ -631,7 +631,7 @@ function DoctorAppointmentDetailsComponent() {
                             Complete Appointment
                           </p>
                           <p className="mt-1 text-sm text-emerald-700">
-                            Close the appointment and log the encounter
+                            Close the appointment and log the treatment
                           </p>
                           <Button
                             size="sm"

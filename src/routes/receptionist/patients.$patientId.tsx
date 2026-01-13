@@ -351,7 +351,7 @@ function ReceptionistPatientDetail() {
                     })
                   }
                 >
-                  Create encounter
+                  Create treatment
                 </Button>
                 <Button
                   size="sm"

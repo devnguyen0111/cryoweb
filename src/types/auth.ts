@@ -53,7 +53,7 @@ export interface RolePermissions {
   canViewReports: boolean;
   canViewSettings: boolean;
   canManageSystem: boolean;
-  canManageEncounters: boolean;
+  canManageTreatments: boolean;
   canManageTreatmentCycles: boolean;
   canManagePrescriptions: boolean;
   canAccessCryobank: boolean;
@@ -84,7 +84,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: true,
     canManageSystem: true,
-    canManageEncounters: true,
+    canManageTreatments: true,
     canManageTreatmentCycles: true,
     canManagePrescriptions: true,
     canAccessCryobank: true,
@@ -110,7 +110,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: false,
     canManageSystem: false,
-    canManageEncounters: true,
+    canManageTreatments: true,
     canManageTreatmentCycles: true,
     canManagePrescriptions: true,
     canAccessCryobank: true,
@@ -136,7 +136,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: false,
     canManageSystem: false,
-    canManageEncounters: false,
+    canManageTreatments: false,
     canManageTreatmentCycles: false,
     canManagePrescriptions: false,
     canAccessCryobank: true,
@@ -162,7 +162,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: false,
     canManageSystem: false,
-    canManageEncounters: false,
+    canManageTreatments: false,
     canManageTreatmentCycles: false,
     canManagePrescriptions: false,
     canAccessCryobank: false,
@@ -251,19 +251,19 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       label: "Service Requests",
       href: "/doctor/service-requests",
       icon: "FileCheck",
-      permission: "canManageEncounters",
+      permission: "canManageTreatments",
     },
     {
-      label: "Encounters",
+      label: "Treatments",
       href: "/doctor/encounters",
       icon: "ClipboardList",
-      permission: "canManageEncounters",
+      permission: "canManageTreatments",
     },
     {
       label: "Medical Records",
       href: "/doctor/medical-records",
       icon: "FileText",
-      permission: "canManageEncounters",
+      permission: "canManageTreatments",
     },
     {
       label: "Treatment Cycles",

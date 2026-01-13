@@ -44,6 +44,7 @@ type TreatmentPlanFormValues = {
 interface TreatmentPlanFormProps {
   treatmentId?: string;
   patientId?: string;
+  treatmentType?: "IUI" | "IVF"; // Optional initial treatment type
   layout?: "page" | "modal";
   onClose?: () => void;
   onSaved?: (treatmentId: string, agreementId?: string) => void;
@@ -131,6 +132,7 @@ const IVF_STEP_PLAN = [
 export function TreatmentPlanForm({
   treatmentId,
   patientId,
+  treatmentType: initialTreatmentType,
   layout = "modal",
   onClose,
   onSaved,
@@ -142,7 +144,7 @@ export function TreatmentPlanForm({
 
   const [formState, setFormState] = useState<TreatmentPlanFormValues>({
     planName: "",
-    treatmentType: "",
+    treatmentType: initialTreatmentType || "",
     patientId: patientId || "",
     startDate: new Date().toISOString().split("T")[0],
     estimatedDuration: "6",

@@ -9,7 +9,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { useDoctorProfile } from "@/hooks/useDoctorProfile";
 import { TreatmentPlanForm } from "@/features/doctor/treatment-cycles/TreatmentPlanForm";
 import { TreatmentPlanSignature } from "@/features/doctor/treatment-cycles/TreatmentPlanSignature";
@@ -45,7 +44,6 @@ export function CreateTreatmentForm({
   onCreated,
 }: CreateTreatmentFormProps) {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [selectedPatientId] = useState(defaultPatientId || "");
   // Step management for IUI/IVF: plan -> signature -> summary
   // If initialTreatmentType or startWithPlan is provided, start with "plan", otherwise start with "treatment"
@@ -66,10 +64,8 @@ export function CreateTreatmentForm({
     patientId: string;
   } | null>(null);
 
-  // AccountId IS DoctorId - use user.id directly as doctorId
-  const doctorId = user?.id ?? null;
-  const { data: doctorProfile, isLoading: doctorProfileLoading } =
-    useDoctorProfile();
+  // Fetch doctor profile for summary step
+  const { data: doctorProfile } = useDoctorProfile();
 
   // Fetch patient details for plan step
   const planPatientId =
@@ -304,12 +300,12 @@ export function CreateTreatmentForm({
             undefined
           }
           layout={layout}
-          onSuccess={(treatmentId, agreementId) => {
+          onSaved={(treatmentId: string, agreementId?: string) => {
             setCreatedTreatmentId(treatmentId);
-            setCreatedAgreementId(agreementId);
+            setCreatedAgreementId(agreementId || null);
             setCurrentStep("signature");
           }}
-          onCancel={() => {
+          onClose={() => {
             if (pendingTreatmentData) {
               // If we came from treatment form, go back to treatment form
               setCurrentStep("treatment");
@@ -825,7 +821,7 @@ export function CreateTreatmentForm({
             onClick={() => {
               navigate({
                 to: "/doctor/treatment-cycles",
-                search: { treatmentId: createdTreatmentId },
+                search: { patientId: treatmentPatientId || undefined },
               });
             }}
           >

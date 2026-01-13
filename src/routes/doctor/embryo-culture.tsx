@@ -257,7 +257,6 @@ function EmbryoCultureComponent() {
         });
 
         const allEmbryos = response.data ?? [];
-        const cycleIds = new Set(cyclesInCulture.map((c) => c.id));
 
         // Group embryos by cycleId
         const results: Record<string, LabSampleDetailResponse[]> = {};

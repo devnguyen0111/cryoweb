@@ -311,7 +311,19 @@ function DoctorMedicalRecordsComponent() {
     },
   });
 
-  const records = data?.data ?? [];
+  // Sort medical records by createdAt (newest first)
+  const records = useMemo(() => {
+    const rawRecords = data?.data ?? [];
+    return [...rawRecords].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
+
   const total = data?.metaData?.totalCount ?? 0;
   const totalPages = data?.metaData?.totalPages ?? 1;
 

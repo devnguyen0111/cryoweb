@@ -201,7 +201,19 @@ function DoctorPrescriptionComponent() {
 
   const prescriptions = prescriptionsQuery.data;
   const prescriptionsLoading = prescriptionsQuery.isFetching;
-  const allPrescriptionRows = prescriptions?.data ?? [];
+  
+  // Sort prescriptions by createdAt (newest first)
+  const allPrescriptionRows = useMemo(() => {
+    const rawPrescriptions = prescriptions?.data ?? [];
+    return [...rawPrescriptions].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [prescriptions?.data]);
 
   // Extract unique medical record IDs from prescriptions (use allPrescriptionRows to avoid circular dependency)
   const medicalRecordIds = useMemo(() => {

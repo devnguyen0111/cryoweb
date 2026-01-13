@@ -298,7 +298,19 @@ function DoctorServiceRequestsComponent() {
     });
   };
 
-  const serviceRequests = data?.data ?? [];
+  // Sort service requests by createdAt (newest first)
+  const serviceRequests = useMemo(() => {
+    const rawRequests = data?.data ?? [];
+    return [...rawRequests].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
+
   const appointments = appointmentsQuery.data ?? {};
   const patients = patientsQuery.data ?? {};
   const metaData = data?.metaData;

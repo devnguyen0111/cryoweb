@@ -109,7 +109,19 @@ function ReceptionistTransactionsComponent() {
       }),
   });
 
-  const transactions = data?.data ?? [];
+  // Sort transactions by createdAt (newest first)
+  const transactions = useMemo(() => {
+    const rawTransactions = data?.data ?? [];
+    return [...rawTransactions].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
+
   const total = data?.metaData?.totalCount ?? 0;
   const totalPages = data?.metaData?.totalPages ?? 1;
 

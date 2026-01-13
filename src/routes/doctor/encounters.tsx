@@ -58,7 +58,19 @@ function DoctorTreatmentsComponent() {
     enabled: !!user?.id,
   });
 
-  const treatments = treatmentsData?.data || [];
+  // Sort treatments by createdAt (newest first)
+  const treatments = useMemo(() => {
+    const rawTreatments = treatmentsData?.data || [];
+    return [...rawTreatments].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [treatmentsData?.data]);
+
   const filteredTreatments = useMemo(() => {
     if (!searchTerm) return treatments;
     const term = searchTerm.toLowerCase();

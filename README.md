@@ -93,10 +93,10 @@ yarn install
 Tạo file `.env` trong thư mục root và cấu hình:
 
 ```env
-VITE_API_URL=https://cryofert.runasp.net/api
+VITE_API_URL=https://cryoferts.runasp.net/api
 ```
 
-Default API URL: `https://cryofert.runasp.net/api`
+Default API URL: `https://cryoferts.runasp.net/api`
 
 ## 🚀 Chạy dự án
 
@@ -501,7 +501,7 @@ cryoweb/
 ### API Base URL
 
 ```
-https://cryofert.runasp.net/api
+https://cryoferts.runasp.net/api
 ```
 
 ### API Modules (25 modules)

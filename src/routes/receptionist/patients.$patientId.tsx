@@ -95,7 +95,7 @@ function ReceptionistPatientDetail() {
       // For now, using direct axios call as API integration is pending
       try {
         const API_BASE_URL =
-          import.meta.env.VITE_API_URL || "https://cryofert.runasp.net/api";
+          import.meta.env.VITE_API_URL || "https://cryoferts.runasp.net/api";
         const token = localStorage.getItem("authToken");
         const response = await axios.get(
           `${API_BASE_URL}/CryoStorageContract`,
@@ -249,8 +249,7 @@ function ReceptionistPatientDetail() {
         // For PayOS, check for qrCodeData or qrCodeUrl
         const qrCodeData = (response.data as any).qrCodeData;
         const qrCodeUrl =
-          (response.data as any).qrCodeUrl ||
-          response.data.paymentUrl;
+          (response.data as any).qrCodeUrl || response.data.paymentUrl;
 
         if (qrCodeData) {
           setQrCodeData(qrCodeData);

@@ -235,6 +235,19 @@ function DoctorAppointmentsComponent() {
     },
   });
 
+  // Sort appointments by createdAt (newest first)
+  const sortedAppointments = useMemo(() => {
+    const rawAppointments = data?.data ?? [];
+    return [...rawAppointments].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
+
   const total = data?.metaData?.totalCount ?? 0;
   const totalPages = data?.metaData?.totalPages ?? 1;
 
@@ -421,7 +434,7 @@ function DoctorAppointmentsComponent() {
                 <div className="py-12 text-center text-gray-500">
                   Loading data...
                 </div>
-              ) : data?.data?.length ? (
+              ) : sortedAppointments.length ? (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead>
@@ -436,7 +449,7 @@ function DoctorAppointmentsComponent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {data.data.map((appointment) => {
+                      {sortedAppointments.map((appointment) => {
                         // Get patientId from multiple possible sources
                         const rawAppointment = appointment as unknown as Record<
                           string,
@@ -635,8 +648,8 @@ function DoctorAppointmentsComponent() {
 
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-500">
-                  Showing {data?.data?.length ?? 0} /{" "}
-                  {total || (data?.data?.length ?? 0)} appointments
+                  Showing {sortedAppointments.length} /{" "}
+                  {total || sortedAppointments.length} appointments
                 </div>
                 <div className="flex items-center gap-2">
                   <Button

@@ -47,7 +47,9 @@ function DoctorServiceRequestsComponent() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["doctor", "service-requests"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "service-requests"],
+      }),
     ]);
     setIsRefreshing(false);
   };
@@ -232,32 +234,23 @@ function DoctorServiceRequestsComponent() {
         queryKey: ["doctor", "service-requests"],
       });
       const actionText =
-        variables.action === "reject"
-          ? "rejected"
-          : "completed";
+        variables.action === "reject" ? "rejected" : "completed";
       toast.success(`Service request ${actionText} successfully`);
-      
+
       // Send notification to patient
       if (response.data?.patientId) {
         const { sendServiceRequestNotification } = await import(
           "@/utils/notifications"
         );
-        const action =
-          variables.action === "reject"
-            ? "rejected"
-            : "completed";
-        
-        await sendServiceRequestNotification(
-          response.data.patientId,
-          action,
-          {
-            serviceRequestId: response.data.id,
-            serviceName: undefined, // Could fetch service details if needed
-            notes: response.data.notes || undefined,
-          }
-        );
+        const action = variables.action === "reject" ? "rejected" : "completed";
+
+        await sendServiceRequestNotification(response.data.patientId, action, {
+          serviceRequestId: response.data.id,
+          serviceName: undefined, // Could fetch service details if needed
+          notes: response.data.notes || undefined,
+        });
       }
-      
+
       setActionModal({ isOpen: false, requestId: null, action: null });
     },
     onError: (error: any) => {
@@ -267,10 +260,7 @@ function DoctorServiceRequestsComponent() {
     },
   });
 
-  const handleStatusAction = (
-    id: string,
-    action: "reject" | "complete"
-  ) => {
+  const handleStatusAction = (id: string, action: "reject" | "complete") => {
     setActionModal({ isOpen: true, requestId: id, action });
   };
 
@@ -332,7 +322,9 @@ function DoctorServiceRequestsComponent() {
                 onClick={handleRefresh}
                 disabled={isRefreshing}
               >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
                 Refresh
               </Button>
               <Button onClick={() => setIsCreateModalOpen(true)}>
@@ -476,19 +468,23 @@ function DoctorServiceRequestsComponent() {
                                       variant="destructive"
                                       size="sm"
                                       onClick={() =>
-                                        handleStatusAction(
-                                          request.id,
-                                          "reject"
-                                        )
+                                        handleStatusAction(request.id, "reject")
                                       }
-                                      disabled={
-                                        statusActionMutation.isPending
-                                      }
+                                      disabled={statusActionMutation.isPending}
                                     >
                                       Reject
                                     </Button>
                                   )}
-                                  {(request.status === "Approved" || request.status === "Pending") && (
+                                  {(() => {
+                                    const status =
+                                      request.status?.toLowerCase() || "";
+                                    return (
+                                      request.status === "Approved" ||
+                                      request.status === "Pending" ||
+                                      status === "inprocess" ||
+                                      status === "in progress"
+                                    );
+                                  })() && (
                                     <Button
                                       variant="default"
                                       size="sm"

@@ -244,7 +244,8 @@ type TabType =
   | "service"
   | "sperm"
   | "oocyte"
-  | "iui-procedure";
+  | "iui-procedure"
+  | "iui-sperm";
 
 export function CycleUpdateModal({
   cycle,
@@ -614,6 +615,13 @@ export function CycleUpdateModal({
     );
   }, [currentCycle.treatmentType, treatmentTypeFromData]);
 
+  // Check if this is an IUI cycle
+  const isIUICycle = useMemo(() => {
+    return (
+      currentCycle.treatmentType === "IUI" || treatmentTypeFromData === "IUI"
+    );
+  }, [currentCycle.treatmentType, treatmentTypeFromData]);
+
   // Check if this is IVF cycle 3 (Oocyte Retrieval and Sperm Collection)
   const isCycle3 = useMemo(
     () => isIVFCycle3(currentCycle),
@@ -887,6 +895,34 @@ export function CycleUpdateModal({
     staleTime: QUERY_CONFIG.STALE_TIME,
     retry: QUERY_CONFIG.RETRY,
   });
+
+  // Fetch IUI sperm samples - samples linked to this IUI cycle
+  const { data: iuiSpermSamplesData, isLoading: iuiSpermSamplesLoading } =
+    useQuery({
+      queryKey: ["iui-sperm-samples", "cycle", cycleId],
+      queryFn: async () =>
+        safeApiCall(
+          async () => {
+            const response = await api.treatmentCycle.getCycleSamples(cycleId!);
+            const allSamples = response.data || [];
+            // Filter to only sperm samples
+            const spermSamples = allSamples.filter(
+              (sample) => sample.sampleType === "Sperm"
+            );
+            return { data: spermSamples };
+          },
+          { data: [] },
+          `[CycleUpdateModal] Failed to fetch IUI sperm samples for cycle ${cycleId}`
+        ),
+      enabled: isIUICycle && !!cycleId && isOpen && activeTab === "iui-sperm",
+      staleTime: QUERY_CONFIG.STALE_TIME,
+      retry: QUERY_CONFIG.RETRY,
+    });
+
+  const iuiSpermSamples = useMemo(
+    () => iuiSpermSamplesData?.data || [],
+    [iuiSpermSamplesData]
+  );
 
   // For validation: use all quality-checked samples of patient
   // For IVF cycle 3, use fertilize API data; otherwise use regular API data
@@ -1559,16 +1595,20 @@ export function CycleUpdateModal({
 
   const cancelCycleMutation = useMutation({
     mutationFn: async () => {
+      // Validate reason is required
+      if (!cancelReason.trim()) {
+        throw new Error("Reason is required to cancel the treatment cycle");
+      }
+
       // Use POST /api/treatment-cycles/{id}/cancel
       const cancelRequest: {
-        reason?: string;
+        reason: string;
         notes?: string;
-      } = {};
+      } = {
+        reason: cancelReason.trim(),
+      };
 
-      // Only include reason and notes if they have values
-      if (cancelReason.trim()) {
-        cancelRequest.reason = cancelReason.trim();
-      }
+      // Only include notes if it has value
       if (cancelNotes.trim()) {
         cancelRequest.notes = cancelNotes.trim();
       }
@@ -1595,9 +1635,11 @@ export function CycleUpdateModal({
       });
     },
     onError: (error: any) => {
-      toast.error(
-        error?.response?.data?.message || "Failed to cancel treatment cycle"
-      );
+      const errorMessage =
+        error?.message ||
+        error?.response?.data?.message ||
+        "Failed to cancel treatment cycle";
+      toast.error(errorMessage);
       setIsCancelling(false);
     },
   });
@@ -2097,6 +2139,15 @@ export function CycleUpdateModal({
                         {
                           id: "iui-procedure" as TabType,
                           label: "IUI Procedure",
+                        },
+                      ]
+                    : []),
+                  // Show IUI Sperm tab for IUI cycles
+                  ...(isIUICycle
+                    ? [
+                        {
+                          id: "iui-sperm" as TabType,
+                          label: "IUI Sperm Samples",
                         },
                       ]
                     : []),
@@ -3392,6 +3443,176 @@ export function CycleUpdateModal({
                 </div>
               )}
 
+            {/* IUI Sperm Samples Tab */}
+            {activeTab === "iui-sperm" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>IUI Sperm Samples</CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Sperm samples used in this IUI treatment cycle
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {iuiSpermSamplesLoading ? (
+                    <div className="py-12 text-center text-gray-500">
+                      Loading sperm samples...
+                    </div>
+                  ) : iuiSpermSamples.length === 0 ? (
+                    <div className="py-12 text-center text-gray-500">
+                      <p>
+                        No sperm samples have been linked to this IUI treatment
+                        cycle.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b bg-gray-50">
+                            <th className="text-left p-2 font-semibold text-gray-700">
+                              Code
+                            </th>
+                            <th className="text-left p-2 font-semibold text-gray-700">
+                              Date
+                            </th>
+                            <th className="text-left p-2 font-semibold text-gray-700">
+                              Status
+                            </th>
+                            <th className="text-left p-2 font-semibold text-gray-700">
+                              Volume
+                            </th>
+                            <th className="text-left p-2 font-semibold text-gray-700">
+                              Conc.
+                            </th>
+                            <th className="text-left p-2 font-semibold text-gray-700">
+                              Motility
+                            </th>
+                            <th className="text-left p-2 font-semibold text-gray-700">
+                              Morph.
+                            </th>
+                            <th className="text-left p-2 font-semibold text-gray-700">
+                              Quality
+                            </th>
+                            <th className="text-left p-2 font-semibold text-gray-700">
+                              Notes
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {iuiSpermSamples.map(
+                            (sample: LabSampleDetailResponse) => (
+                              <tr
+                                key={sample.id}
+                                className="border-b hover:bg-gray-50 transition-colors"
+                              >
+                                <td className="p-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <FlaskConical className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                                    <span className="font-mono text-xs font-medium">
+                                      {sample.sampleCode ||
+                                        getLast4Chars(sample.id)}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="p-2 text-xs text-gray-600 whitespace-nowrap">
+                                  {formatDate(sample.collectionDate)}
+                                </td>
+                                <td className="p-2">
+                                  <Badge
+                                    className={cn(
+                                      "inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold border",
+                                      getSampleStatusBadgeClass(sample.status)
+                                    )}
+                                  >
+                                    {sample.status}
+                                  </Badge>
+                                </td>
+                                <td className="p-2 text-xs whitespace-nowrap">
+                                  {sample.sperm?.volume !== undefined &&
+                                  sample.sperm.volume !== null
+                                    ? `${sample.sperm.volume} mL`
+                                    : "—"}
+                                </td>
+                                <td className="p-2 text-xs whitespace-nowrap">
+                                  {sample.sperm?.concentration !== undefined &&
+                                  sample.sperm.concentration !== null
+                                    ? `${sample.sperm.concentration}M`
+                                    : "—"}
+                                </td>
+                                <td className="p-2 text-xs">
+                                  {sample.sperm?.motility !== undefined &&
+                                  sample.sperm.motility !== null &&
+                                  sample.sperm?.progressiveMotility !==
+                                    undefined &&
+                                  sample.sperm.progressiveMotility !== null ? (
+                                    <div className="space-y-0.5">
+                                      <div>
+                                        {sample.sperm.motility}%
+                                        <span className="text-gray-400 ml-1">
+                                          (Total)
+                                        </span>
+                                      </div>
+                                      <div className="text-gray-600">
+                                        {sample.sperm.progressiveMotility}%
+                                        <span className="text-gray-400 ml-1">
+                                          (Prog.)
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : sample.sperm?.motility !== undefined &&
+                                    sample.sperm.motility !== null ? (
+                                    <div>
+                                      {sample.sperm.motility}%
+                                      <span className="text-gray-400 ml-1">
+                                        (Total)
+                                      </span>
+                                    </div>
+                                  ) : sample.sperm?.progressiveMotility !==
+                                      undefined &&
+                                    sample.sperm.progressiveMotility !==
+                                      null ? (
+                                    <div>
+                                      {sample.sperm.progressiveMotility}%
+                                      <span className="text-gray-400 ml-1">
+                                        (Prog.)
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    "—"
+                                  )}
+                                </td>
+                                <td className="p-2 text-xs whitespace-nowrap">
+                                  {sample.sperm?.morphology !== undefined &&
+                                  sample.sperm.morphology !== null
+                                    ? `${sample.sperm.morphology}%`
+                                    : "—"}
+                                </td>
+                                <td className="p-2 text-xs">
+                                  <span className="font-medium">
+                                    {sample.sperm?.quality ||
+                                      sample.quality ||
+                                      "—"}
+                                  </span>
+                                </td>
+                                <td className="p-2 text-xs text-gray-600 max-w-[150px]">
+                                  <div
+                                    className="truncate"
+                                    title={sample.notes || undefined}
+                                  >
+                                    {sample.notes || "—"}
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Sperm Samples Tab */}
             {activeTab === "sperm" && (
               <Card>
@@ -4022,7 +4243,7 @@ export function CycleUpdateModal({
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="cancel-reason">
-                  Reason <span className="text-gray-500">(Optional)</span>
+                  Reason <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="cancel-reason"
@@ -4030,6 +4251,7 @@ export function CycleUpdateModal({
                   onChange={(e) => setCancelReason(e.target.value)}
                   placeholder="Enter cancellation reason..."
                   disabled={isCancelling || cancelCycleMutation.isPending}
+                  required
                 />
               </div>
               <div className="space-y-2">
@@ -4065,10 +4287,19 @@ export function CycleUpdateModal({
               <Button
                 variant="destructive"
                 onClick={() => {
+                  // Validate reason before submitting
+                  if (!cancelReason.trim()) {
+                    toast.error("Please enter a reason for cancellation");
+                    return;
+                  }
                   setIsCancelling(true);
                   cancelCycleMutation.mutate();
                 }}
-                disabled={isCancelling || cancelCycleMutation.isPending}
+                disabled={
+                  isCancelling ||
+                  cancelCycleMutation.isPending ||
+                  !cancelReason.trim()
+                }
               >
                 {isCancelling || cancelCycleMutation.isPending
                   ? "Cancelling..."

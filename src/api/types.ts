@@ -168,12 +168,6 @@ export interface CreateUserRequest {
   role: UserRole;
 }
 
-export interface UpdateUserRequest {
-  firstName?: string;
-  lastName?: string;
-  phoneNumber?: string;
-}
-
 export interface GetUsersRequest {
   pageNumber?: number;
   pageSize?: number;
@@ -181,7 +175,45 @@ export interface GetUsersRequest {
   role?: UserRole;
   isActive?: boolean;
 }
+export interface UserDetail {
+  id: string;
+  email: string;
+  userName: string;
 
+  firstName: string;
+  lastName: string;
+
+  phone?: string;
+  birthDate?: string;   // yyyy-MM-dd
+  gender?: boolean;     // true = Male, false = Female
+  address?: string;
+  country?: string;
+
+  roleId: string;
+  roleName: string;
+
+  status: boolean;
+}
+export interface UpdateUserRequest {
+  firstName: string;
+  lastName: string;
+  userName: string;
+  birthDate?: string;
+  gender?: boolean;
+  phone?: string;
+  address?: string;
+  country?: string;
+  roleId: string;
+  status: boolean;
+}
+export interface AdminCreateAccountRequest {
+  username: string;
+  email: string;
+  location?: string;
+  phone?: string;
+  roleId: string;
+  status: boolean;
+}
 // ============================================================================
 // Patient Types
 // ============================================================================

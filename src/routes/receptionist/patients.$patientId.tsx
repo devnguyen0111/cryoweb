@@ -95,7 +95,7 @@ function ReceptionistPatientDetail() {
       // For now, using direct axios call as API integration is pending
       try {
         const API_BASE_URL =
-          import.meta.env.VITE_API_URL || "https://cryoferts.runasp.net/api";
+          import.meta.env.VITE_API_URL || "https://cryofert-bfbqgkgzf8b3e9ap.southeastasia-01.azurewebsites.net/api";
         const token = localStorage.getItem("authToken");
         const response = await axios.get(
           `${API_BASE_URL}/CryoStorageContract`,

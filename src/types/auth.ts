@@ -278,34 +278,10 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       permission: "canManagePrescriptions",
     },
     {
-      label: "Cryobank",
-      href: "/doctor/cryobank",
-      icon: "Snowflake",
-      permission: "canAccessCryobank",
-    },
-    {
       label: "Quality Check",
       href: "/doctor/quality-check",
       icon: "CheckCircle",
       permission: "canViewSamples",
-    },
-    {
-      label: "Embryo Culture",
-      href: "/doctor/embryo-culture",
-      icon: "FlaskConical",
-      permission: "canManageTreatmentCycles",
-    },
-    {
-      label: "Embryo Quality",
-      href: "/doctor/embryo-quality-check",
-      icon: "CheckCircle",
-      permission: "canViewSamples",
-    },
-    {
-      label: "Embryo Transfer",
-      href: "/doctor/embryo-transfer",
-      icon: "ArrowRight",
-      permission: "canManageTreatmentCycles",
     },
     {
       label: "Reports",

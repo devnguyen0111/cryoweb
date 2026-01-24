@@ -70,7 +70,6 @@ function QualityCheckPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<string>("All");
-  const [isViewMode, setIsViewMode] = useState(false);
   /* ---------- PAGINATION ---------- */
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);

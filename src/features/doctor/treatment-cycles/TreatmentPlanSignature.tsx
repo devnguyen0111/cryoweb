@@ -3,7 +3,7 @@
  * Handles doctor and patient signature confirmation for treatment plans
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -227,17 +227,8 @@ export function TreatmentPlanSignature({
     );
   };
 
-  // Call onSigned after cycle is created
-  // This hook MUST be called before any early returns to follow Rules of Hooks
-  useEffect(() => {
-    if (bothSigned && onSigned) {
-      // Small delay to ensure UI updates
-      const timer = setTimeout(() => {
-        onSigned();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [bothSigned, onSigned]);
+  // Note: onSigned is now only called when user clicks "Next Step" button
+  // This prevents automatic modal closing before user can see step 3 summary
 
   if (agreementLoading || agreementFetching) {
     return (

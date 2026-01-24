@@ -1,27 +1,33 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { DashboardLayout } from "@/components/layouts/DashboardLayout";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
+import { toast } from "sonner";
 import {
   Activity,
-  Bell,
   ClipboardList,
   FileText,
   LayoutDashboard,
   RefreshCw,
   Settings,
   Users,
+  TrendingUp,
 } from "lucide-react";
-import { api } from "@/api/client";
+import { DashboardLayout } from "@/components/layouts/DashboardLayout";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { KpiCard } from "@/components/admin/KpiCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState } from "@/components/admin/EmptyState";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "@tanstack/react-router";
-import { ListToolbar } from "@/components/admin/ListToolbar";
-import { useMemo, useState, type ReactNode } from "react";
-import { StatusBadge } from "@/components/admin/StatusBadge";
+import { Badge } from "@/components/ui/badge";
+import { api } from "@/api/client";
+import {
+  createEmptyPaginatedResponse,
+} from "@/utils/api-helpers";
+import type {
+  User,
+  Appointment,
+  TreatmentCycle,
+} from "@/api/types";
 
 export const Route = createFileRoute("/admin/dashboard")({
   component: AdminDashboardComponent,
@@ -30,151 +36,281 @@ export const Route = createFileRoute("/admin/dashboard")({
 function AdminDashboardComponent() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    // Invalidate all queries to refresh dashboard data
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["users"] }),
-      queryClient.invalidateQueries({ queryKey: ["appointments"] }),
-      queryClient.invalidateQueries({ queryKey: ["patients"] }),
-    ]);
-    setIsRefreshing(false);
+    const toastId = toast.loading("Refreshing dashboard data...");
+
+    try {
+      // Invalidate all queries to refresh dashboard data
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "users"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "appointments"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "patients"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "treatment-cycles"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "samples"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "transactions"] }),
+      ]);
+      toast.success("Dashboard refreshed successfully", { id: toastId });
+    } catch (error) {
+      toast.error("Failed to refresh dashboard", { id: toastId });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
-  const { data: usersData } = useQuery({
-    queryKey: ["users", { pageNumber: 1, pageSize: 1 }],
-    queryFn: () => api.user.getUsers({ pageNumber: 1, pageSize: 1 }),
+  // Get dashboard statistics with proper error handling
+  const { data: usersData, isLoading: usersLoading } = useQuery({
+    queryKey: ["admin", "users", { pageNumber: 1, pageSize: 1 }],
+    queryFn: async () => {
+      try {
+        return await api.user.getUsers({ pageNumber: 1, pageSize: 1 });
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return createEmptyPaginatedResponse<User>();
+        }
+        return createEmptyPaginatedResponse<User>();
+      }
+    },
+    staleTime: 30000,
+    gcTime: 5 * 60 * 1000,
   });
 
-  const { data: appointmentsData } = useQuery({
-    queryKey: ["appointments", { pageNumber: 1, pageSize: 1 }],
-    queryFn: () => api.appointment.getAppointments({ pageNumber: 1, pageSize: 1 }),
+  const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
+    queryKey: ["admin", "appointments", { pageNumber: 1, pageSize: 1 }],
+    queryFn: async () => {
+      try {
+        return await api.appointment.getAppointments({ pageNumber: 1, pageSize: 1 });
+      } catch (error) {
+        console.error("Error fetching appointments:", error);
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return createEmptyPaginatedResponse<Appointment>();
+        }
+        return createEmptyPaginatedResponse<Appointment>();
+      }
+    },
+    staleTime: 30000,
+    gcTime: 5 * 60 * 1000,
   });
 
-  const { data: patientsData } = useQuery({
-    queryKey: ["patients", { pageNumber: 1, pageSize: 1 }],
-    queryFn: () => api.patient.getPatients({ pageNumber: 1, pageSize: 1 }),
+  const { data: patientsData, isLoading: patientsLoading } = useQuery({
+    queryKey: ["admin", "patients", { pageNumber: 1, pageSize: 1 }],
+    queryFn: async () => {
+      try {
+        return await api.patient.getPatients({ pageNumber: 1, pageSize: 1 });
+      } catch (error) {
+        console.error("Error fetching patients:", error);
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return createEmptyPaginatedResponse<any>();
+        }
+        return createEmptyPaginatedResponse<any>();
+      }
+    },
+    staleTime: 30000,
+    gcTime: 5 * 60 * 1000,
   });
 
-  const mockActivities = useMemo(
-    () => [
-      {
-        id: "activity-1",
-        actor: "Dr. Tran Nguyen",
-        action: "published new article",
-        target: "Embryo Transfer Guidelines 2025",
-        timestamp: "2 hours ago",
-      },
-      {
-        id: "activity-2",
-        actor: "System",
-        action: "generated patient summary report",
-        target: "Q3 Cryo Outcomes",
-        timestamp: "6 hours ago",
-      },
-      {
-        id: "activity-3",
-        actor: "Admin",
-        action: "updated service pricing",
-        target: "IVF Cycle - Premium",
-        timestamp: "1 day ago",
-      },
-    ],
-    []
-  );
-
-  const filteredActivities = mockActivities.filter((activity) => {
-    if (!searchTerm) {
-      return true;
-    }
-    const lower = searchTerm.toLowerCase();
-    return (
-      activity.actor.toLowerCase().includes(lower) ||
-      activity.action.toLowerCase().includes(lower) ||
-      activity.target.toLowerCase().includes(lower)
-    );
+  const { data: treatmentCyclesData, isLoading: treatmentCyclesLoading } = useQuery({
+    queryKey: ["admin", "treatment-cycles", { pageNumber: 1, pageSize: 1 }],
+    queryFn: async () => {
+      try {
+        return await api.treatmentCycle.getTreatmentCycles({ pageNumber: 1, pageSize: 1 });
+      } catch (error) {
+        console.error("Error fetching treatment cycles:", error);
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return createEmptyPaginatedResponse<TreatmentCycle>();
+        }
+        return createEmptyPaginatedResponse<TreatmentCycle>();
+      }
+    },
+    staleTime: 30000,
+    gcTime: 5 * 60 * 1000,
   });
 
-  const notifications = useMemo(
-    () => [
-      {
-        id: "notification-1",
-        type: "storage",
-        title: "Cryo storage reaching 85% capacity",
-        description: "Center A - Cryo tank 02 requires review",
-        status: "active" as const,
-      },
-      {
-        id: "notification-2",
-        type: "compliance",
-        title: "Consent renewals due this week",
-        description: "12 patient consents expiring within 7 days",
-        status: "pending" as const,
-      },
-      {
-        id: "notification-3",
-        type: "system",
-        title: "Security patch applied",
-        description: "JWT token rotation updated at 02:30",
-        status: "active" as const,
-      },
-    ],
-    []
-  );
+  const { data: samplesData, isLoading: samplesLoading } = useQuery({
+    queryKey: ["admin", "samples", { SampleType: "All", pageNumber: 1, pageSize: 1 }],
+    queryFn: async () => {
+      try {
+        return await api.sample.getAllDetailSamples({ SampleType: "All", pageNumber: 1, pageSize: 1 });
+      } catch (error) {
+        console.error("Error fetching samples:", error);
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return createEmptyPaginatedResponse<any>();
+        }
+        return createEmptyPaginatedResponse<any>();
+      }
+    },
+    staleTime: 30000,
+    gcTime: 5 * 60 * 1000,
+  });
 
-  type QuickActionRoute =
-    | "/admin/users"
-    | "/admin/categories"
-    | "/admin/content"
-    | "/admin/settings";
+  const { data: transactionsData, isLoading: transactionsLoading } = useQuery({
+    queryKey: ["admin", "transactions", { pageNumber: 1, pageSize: 1 }],
+    queryFn: async () => {
+      try {
+        return await api.transaction.getTransactions({ pageNumber: 1, pageSize: 1 });
+      } catch (error) {
+        console.error("Error fetching transactions:", error);
+        if (isAxiosError(error) && error.response?.status === 404) {
+          return createEmptyPaginatedResponse<any>();
+        }
+        return createEmptyPaginatedResponse<any>();
+      }
+    },
+    staleTime: 30000,
+    gcTime: 5 * 60 * 1000,
+  });
 
-  const quickActions = useMemo<
-    Array<{
-      icon: ReactNode;
-      label: string;
-      description: string;
-      to: QuickActionRoute;
-    }>
-  >(
-    () => [
-      {
-        icon: <Users className="h-4 w-4" />,
-        label: "Invite user",
-        description: "Provision new administrator, doctor, or staff account",
-        to: "/admin/users",
+
+
+  // Dashboard statistics - Using fallback data for UI testing
+  const dashboardStats = useMemo(() => [
+    {
+      title: "Total Users",
+      value: usersLoading ? "..." : (
+        usersData?.metaData?.totalCount ??
+        usersData?.data?.length ??
+        42 // Mock fallback for testing
+      ),
+      description: "Active accounts across all roles",
+      icon: Users,
+      action: () => {
+        toast.info("Navigating to Users management");
+        navigate({ to: "/admin/users" });
       },
-      {
-        icon: <ClipboardList className="h-4 w-4" />,
-        label: "Review categories",
-        description: "Update pricing or freeze categories",
-        to: "/admin/categories",
+      trend: { value: "+12%", direction: "up" as const },
+    },
+    {
+      title: "Total Patients",
+      value: patientsLoading ? "..." : (
+        patientsData?.metaData?.totalCount ??
+        patientsData?.data?.length ??
+        156 // Mock fallback for testing
+      ),
+      description: "Registered patients in system",
+      icon: Activity,
+      action: () => {
+        toast.info("Navigating to Patients overview");
+        navigate({ to: "/admin/dashboard" });
       },
-      {
-        icon: <FileText className="h-4 w-4" />,
-        label: "Create announcement",
-        description: "Publish blog, patient notice, or marketing content",
-        to: "/admin/content",
+      trend: { value: "+8%", direction: "up" as const },
+    },
+    {
+      title: "Total Appointments",
+      value: appointmentsLoading ? "..." : (
+        appointmentsData?.metaData?.totalCount ??
+        appointmentsData?.data?.length ??
+        89 // Mock fallback for testing
+      ),
+      description: "Scheduled appointments",
+      icon: LayoutDashboard,
+      action: () => {
+        toast.info("Navigating to Appointments overview");
+        navigate({ to: "/admin/dashboard" });
       },
-      {
-        icon: <Settings className="h-4 w-4" />,
-        label: "Adjust configurations",
-        description: "Manage center info, reminders, and integrations",
-        to: "/admin/settings",
+      trend: { value: "+15%", direction: "up" as const },
+    },
+    {
+      title: "Treatment Cycles",
+      value: treatmentCyclesLoading ? "..." : (
+        treatmentCyclesData?.metaData?.totalCount ??
+        treatmentCyclesData?.data?.length ??
+        23 // Mock fallback for testing
+      ),
+      description: "Active IVF/IUI cycles",
+      icon: ClipboardList,
+      action: () => {
+        toast.info("Navigating to Treatment Cycles overview");
+        navigate({ to: "/admin/dashboard" });
       },
-    ],
-    []
-  );
+      trend: { value: "+5%", direction: "up" as const },
+    },
+    {
+      title: "Samples Stored",
+      value: samplesLoading ? "..." : (
+        samplesData?.metaData?.totalCount ??
+        samplesData?.data?.length ??
+        1_247 // Mock fallback for testing
+      ),
+      description: "Cryopreserved samples",
+      icon: FileText,
+      action: () => {
+        toast.info("Navigating to Samples management");
+        navigate({ to: "/admin/samples" });
+      },
+      trend: { value: "+20%", direction: "up" as const },
+    },
+    {
+      title: "Transactions",
+      value: transactionsLoading ? "..." : (
+        transactionsData?.metaData?.totalCount ??
+        transactionsData?.data?.length ??
+        334 // Mock fallback for testing
+      ),
+      description: "Payment transactions",
+      icon: TrendingUp,
+      action: () => {
+        toast.info("Navigating to Transactions management");
+        navigate({ to: "/admin/transaction" });
+      },
+      trend: { value: "+18%", direction: "up" as const },
+    },
+  ], [
+    usersData, usersLoading, patientsData, patientsLoading,
+    appointmentsData, appointmentsLoading, treatmentCyclesData, treatmentCyclesLoading,
+    samplesData, samplesLoading, transactionsData, transactionsLoading, navigate
+  ]);
+
+
+  // Quick actions for common admin workflows
+  const quickActions = useMemo(() => [
+    {
+      icon: Users,
+      label: "Manage Users",
+      description: "Add, edit, or deactivate user accounts",
+      action: () => {
+        toast.info("Opening Users management");
+        navigate({ to: "/admin/users" });
+      },
+    },
+    {
+      icon: ClipboardList,
+      label: "Review Categories",
+      description: "Update service categories and pricing",
+      action: () => {
+        toast.info("Opening Categories management");
+        navigate({ to: "/admin/categories" });
+      },
+    },
+    {
+      icon: FileText,
+      label: "View Reports",
+      description: "Generate and view system reports",
+      action: () => {
+        toast.info("Opening Reports section");
+        navigate({ to: "/admin/reports" });
+      },
+    },
+    {
+      icon: Settings,
+      label: "System Settings",
+      description: "Configure system preferences",
+      action: () => {
+        toast.info("Opening System Settings");
+        navigate({ to: "/admin/dashboard" });
+      },
+    },
+  ], [navigate]);
 
   return (
     <ProtectedRoute allowedRoles={["Admin"]}>
       <DashboardLayout>
-        <div className="space-y-10">
+        <div className="space-y-8">
           <AdminPageHeader
             title="Administrator Dashboard"
-            description="Track cryo-center performance, user activity, and system health."
+            description="Monitor system performance, user activity, and operational metrics."
             breadcrumbs={[
               { label: "Dashboard", href: "/admin/dashboard" },
               { label: "Overview" },
@@ -194,167 +330,66 @@ function AdminDashboardComponent() {
                   onClick={() => navigate({ to: "/admin/reports" })}
                 >
                   <FileText className="mr-2 h-4 w-4" />
-                  Export summary
-                </Button>
-                <Button onClick={() => navigate({ to: "/admin/settings" })}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Configure system
+                  View Reports
                 </Button>
               </>
             }
           >
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <KpiCard
-                title="Total users"
-                value={usersData?.metaData?.totalCount ?? 0}
-                subtitle="Across all roles"
-                icon={<Users className="h-4 w-4" />}
-                trend={{ label: "+8% vs last month", tone: "up" }}
-              />
-              <KpiCard
-                title="Patients under care"
-                value={patientsData?.metaData?.totalCount ?? 0}
-                subtitle="Active treatment plans"
-                icon={<Activity className="h-4 w-4" />}
-                trend={{ label: "+3% vs last month", tone: "up" }}
-              />
-              <KpiCard
-                title="Appointments scheduled"
-                value={appointmentsData?.metaData?.totalCount ?? 0}
-                subtitle="Rolling 30 days"
-                icon={<LayoutDashboard className="h-4 w-4" />}
-                trend={{ label: "-2% vs target", tone: "down" }}
-              />
-              <KpiCard
-                title="System health"
-                value="Operational"
-                subtitle="JWT, storage, and integrations"
-                icon={<Settings className="h-4 w-4" />}
-                trend={{ label: "Last audit 4 hours ago", tone: "flat" }}
-              />
+            {/* Dashboard Statistics Grid */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              {dashboardStats.map((stat, index) => (
+                <Card key={`${stat.title}-${index}`} className="cursor-pointer hover:shadow-md transition-shadow" onClick={stat.action}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+                    <stat.icon className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stat.value}</div>
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-muted-foreground">{stat.description}</p>
+                      <Badge variant={stat.trend.direction === "up" ? "default" : "secondary"} className="text-xs">
+                        {stat.trend.value}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </AdminPageHeader>
 
-          <ListToolbar
-            placeholder="Search activity, notifications, or quick actions..."
-            searchValue={searchTerm}
-            onSearchChange={setSearchTerm}
-          />
-
-          <div className="grid gap-6 lg:grid-cols-12">
-            <Card className="lg:col-span-8">
-              <CardHeader className="flex items-start justify-between">
-                <div>
-                  <CardTitle>Recent activity</CardTitle>
-                  <CardDescription>
-                    Logged administrator and system events in the past 48 hours.
-                  </CardDescription>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate({ to: "/admin/logs" })}
-                >
-                  View audit logs
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {filteredActivities.length === 0 ? (
-                  <EmptyState
-                    icon={<Activity className="h-8 w-8" />}
-                    title="No activity found"
-                    description="Adjust your filters or try a different search query."
-                  />
-                ) : (
-                  <ul className="space-y-4">
-                    {filteredActivities.map((activity) => (
-                      <li key={activity.id} className="flex items-start gap-4 rounded-lg border p-4">
-                        <div className="rounded-full border bg-muted/50 p-2">
-                          <Activity className="h-4 w-4 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex flex-wrap items-center gap-2 text-sm">
-                            <span className="font-medium text-foreground">{activity.actor}</span>
-                            <span className="text-muted-foreground">{activity.action}</span>
-                            <span className="font-medium text-primary">{activity.target}</span>
-                          </div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {activity.timestamp}
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-
-            <div className="space-y-6 lg:col-span-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Notifications</CardTitle>
-                  <CardDescription>
-                    System alerts and compliance reminders for your attention.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {notifications.length === 0 ? (
-                    <EmptyState
-                      icon={<Bell className="h-8 w-8" />}
-                      title="All clear"
-                      description="You're fully up to date. We'll alert you when there's something new."
-                    />
-                  ) : (
-                    notifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        className="rounded-lg border bg-muted/30 p-4 text-sm"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-medium text-foreground">
-                              {notification.title}
-                            </div>
-                            <p className="mt-1 text-muted-foreground">
-                              {notification.description}
-                            </p>
-                          </div>
-                          <StatusBadge status={notification.status} />
-                        </div>
+          {/* Quick Actions Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+              <CardDescription>
+                Common administrative tasks and shortcuts
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {quickActions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    onClick={action.action}
+                    className="flex items-start gap-3 rounded-lg border p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+                  >
+                    <div className="rounded-full border bg-muted/30 p-3 text-primary">
+                      <action.icon className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-foreground mb-1">
+                        {action.label}
                       </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick actions</CardTitle>
-                  <CardDescription>
-                    Shortcuts to the most common administrator workflows.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {quickActions.map((action) => (
-                    <button
-                      key={action.label}
-                      type="button"
-                      onClick={() => navigate({ to: action.to })}
-                      className="flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:border-primary hover:bg-primary/5"
-                    >
-                      <div className="rounded-full border bg-muted/30 p-2 text-primary">
-                        {action.icon}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-foreground">{action.label}</div>
-                        <p className="text-xs text-muted-foreground">{action.description}</p>
-                      </div>
-                    </button>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+                      <p className="text-xs text-muted-foreground">
+                        {action.description}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

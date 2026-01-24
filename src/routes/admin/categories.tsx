@@ -52,12 +52,14 @@ function AdminCategoriesComponent() {
   };
 
   const openCreate = () => {
+    toast.info("Opening category creation form");
     setSelectedCategory(null);
     setFormData({ name: "", description: "", isActive: true });
     setModalMode("create");
   };
 
   const openView = (category: any) => {
+    toast.info("Loading category details");
     setSelectedCategory(category);
     setFormData({
       name: (category?.name ?? category?.categoryName ?? "") as string,
@@ -68,6 +70,7 @@ function AdminCategoriesComponent() {
   };
 
   const openEdit = (category: any) => {
+    toast.info("Loading category for editing");
     setSelectedCategory(category);
     setFormData({
       name: (category?.name ?? category?.categoryName ?? "") as string,
@@ -78,6 +81,7 @@ function AdminCategoriesComponent() {
   };
 
   const openDelete = (category: any) => {
+    toast.info("Preparing to delete category");
     setSelectedCategory(category);
     setModalMode("delete");
   };
@@ -190,6 +194,7 @@ function AdminCategoriesComponent() {
       return api.serviceCategory.updateServiceCategory(id, payload);
     },
     onSuccess: () => {
+      toast.success("Category status updated successfully");
       queryClient.invalidateQueries({ queryKey: ["serviceCategories"] });
     },
     onError: (e: any) => {

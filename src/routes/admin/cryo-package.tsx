@@ -119,7 +119,7 @@ function AdminCryoPackageComponent() {
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["cyro-packages", { searchTerm }],
     queryFn: () =>
-      api.cyroPackage.getCryoPackages({
+      api.cryoPackage.getCryoPackages({
         searchTerm: searchTerm || undefined,
       }),
   });
@@ -153,7 +153,7 @@ function AdminCryoPackageComponent() {
 
   const createMutation = useMutation({
     mutationFn: async () =>
-      api.cyroPackage.createCryoPackage({
+      api.cryoPackage.createCryoPackage({
         ...formData,
         price: Number(formData.price),
         durationMonths: Number(formData.durationMonths),
@@ -170,7 +170,7 @@ function AdminCryoPackageComponent() {
 
   const updateMutation = useMutation({
     mutationFn: async () =>
-      api.cyroPackage.updateCryoPackage(selectedPackage.id, {
+      api.cryoPackage.updateCryoPackage(selectedPackage.id, {
         ...formData,
         price: Number(formData.price),
         durationMonths: Number(formData.durationMonths),
@@ -187,7 +187,7 @@ function AdminCryoPackageComponent() {
 
   const deleteMutation = useMutation({
     mutationFn: async () =>
-      api.cyroPackage.deleteCryoPackage(selectedPackage.id),
+      api.cryoPackage.deleteCryoPackage(selectedPackage.id),
     onSuccess: () => {
       toast.success("Deleted cryo package successfully");
       queryClient.invalidateQueries({ queryKey: ["cyro-packages"] });

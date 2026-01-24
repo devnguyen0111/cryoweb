@@ -90,6 +90,7 @@ function AdminRelationshipPage() {
   };
 
   const openCreate = () => {
+    toast.info("Opening relationship creation form");
     setSelectedRelationship(null);
     setFormData({
       relationshipType: undefined,
@@ -101,6 +102,7 @@ function AdminRelationshipPage() {
   };
 
   const openView = (item: any) => {
+    toast.info("Loading relationship details");
     setSelectedRelationship(item);
     setFormData({
       relationshipType: item?.relationshipType as RelationshipType | undefined,
@@ -112,6 +114,7 @@ function AdminRelationshipPage() {
   };
 
   const openEdit = (item: any) => {
+    toast.info("Loading relationship for editing");
     setSelectedRelationship(item);
     setFormData({
       relationshipType: item?.relationshipType as RelationshipType | undefined,
@@ -123,6 +126,7 @@ function AdminRelationshipPage() {
   };
 
   const openDelete = (item: any) => {
+    toast.info("Preparing to delete relationship");
     setSelectedRelationship(item);
     setModalMode("delete");
   };
@@ -245,6 +249,7 @@ function AdminRelationshipPage() {
       } as any);
     },
     onSuccess: () => {
+      toast.success("Relationship status updated successfully");
       queryClient.invalidateQueries({ queryKey: ["relationships"] });
     },
     onError: (e: any) => {

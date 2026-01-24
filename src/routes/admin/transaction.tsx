@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -71,6 +72,7 @@ function AdminTransactionsPage() {
   const [selectedTx, setSelectedTx] = useState<any>(null);
 
   const openView = (tx: any) => {
+    toast.info("Loading transaction details");
     setSelectedTx(tx);
     setModalMode("view");
   };

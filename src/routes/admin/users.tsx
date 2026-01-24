@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -269,6 +270,7 @@ function AdminUsersComponent() {
   }, [users]);
 
   async function openView(userId: string) {
+    toast.info("Loading user details");
     setSelectedUserId(userId);
     setDetail(null);
     setEditForm(null);
@@ -284,6 +286,7 @@ function AdminUsersComponent() {
   }
 
   async function openEdit(userId: string) {
+    toast.info("Loading user for editing");
     setSelectedUserId(userId);
     setDetail(null);
     setEditForm(null);
@@ -314,6 +317,7 @@ function AdminUsersComponent() {
   }
 
   function openCreate() {
+    toast.info("Opening user creation form");
     setSelectedUserId(null);
     setDetail(null);
     setEditForm(null);
@@ -341,7 +345,11 @@ function AdminUsersComponent() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success("User updated successfully");
       closeModal();
+    },
+    onError: (error: any) => {
+      toast.error(error?.message ?? "Failed to update user");
     },
   });
 
@@ -351,7 +359,11 @@ function AdminUsersComponent() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success("User created successfully");
       closeModal();
+    },
+    onError: (error: any) => {
+      toast.error(error?.message ?? "Failed to create user");
     },
   });
 

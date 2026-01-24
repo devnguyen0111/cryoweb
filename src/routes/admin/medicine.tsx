@@ -66,6 +66,7 @@ function AdminMedicinesComponent() {
   };
 
   const openCreate = () => {
+    toast.info("Opening medicine creation form");
     setSelectedMedicine(null);
     setFormData({
       name: "",
@@ -77,6 +78,7 @@ function AdminMedicinesComponent() {
   };
 
   const openView = (medicine: any) => {
+    toast.info("Loading medicine details");
     setSelectedMedicine(medicine);
     setFormData({
       name: medicine?.name ?? "",
@@ -88,6 +90,7 @@ function AdminMedicinesComponent() {
   };
 
   const openEdit = (medicine: any) => {
+    toast.info("Loading medicine for editing");
     setSelectedMedicine(medicine);
     setFormData({
       name: medicine?.name ?? "",
@@ -99,6 +102,7 @@ function AdminMedicinesComponent() {
   };
 
   const openDelete = (medicine: any) => {
+    toast.info("Preparing to delete medicine");
     setSelectedMedicine(medicine);
     setModalMode("delete");
   };

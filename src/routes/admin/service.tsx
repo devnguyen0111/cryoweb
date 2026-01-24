@@ -52,6 +52,7 @@ function AdminServicesComponent() {
   };
 
   const openCreate = () => {
+    toast.info("Opening service creation form");
     setSelectedService(null);
     setFormData({
       name: "",
@@ -64,6 +65,7 @@ function AdminServicesComponent() {
   };
 
   const openView = (service: any) => {
+    toast.info("Loading service details");
     setSelectedService(service);
     setFormData({
       name: service?.name ?? "",
@@ -76,6 +78,7 @@ function AdminServicesComponent() {
   };
 
   const openEdit = (service: any) => {
+    toast.info("Loading service for editing");
     setSelectedService(service);
     setFormData({
       name: service?.name ?? "",
@@ -88,6 +91,7 @@ function AdminServicesComponent() {
   };
 
   const openDelete = (service: any) => {
+    toast.info("Preparing to delete service");
     setSelectedService(service);
     setModalMode("delete");
   };
@@ -209,6 +213,7 @@ function AdminServicesComponent() {
       });
     },
     onSuccess: () => {
+      toast.success("Service status updated successfully");
       queryClient.invalidateQueries({ queryKey: ["services"] });
     },
     onError: (e: any) => {

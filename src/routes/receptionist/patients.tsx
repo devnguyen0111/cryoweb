@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Filter, X, Search, Loader2 } from "lucide-react";
 import { isAxiosError } from "axios";
 import { z } from "zod";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
@@ -9,7 +9,16 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { api } from "@/api/client";
+import type { PatientDetailResponse } from "@/api/types";
 import {
   isPatientDetailResponse,
   getPatientProperty,
@@ -69,16 +78,64 @@ function ReceptionistPatientsComponent() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["receptionist", "patients"] }),
-      queryClient.invalidateQueries({ queryKey: ["receptionist", "patient"] }),
-    ]);
+    // Force refetch all queries
+    await queryClient.refetchQueries({ queryKey: ["receptionist", "patients"] });
+    await queryClient.invalidateQueries({ queryKey: ["receptionist", "patient"] });
     setIsRefreshing(false);
+  };
+
+  const handleResetFilters = () => {
+    setSearchTerm("");
+    setIsActiveFilter("all");
+    setGenderFilter("all");
+    setSortBy("patientCode");
+    setSortOrder("asc");
+    setPage(1);
+  };
+
+  const handleFilterChange = () => {
+    console.log("Filter changed:", { isActiveFilter, genderFilter, sortBy, sortOrder });
+    setPage(1); // Reset to first page when filters change
+    // Force invalidate to ensure query runs with new filters
+    queryClient.invalidateQueries({
+      queryKey: ["receptionist", "patients"]
+    });
   };
   const { viewId } = Route.useSearch();
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [isSearchDebouncing, setIsSearchDebouncing] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
+
+  // Debounce search term
+  const debounceTimeoutRef = useRef<NodeJS.Timeout>();
+  useEffect(() => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    setIsSearchDebouncing(true);
+
+    debounceTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setPage(1); // Reset to first page when search changes
+      setIsSearchDebouncing(false);
+    }, 300); // 300ms debounce
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [searchTerm]);
+
+  // Filter states
+  const [isActiveFilter, setIsActiveFilter] = useState<string>("all");
+  const [genderFilter, setGenderFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("patientCode");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [showFilters, setShowFilters] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: [
@@ -87,30 +144,183 @@ function ReceptionistPatientsComponent() {
       {
         pageNumber: page,
         pageSize: pageSize,
-        searchTerm: searchTerm || undefined,
+        searchTerm: debouncedSearchTerm || "",
+        isActive: isActiveFilter === "all" ? undefined : isActiveFilter === "active" ? true : false,
+        gender: genderFilter === "all" ? undefined : genderFilter,
+        sortBy: sortBy,
+        sortOrder: sortOrder,
       },
     ],
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
     queryFn: async () => {
-      const response = await api.patient.getPatients({
+      const params = {
         pageNumber: page,
         pageSize: pageSize,
-        searchTerm: searchTerm || undefined,
+        searchTerm: debouncedSearchTerm || "",
+        isActive: isActiveFilter === "all" ? undefined : isActiveFilter === "active" ? true : false,
+        gender: genderFilter === "all" ? undefined : genderFilter,
+        sortBy: sortBy,
+        sortOrder: sortOrder,
+      };
+
+      // TEMPORARY TEST: Force gender filter to test if backend supports it
+      // params.gender = "Female";
+
+      console.log("Fetching patients with params:", params);
+
+      // Test if filters are being applied by checking API response
+      console.log("Filter values being sent:", {
+        isActive: params.isActive,
+        gender: params.gender,
+        genderFilter,
+        isActiveFilter
       });
 
+      // Debug filter states
+      console.log("Current filter states:", {
+        isActiveFilter,
+        genderFilter,
+        sortBy,
+        sortOrder,
+        debouncedSearchTerm
+      });
+
+      // Determine if we need client-side filtering
+      // Note: Backend gender is boolean (true=Male, false=Female), not string
+      const needsClientSideFilter = genderFilter !== "all";
+      const backendParams = {
+        ...params,
+        // If filtering gender client-side, request larger dataset
+        // Note: This works if total data < 100. For larger datasets, backend filter support needed
+        pageSize: needsClientSideFilter ? 100 : pageSize,
+        pageNumber: needsClientSideFilter ? 1 : page,
+        // Remove gender filter - we'll filter client-side since backend uses boolean
+        gender: undefined,
+        // Keep isActive filter - let backend handle it if supported
+        isActive: isActiveFilter === "all" ? undefined : isActiveFilter === "active" ? true : false,
+      };
+
+      const response = await api.patient.getPatients(backendParams);
+
+      console.log("API Response:", response);
+
       if (!response?.data) {
+        console.warn("No data in response, returning empty array");
         return {
           ...response,
           data: [],
         };
       }
 
-      return response;
+      // Apply client-side filtering if needed
+      let filteredData = response.data;
+
+      // Client-side gender filter (backend uses boolean: true=Male, false=Female)
+      if (needsClientSideFilter) {
+        const genderMap: Record<string, boolean | null> = {
+          "Male": true,
+          "Female": false,
+          "Other": null, // Handle "Other" case if needed
+        };
+
+        const targetGender = genderMap[genderFilter];
+        if (targetGender !== undefined) {
+          filteredData = filteredData.filter((patient: PatientDetailResponse) => {
+            const patientGender = (patient.accountInfo as any)?.gender;
+            return patientGender === targetGender;
+          });
+          console.log(`Client-side gender filter applied (${genderFilter}):`, {
+            before: response.data.length,
+            after: filteredData.length
+          });
+        }
+      }
+
+      // Note: isActive filter is handled by backend via params.isActive
+      // If backend doesn't support it, we could add client-side filtering here
+
+      // Apply client-side pagination if we filtered client-side
+      let paginatedData = filteredData;
+      let finalTotal = filteredData.length;
+      let finalTotalPages = Math.ceil(filteredData.length / pageSize);
+
+      if (needsClientSideFilter) {
+        // Apply pagination to filtered data
+        const startIndex = (page - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        paginatedData = filteredData.slice(startIndex, endIndex);
+        finalTotal = filteredData.length;
+        finalTotalPages = Math.ceil(filteredData.length / pageSize);
+
+        console.log("Client-side pagination applied:", {
+          totalFiltered: filteredData.length,
+          page,
+          pageSize,
+          startIndex,
+          endIndex,
+          paginatedCount: paginatedData.length,
+          totalPages: finalTotalPages
+        });
+      } else {
+        // Use backend pagination
+        const responseMeta = response.metaData as any;
+        finalTotal = responseMeta?.total ?? responseMeta?.totalCount ?? filteredData.length;
+        finalTotalPages = responseMeta?.totalPages ?? Math.ceil(filteredData.length / pageSize);
+      }
+
+      // Return filtered and paginated response
+      const responseMeta = response.metaData as any;
+      return {
+        ...response,
+        data: paginatedData,
+        metaData: {
+          ...responseMeta,
+          total: finalTotal,
+          totalCount: finalTotal, // Support both formats
+          totalPages: finalTotalPages,
+          page: page,
+          pageNumber: page,
+          size: pageSize,
+          pageSize: pageSize,
+        }
+      };
     },
   });
 
   const patients = data?.data ?? [];
-  const total = data?.metaData?.totalCount ?? 0;
-  const totalPages = data?.metaData?.totalPages ?? 1;
+
+  const { total, totalPages } = useMemo(() => {
+    // Use API metaData if available, otherwise fallback to local calculation
+    // Handle both API response formats: {total, size} and {totalCount, pageSize}
+    const metaData = data?.metaData as any;
+    const apiTotal = metaData?.total ?? metaData?.totalCount;
+    const apiTotalPages = metaData?.totalPages;
+    const apiPageSize = metaData?.size ?? metaData?.pageSize ?? pageSize;
+
+    const patientCount = patients ? patients.length : 0;
+
+    // Prefer API data, fallback to local calculation
+    const calculatedTotal = apiTotal !== undefined ? apiTotal : patientCount;
+    const calculatedTotalPages = apiTotalPages !== undefined ? apiTotalPages : (patientCount > 0 ? Math.ceil(patientCount / apiPageSize) : 1);
+
+    console.log("Calculated totals:", {
+      patientCount,
+      apiTotal,
+      apiTotalPages,
+      apiPageSize,
+      calculatedTotal,
+      calculatedTotalPages,
+      metaData: data?.metaData,
+      hasPatients: patients && patients.length > 0,
+      dataExists: !!data
+    });
+
+    return {
+      total: calculatedTotal,
+      totalPages: calculatedTotalPages
+    };
+  }, [data, patients, pageSize]);
   const isDetailOpen = Boolean(viewId);
 
   useEffect(() => {
@@ -218,7 +428,7 @@ function ReceptionistPatientsComponent() {
             <div>
               <h1 className="text-3xl font-bold">Patient management</h1>
               <p className="text-gray-600 mt-2">
-                Search and update patient records captured during intake.
+                Search patients by patient code or email, and update patient records.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -254,18 +464,145 @@ function ReceptionistPatientsComponent() {
                 <div>
                   <CardTitle>Patient list</CardTitle>
                   <p className="text-sm text-gray-500">
-                    Results: {total} patients · Page {page}/{totalPages}
+                    Search by patient code or email • Results: {total} patients • Page {page}/{totalPages}
                   </p>
                 </div>
-                <Input
-                  placeholder="Search by name, code, email, or phone..."
-                  value={searchTerm}
-                  onChange={(event) => {
-                    setSearchTerm(event.target.value);
-                    setPage(1);
-                  }}
-                />
+                <div className="flex gap-2">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    placeholder="Search by patient code or email..."
+                    value={searchTerm}
+                    onChange={(event) => {
+                      setSearchTerm(event.target.value);
+                    }}
+                    className="pl-10 pr-10"
+                  />
+                  {(isSearchDebouncing || isLoading) && (
+                    <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" />
+                  )}
+                </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowFilters(!showFilters)}
+                  >
+                    <Filter className="mr-2 h-4 w-4" />
+                    Filters
+                    {(isActiveFilter !== "all" || genderFilter !== "all" || sortBy !== "patientCode" || sortOrder !== "asc") && (
+                      <span className="ml-1 h-2 w-2 rounded-full bg-blue-500"></span>
+                    )}
+                  </Button>
+                </div>
               </div>
+
+              {showFilters && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-gray-900">Filters</h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleResetFilters}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      <X className="mr-1 h-3 w-3" />
+                      Reset
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="status-filter" className="text-xs font-medium text-gray-700">
+                        Status
+                      </Label>
+                      <Select
+                        value={isActiveFilter}
+                        onValueChange={(value) => {
+                          setIsActiveFilter(value);
+                          handleFilterChange();
+                        }}
+                      >
+                        <SelectTrigger id="status-filter">
+                          <SelectValue placeholder="All statuses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All statuses</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="gender-filter" className="text-xs font-medium text-gray-700">
+                        Gender
+                      </Label>
+                      <Select
+                        value={genderFilter}
+                        onValueChange={(value) => {
+                          setGenderFilter(value);
+                          handleFilterChange();
+                        }}
+                      >
+                        <SelectTrigger id="gender-filter">
+                          <SelectValue placeholder="All genders" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All genders</SelectItem>
+                          <SelectItem value="Male">Male</SelectItem>
+                          <SelectItem value="Female">Female</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="sort-by" className="text-xs font-medium text-gray-700">
+                        Sort by
+                      </Label>
+                      <Select
+                        value={sortBy}
+                        onValueChange={(value) => {
+                          setSortBy(value);
+                          handleFilterChange();
+                        }}
+                      >
+                        <SelectTrigger id="sort-by">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="firstName">First Name</SelectItem>
+                          <SelectItem value="lastName">Last Name</SelectItem>
+                          <SelectItem value="patientCode">Patient Code</SelectItem>
+                          <SelectItem value="createdAt">Created Date</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="sort-order" className="text-xs font-medium text-gray-700">
+                        Order
+                      </Label>
+                      <Select
+                        value={sortOrder}
+                        onValueChange={(value) => {
+                          setSortOrder(value as "asc" | "desc");
+                          handleFilterChange();
+                        }}
+                      >
+                        <SelectTrigger id="sort-order">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="asc">Ascending</SelectItem>
+                          <SelectItem value="desc">Descending</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -316,20 +653,11 @@ function ReceptionistPatientsComponent() {
                                     </div>
                                   </td>
                                   <td className="p-2 text-sm text-gray-600">
-                                    <div>
-                                      {(isDetail
-                                        ? (patient as any).accountInfo?.email
-                                        : null) ||
-                                        patient.email ||
-                                        "-"}
-                                    </div>
-                                    <div className="text-xs">
-                                      {(isDetail
-                                        ? (patient as any).accountInfo?.phone
-                                        : null) ||
-                                        patient.phoneNumber ||
-                                        "-"}
-                                    </div>
+                                    {(isDetail
+                                      ? (patient as any).accountInfo?.email
+                                      : null) ||
+                                      patient.email ||
+                                      "-"}
                                   </td>
                                   <td className="p-2">
                                     <Button

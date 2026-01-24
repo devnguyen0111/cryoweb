@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import api from "@/api/client";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { toast } from "sonner";
 
 /* =====================
    ROUTE
@@ -406,12 +407,12 @@ function CryostoragePage() {
     if (!selectedSample || !selectedSlot) return;
 
     if (!importForm.importedBy) {
-      alert("Please select Imported By");
+      toast.error("Please select Imported By");
       return;
     }
 
     if (!importForm.witnessedBy) {
-      alert("Please select Witnessed By");
+      toast.error("Please select Witnessed By");
       return;
     }
 
@@ -430,6 +431,8 @@ function CryostoragePage() {
         notes: importForm.notes,
       });
 
+      toast.success("Sample imported successfully");
+
       // Refresh lists
       await loadFrozenSamples();
       await loadSlotSamples(selectedSlot.id);
@@ -438,7 +441,7 @@ function CryostoragePage() {
       setShowImportModal(false);
     } catch (e: any) {
       const msg = e?.response?.data?.message || e?.message || "Import failed";
-      alert(msg);
+      toast.error(msg);
     } finally {
       setLoadingImport(false);
     }

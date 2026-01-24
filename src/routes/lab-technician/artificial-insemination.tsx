@@ -5,6 +5,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useMemo, useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/api/client";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/lab-technician/artificial-insemination")({
   component: ArtificialInseminationPage,
@@ -204,7 +205,7 @@ function ArtificialInseminationPage() {
       } as any);
     },
     onSuccess: () => {
-      alert("Create embryo successfully");
+      toast.success("Embryo created successfully");
       setSelectedSperm(null);
       setSelectedOocyte(null);
 
@@ -219,7 +220,8 @@ function ArtificialInseminationPage() {
       });
     },
     onError: (err: any) => {
-      alert(err?.message ?? "Create embryo failed");
+      const message = err?.response?.data?.message || err?.message || "Failed to create embryo";
+      toast.error(message);
     },
   });
 
@@ -410,14 +412,15 @@ function ArtificialInseminationPage() {
       throw new Error("No client method for PUT /api/labsample/embryo/{id}");
     },
     onSuccess: () => {
-      alert("Update embryo successfully");
+      toast.success("Embryo updated successfully");
       queryClient.invalidateQueries({ queryKey: ["lab-samples", "embryo"] });
       if (viewEmbryoId) queryClient.invalidateQueries({ queryKey: ["lab-sample-detail", viewEmbryoId] });
       setUpdateEmbryoId(null);
       refetchEmbryos();
     },
     onError: (err: any) => {
-      alert(err?.message ?? "Update embryo failed");
+      const message = err?.response?.data?.message || err?.message || "Failed to update embryo";
+      toast.error(message);
     },
   });
 

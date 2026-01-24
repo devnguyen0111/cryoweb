@@ -6,6 +6,7 @@ import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 import api from "@/api/client";
+import { toast } from "sonner";
 
 /* ================= ROUTE ================= */
 export const Route = createFileRoute(
@@ -154,8 +155,7 @@ const openView = (s: any) => {
   const updateMutation = useMutation({
   mutationFn: async () => {
     if (!formData?.id) {
-      console.log("NO FORM DATA ID");
-      return;
+      throw new Error("No form data ID");
     }
     const payload: any = {};
 
@@ -212,8 +212,6 @@ const openView = (s: any) => {
   if (formData.totalSpermCount != null)
     payload.totalSpermCount = formData.totalSpermCount;
 
-  console.log("SPERM QC PAYLOAD", payload);
-
   return api.sample.updateSpermSample(formData.id, payload);
 } 
 
@@ -250,20 +248,19 @@ const openView = (s: any) => {
   if (formData.vitrificationDate)
     payload.vitrificationDate = formData.vitrificationDate;
 
-  console.log("OOCYTE QC PAYLOAD", payload);
-
   return api.sample.updateOocyteSample(formData.id, payload);
 }
   },
 
   onSuccess: () => {
-    console.log("QUALITY CHECK SUCCESS");
+    toast.success("Quality check completed successfully");
     closeModal();
     refetch();
   },
 
-  onError: (error) => {
-    console.error("QUALITY CHECK ERROR", error);
+  onError: (error: any) => {
+    const message = error?.response?.data?.message || error?.message || "Failed to update quality check";
+    toast.error(message);
   },
 });
 

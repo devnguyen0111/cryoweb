@@ -112,7 +112,19 @@ function ReceptionistServiceRequestsRoute() {
       } as any),
   });
 
-  const requests = data?.data ?? [];
+  // Sort requests by createdAt (newest first)
+  const requests = useMemo(() => {
+    const rawRequests = data?.data ?? [];
+    return [...rawRequests].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
+
   const apiTotal = data?.metaData?.totalCount ?? 0;
   // Use requests.length as fallback if API returns 0 total but we have data
   const total = apiTotal > 0 ? apiTotal : requests.length;

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -14,6 +15,19 @@ function LabTechnicianSamplesComponent() {
     queryKey: ["samples", { pageNumber: 1, pageSize: 20 }],
     queryFn: () => api.sample.getSamples({ pageNumber: 1, pageSize: 20 }),
   });
+
+  // Sort samples by createdAt (newest first)
+  const sortedSamples = useMemo(() => {
+    const rawSamples = data?.data ?? [];
+    return [...rawSamples].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
 
   return (
     <ProtectedRoute allowedRoles={["Lab Technician"]}>
@@ -33,7 +47,7 @@ function LabTechnicianSamplesComponent() {
                 <div className="text-center py-8">Loading...</div>
               ) : (
                 <div className="space-y-4">
-                  {data?.data && data.data.length > 0 ? (
+                  {sortedSamples.length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
@@ -45,7 +59,7 @@ function LabTechnicianSamplesComponent() {
                           </tr>
                         </thead>
                         <tbody>
-                          {data.data.map((sample) => (
+                          {sortedSamples.map((sample) => (
                             <tr key={sample.id} className="border-b">
                               <td className="p-2">{sample.id}</td>
                               <td className="p-2">{sample.sampleType}</td>

@@ -67,12 +67,12 @@ function DoctorDiagnosisComponent() {
         return response.data;
       } catch (error: any) {
         if (isAxiosError(error) && error.response?.status === 404) {
-          toast.warning("Encounter has been deleted or does not exist.");
+          toast.warning("Treatment has been deleted or does not exist.");
           return undefined;
         }
         const message =
           error?.response?.data?.message ||
-          "Unable to load encounter details. Please try again.";
+          "Unable to load treatment details. Please try again.";
         toast.error(message);
         return undefined;
       }
@@ -108,7 +108,7 @@ function DoctorDiagnosisComponent() {
     onError: (error: any) => {
       const message =
         error?.response?.data?.message ||
-        "Unable to update encounter. Please try again.";
+        "Unable to update treatment. Please try again.";
       toast.error(message);
     },
   });
@@ -118,7 +118,7 @@ function DoctorDiagnosisComponent() {
   ) => {
     if (!resolvedTreatmentId) {
       toast.error(
-        "Encounter record not found. Please create the encounter again."
+        "Treatment record not found. Please create the treatment again."
       );
       return;
     }
@@ -163,13 +163,13 @@ function DoctorDiagnosisComponent() {
           <section className="flex flex-col gap-1">
             <h1 className="text-3xl font-bold">Diagnosis &amp; orders</h1>
             <p className="text-gray-600">
-              Encounter: <span className="font-semibold">{encounterId}</span>
+              Treatment: <span className="font-semibold">{encounterId}</span>
             </p>
           </section>
 
           {isFetching && (
             <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-primary">
-              Loading encounter data...
+              Loading treatment data...
             </div>
           )}
 

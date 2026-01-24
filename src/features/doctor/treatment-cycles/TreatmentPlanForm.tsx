@@ -44,6 +44,7 @@ type TreatmentPlanFormValues = {
 interface TreatmentPlanFormProps {
   treatmentId?: string;
   patientId?: string;
+  treatmentType?: "IUI" | "IVF"; // Optional initial treatment type
   layout?: "page" | "modal";
   onClose?: () => void;
   onSaved?: (treatmentId: string, agreementId?: string) => void;
@@ -131,6 +132,7 @@ const IVF_STEP_PLAN = [
 export function TreatmentPlanForm({
   treatmentId,
   patientId,
+  treatmentType: initialTreatmentType,
   layout = "modal",
   onClose,
   onSaved,
@@ -142,7 +144,7 @@ export function TreatmentPlanForm({
 
   const [formState, setFormState] = useState<TreatmentPlanFormValues>({
     planName: "",
-    treatmentType: "",
+    treatmentType: initialTreatmentType || "",
     patientId: patientId || "",
     startDate: new Date().toISOString().split("T")[0],
     estimatedDuration: "6",
@@ -183,12 +185,14 @@ export function TreatmentPlanForm({
   const filteredPatients = useMemo(() => {
     if (!patientsData?.data) return [];
     if (!patientSearch.trim()) return patientsData.data;
-    
+
     const searchLower = patientSearch.toLowerCase().trim();
     return patientsData.data.filter((patient: any) => {
       const patientCode = patient.patientCode?.toLowerCase() || "";
       const fullName = getFullNameFromObject(patient)?.toLowerCase() || "";
-      return patientCode.includes(searchLower) || fullName.includes(searchLower);
+      return (
+        patientCode.includes(searchLower) || fullName.includes(searchLower)
+      );
     });
   }, [patientsData?.data, patientSearch]);
   const [showSignatureStep, setShowSignatureStep] = useState(false);
@@ -556,7 +560,7 @@ export function TreatmentPlanForm({
       }
 
       // If treatmentId was provided (updating existing), don't show signature step
-      // Signature will be handled by parent component (CreateEncounterForm)
+      // Signature will be handled by parent component (CreateTreatmentForm)
       if (
         result.treatment?.id &&
         result.agreement?.id &&
@@ -985,13 +989,7 @@ export function TreatmentPlanForm({
     "Unknown";
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className={
-        layout === "modal" ? "space-y-6 overflow-y-auto pr-1" : "space-y-6"
-      }
-      style={layout === "modal" ? { maxHeight: "70vh" } : undefined}
-    >
+    <form onSubmit={handleSubmit} className="space-y-6">
       {/* Patient Selection */}
       {showPatientSelector ? (
         <Card>
@@ -1048,7 +1046,10 @@ export function TreatmentPlanForm({
                   const patientName = (() => {
                     if (!patient) return "";
                     // Try to get name from accountInfo first (if PatientDetailResponse)
-                    if (isPatientDetailResponse(patient) && patient.accountInfo) {
+                    if (
+                      isPatientDetailResponse(patient) &&
+                      patient.accountInfo
+                    ) {
                       // accountInfo has username, not firstName/lastName, so use username directly
                       if (patient.accountInfo.username) {
                         return patient.accountInfo.username;
@@ -1058,12 +1059,12 @@ export function TreatmentPlanForm({
                     return getFullNameFromObject(patient);
                   })();
                   const patientCode = patient.patientCode || "";
-                  
+
                   // Format: "FirstName LastName (patientCode)" or just "patientCode" if no name
                   const displayText = patientName
                     ? `${patientName}${patientCode ? ` (${patientCode})` : ""}`
                     : patientCode || patient.id;
-                  
+
                   return (
                     <option key={patient.id} value={patient.id}>
                       {displayText}
@@ -1071,11 +1072,13 @@ export function TreatmentPlanForm({
                   );
                 })}
               </select>
-              {filteredPatients.length === 0 && patientsData?.data && patientsData.data.length > 0 && (
-                <p className="text-sm text-gray-500">
-                  No patients found matching your search.
-                </p>
-              )}
+              {filteredPatients.length === 0 &&
+                patientsData?.data &&
+                patientsData.data.length > 0 && (
+                  <p className="text-sm text-gray-500">
+                    No patients found matching your search.
+                  </p>
+                )}
               {!patientsData?.data && (
                 <p className="text-sm text-gray-500">Loading patients...</p>
               )}
@@ -1258,7 +1261,10 @@ export function TreatmentPlanForm({
                   const patientName = (() => {
                     if (!patient) return "";
                     // Try to get name from accountInfo first (if PatientDetailResponse)
-                    if (isPatientDetailResponse(patient) && patient.accountInfo) {
+                    if (
+                      isPatientDetailResponse(patient) &&
+                      patient.accountInfo
+                    ) {
                       // accountInfo has username, not firstName/lastName, so use username directly
                       if (patient.accountInfo.username) {
                         return patient.accountInfo.username;
@@ -1268,12 +1274,12 @@ export function TreatmentPlanForm({
                     return getFullNameFromObject(patient);
                   })();
                   const patientCode = patient.patientCode || "";
-                  
+
                   // Format: "FirstName LastName (patientCode)" or just "patientCode" if no name
                   const displayText = patientName
                     ? `${patientName}${patientCode ? ` (${patientCode})` : ""}`
                     : patientCode || patient.id;
-                  
+
                   return (
                     <option key={patient.id} value={patient.id}>
                       {displayText}
@@ -1281,11 +1287,13 @@ export function TreatmentPlanForm({
                   );
                 })}
               </select>
-              {filteredPatients.length === 0 && patientsData?.data && patientsData.data.length > 0 && (
-                <p className="text-sm text-gray-500">
-                  No patients found matching your search.
-                </p>
-              )}
+              {filteredPatients.length === 0 &&
+                patientsData?.data &&
+                patientsData.data.length > 0 && (
+                  <p className="text-sm text-gray-500">
+                    No patients found matching your search.
+                  </p>
+                )}
               {!patientsData?.data && (
                 <p className="text-sm text-gray-500">Loading patients...</p>
               )}

@@ -93,10 +93,10 @@ yarn install
 Tạo file `.env` trong thư mục root và cấu hình:
 
 ```env
-VITE_API_URL=https://cryofert.runasp.net/api
+VITE_API_URL=https://cryoferts.runasp.net/api
 ```
 
-Default API URL: `https://cryofert.runasp.net/api`
+Default API URL: `https://cryoferts.runasp.net/api`
 
 ## 🚀 Chạy dự án
 
@@ -150,7 +150,7 @@ Quyền truy cập đầy đủ hệ thống:
 - ✅ Quản lý Categories & Content
 - ✅ Xem Reports & Logs
 - ✅ Quản lý Settings
-- ✅ Quản lý Encounters & Treatment Cycles
+- ✅ Quản lý Treatments & Treatment Cycles
 - ✅ Quản lý Prescriptions
 - ✅ Truy cập Cryobank
 - ✅ Quản lý Schedule
@@ -162,7 +162,7 @@ Quản lý bệnh nhân và điều trị:
 - ✅ Quản lý Patients (xem, tạo, sửa)
 - ✅ Quản lý Appointments (xem, tạo, sửa)
 - ✅ Quản lý Samples (xem, tạo, sửa)
-- ✅ Quản lý Encounters (khám bệnh)
+- ✅ Quản lý Treatments (điều trị)
 - ✅ Quản lý Treatment Cycles (chu kỳ điều trị)
 - ✅ Quản lý Medical Records (hồ sơ bệnh án)
 - ✅ Quản lý Service Requests (yêu cầu dịch vụ)
@@ -184,7 +184,7 @@ Quản lý lịch hẹn và giao dịch:
 - ✅ Xem Schedule
 - ✅ Xem Reports
 - ✅ Xem Samples (read-only)
-- ❌ Quản lý Encounters
+- ❌ Quản lý Treatments
 - ❌ Quản lý Treatment Cycles
 
 ### 4. Lab Technician (Kỹ thuật viên Lab)
@@ -217,9 +217,9 @@ Quản lý mẫu xét nghiệm:
   - Receptionist: Quản lý tất cả lịch hẹn
   - Admin: Quản lý toàn bộ lịch hẹn
 
-### Quản lý Khám bệnh (Encounters)
+### Quản lý Điều trị (Treatments)
 
-- Tạo encounter mới cho bệnh nhân
+- Tạo treatment mới cho bệnh nhân
 - Form khám bệnh chi tiết với nhiều bước:
   - Thông tin cơ bản
   - Chẩn đoán
@@ -257,7 +257,7 @@ Quản lý mẫu xét nghiệm:
 ### Quản lý Đơn thuốc (Prescriptions)
 
 - Tạo và quản lý đơn thuốc
-- Liên kết với encounters
+- Liên kết với treatments
 - Chi tiết đơn thuốc
 
 ### Quản lý Hồ sơ bệnh án (Medical Records)
@@ -370,7 +370,7 @@ cryoweb/
 │   │   │   │   ├── DoctorAppointmentDetailModal.tsx
 │   │   │   │   └── DoctorCreateAppointmentForm.tsx
 │   │   │   ├── encounters/
-│   │   │   │   ├── CreateEncounterForm.tsx
+│   │   │   │   ├── CreateTreatmentForm.tsx
 │   │   │   │   ├── TreatmentDetailForm.tsx
 │   │   │   │   └── TreatmentViewModal.tsx
 │   │   │   ├── medical-records/
@@ -501,7 +501,7 @@ cryoweb/
 ### API Base URL
 
 ```
-https://cryofert.runasp.net/api
+https://cryoferts.runasp.net/api
 ```
 
 ### API Modules (25 modules)

@@ -47,7 +47,6 @@ type PrescriptionSearchState = {
   medicalRecordId?: string;
 };
 
-
 export const Route = createFileRoute("/doctor/prescriptions")({
   component: DoctorPrescriptionComponent,
   validateSearch: (
@@ -182,6 +181,8 @@ function DoctorPrescriptionComponent() {
   const prescriptionsQuery = useQuery<PaginatedResponse<Prescription>>({
     queryKey: ["prescriptions", "doctor-prescriptions", filterParams],
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async (): Promise<PaginatedResponse<Prescription>> => {
       try {
         const response = await api.prescription.getPrescriptions(filterParams);
@@ -200,7 +201,19 @@ function DoctorPrescriptionComponent() {
 
   const prescriptions = prescriptionsQuery.data;
   const prescriptionsLoading = prescriptionsQuery.isFetching;
-  const allPrescriptionRows = prescriptions?.data ?? [];
+  
+  // Sort prescriptions by createdAt (newest first)
+  const allPrescriptionRows = useMemo(() => {
+    const rawPrescriptions = prescriptions?.data ?? [];
+    return [...rawPrescriptions].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [prescriptions?.data]);
 
   // Extract unique medical record IDs from prescriptions (use allPrescriptionRows to avoid circular dependency)
   const medicalRecordIds = useMemo(() => {
@@ -221,6 +234,8 @@ function DoctorPrescriptionComponent() {
     queryKey: ["medical-records", "by-ids", medicalRecordIds, "prescriptions"],
     enabled: medicalRecordIds.length > 0,
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async () => {
       const results: Record<string, MedicalRecord & { patientId?: string }> =
         {};
@@ -262,6 +277,7 @@ function DoctorPrescriptionComponent() {
   const patientQueries = useQueries({
     queries: patientIds.map((patientId) => ({
       queryKey: ["doctor", "patient", patientId, "prescriptions"],
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
       queryFn: async (): Promise<Patient | PatientDetailResponse | null> => {
         try {
           const response = await api.patient.getPatientById(patientId);
@@ -283,7 +299,7 @@ function DoctorPrescriptionComponent() {
           return null;
         }
       },
-      enabled: patientIds.length > 0,
+      enabled: !!patientId && patientIds.length > 0,
       retry: false,
       staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     })),

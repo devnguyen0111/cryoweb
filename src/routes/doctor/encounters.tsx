@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { api } from "@/api/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { CreateEncounterForm } from "@/features/doctor/encounters/CreateEncounterForm";
+import { CreateTreatmentForm } from "@/features/doctor/encounters/CreateTreatmentForm";
 import { TreatmentViewModal } from "@/features/doctor/encounters/TreatmentViewModal";
 import { isAxiosError } from "axios";
 import { getLast4Chars } from "@/utils/id-helpers";
@@ -19,11 +19,11 @@ import { usePatientDetails } from "@/hooks/usePatientDetails";
 import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 export const Route = createFileRoute("/doctor/encounters")({
-  component: DoctorEncountersComponent,
+  component: DoctorTreatmentsComponent,
   validateSearch: (search: { patientId?: string } = {}) => search,
 });
 
-function DoctorEncountersComponent() {
+function DoctorTreatmentsComponent() {
   const search = Route.useSearch();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -58,7 +58,19 @@ function DoctorEncountersComponent() {
     enabled: !!user?.id,
   });
 
-  const treatments = treatmentsData?.data || [];
+  // Sort treatments by createdAt (newest first)
+  const treatments = useMemo(() => {
+    const rawTreatments = treatmentsData?.data || [];
+    return [...rawTreatments].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [treatmentsData?.data]);
+
   const filteredTreatments = useMemo(() => {
     if (!searchTerm) return treatments;
     const term = searchTerm.toLowerCase();
@@ -393,10 +405,10 @@ function DoctorEncountersComponent() {
           isOpen={isCreateModalOpen}
           onClose={() => setIsCreateModalOpen(false)}
           title="Create Treatment"
-          description="Start by creating a treatment plan for IUI/IVF treatments, or create an encounter for consultations."
+          description="Start by creating a treatment plan for IUI/IVF treatments, or create a treatment for consultations."
           size="xl"
         >
-          <CreateEncounterForm
+          <CreateTreatmentForm
             layout="modal"
             defaultPatientId={search.patientId}
             startWithPlan={true}

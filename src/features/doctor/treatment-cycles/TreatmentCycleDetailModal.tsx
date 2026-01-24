@@ -29,13 +29,13 @@ import { FlaskConical } from "lucide-react";
 import { TreatmentTimeline } from "./TreatmentTimeline";
 import { CycleUpdateForm } from "./CycleUpdateForm";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePatientDetails } from "@/hooks/usePatientDetails";
-import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
 interface TreatmentCycleDetailModalProps {
   cycle: TreatmentCycle;
   isOpen: boolean;
   onClose: () => void;
+  // Optional: Pass cached data to avoid refetching
+  treatment?: any;
 }
 
 type TabType = "overview" | "medical-records" | "oocytes" | "sperm" | "partner";
@@ -44,11 +44,12 @@ export function TreatmentCycleDetailModal({
   cycle,
   isOpen,
   onClose,
+  treatment: cachedTreatment,
 }: TreatmentCycleDetailModalProps) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
 
-  // Fetch latest cycle details from API
+  // Use cached cycle or fetch if needed (only fetch if modal is open)
   const { data: cycleDetails } = useQuery({
     queryKey: ["doctor", "treatment-cycle", cycle.id],
     queryFn: async () => {
@@ -56,12 +57,14 @@ export function TreatmentCycleDetailModal({
       return response.data;
     },
     enabled: isOpen && !!cycle.id,
-    staleTime: 30000, // Cache for 30 seconds to reduce unnecessary refetches
+    staleTime: 30000, // Cache for 30 seconds
+    // Use cycle prop as initial data to avoid unnecessary fetch
+    initialData: cycle,
   });
 
   const currentCycle = cycleDetails || cycle;
 
-  // Fetch treatment to get treatmentType
+  // Use cached treatment or fetch if not available
   const { data: treatmentData } = useQuery({
     queryKey: ["treatment", currentCycle.treatmentId],
     queryFn: async () => {
@@ -75,40 +78,19 @@ export function TreatmentCycleDetailModal({
         return null;
       }
     },
-    enabled: !!currentCycle.treatmentId && isOpen,
+    enabled: !!currentCycle.treatmentId && isOpen && !cachedTreatment,
+    staleTime: 60000, // Cache for 1 minute
+    // Use cached treatment as initial data
+    initialData: cachedTreatment,
   });
 
-  // Fetch patient details
-  const { data: patientDetails } = usePatientDetails(
-    currentCycle.patientId,
-    !!currentCycle.patientId && isOpen
-  );
+  // Use cached treatment data if available
+  const treatment = treatmentData || cachedTreatment;
 
-  // Fetch user details for patient name
-  const { data: userDetails } = useQuery({
-    queryKey: ["user-details", currentCycle.patientId],
-    queryFn: async () => {
-      if (!currentCycle.patientId) return null;
-      try {
-        const response = await api.user.getUserDetails(currentCycle.patientId);
-        return response.data;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!currentCycle.patientId && isOpen,
-  });
-
-  // Get patient name and code
+  // Get patient name from treatment agreements if available
   const patientName =
-    getFullNameFromObject(userDetails) ||
-    getFullNameFromObject(patientDetails) ||
-    userDetails?.userName ||
-    (isPatientDetailResponse(patientDetails)
-      ? patientDetails.accountInfo?.username
-      : null) ||
-    "Unknown";
-  const patientCode = patientDetails?.patientCode;
+    (treatment as any)?.agreements?.[0]?.patientName || "Unknown";
+  const patientCode = (treatment as any)?.agreements?.[0]?.patientCode;
 
   // Function to get treatment type with fallback logic
   const getTreatmentType = (): string => {
@@ -121,8 +103,8 @@ export function TreatmentCycleDetailModal({
     }
 
     // Try to get from treatment data
-    if (treatmentData?.treatmentType) {
-      const treatmentType = treatmentData.treatmentType;
+    if (treatment?.treatmentType) {
+      const treatmentType = treatment.treatmentType;
       if (treatmentType === "IUI" || treatmentType === "IVF") {
         return treatmentType;
       }

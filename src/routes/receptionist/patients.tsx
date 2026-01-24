@@ -16,8 +16,9 @@ import {
 } from "@/utils/patient-helpers";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { getStatusBadgeClass } from "@/utils/status-colors";
-import { getFullNameFromObject } from "@/utils/name-helpers";
 import { usePatientDetails } from "@/hooks/usePatientDetails";
+import { StructuredNote } from "@/components/StructuredNote";
+import { cn } from "@/utils/cn";
 
 export const Route = createFileRoute("/receptionist/patients")({
   validateSearch: z.object({
@@ -25,6 +26,41 @@ export const Route = createFileRoute("/receptionist/patients")({
   }),
   component: ReceptionistPatientsComponent,
 });
+
+interface DetailFieldProps {
+  label: string;
+  value?: string | number | null;
+  placeholder?: string;
+  multiline?: boolean;
+}
+
+function DetailField({
+  label,
+  value,
+  placeholder = "—",
+  multiline,
+}: DetailFieldProps) {
+  const displayValue =
+    value === null || value === undefined || value === ""
+      ? placeholder
+      : String(value);
+
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+        {label}
+      </p>
+      <div
+        className={cn(
+          "rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900",
+          multiline ? "whitespace-pre-wrap leading-relaxed" : ""
+        )}
+      >
+        {displayValue}
+      </div>
+    </div>
+  );
+}
 
 function ReceptionistPatientsComponent() {
   const navigate = useNavigate();
@@ -44,7 +80,7 @@ function ReceptionistPatientsComponent() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: [
       "receptionist",
       "patients",
@@ -54,12 +90,22 @@ function ReceptionistPatientsComponent() {
         searchTerm: searchTerm || undefined,
       },
     ],
-    queryFn: () =>
-      api.patient.getPatients({
+    queryFn: async () => {
+      const response = await api.patient.getPatients({
         pageNumber: page,
         pageSize: pageSize,
         searchTerm: searchTerm || undefined,
-      }),
+      });
+
+      if (!response?.data) {
+        return {
+          ...response,
+          data: [],
+        };
+      }
+
+      return response;
+    },
   });
 
   const patients = data?.data ?? [];
@@ -81,33 +127,6 @@ function ReceptionistPatientsComponent() {
     isLoading: isDetailLoading,
     error: detailError,
   } = usePatientDetails(viewId, isDetailOpen && !!viewId);
-
-  const { data: patientServiceRequests, isLoading: isServiceRequestsLoading } =
-    useQuery({
-      queryKey: [
-        "receptionist",
-        "patient",
-        "detail",
-        "service-requests",
-        viewId,
-      ],
-      enabled: isDetailOpen && Boolean(viewId),
-      queryFn: async () => {
-        if (!viewId) return null;
-        try {
-          return await api.serviceRequest.getServiceRequests({
-            patientId: viewId,
-            pageNumber: 1,
-            pageSize: 5,
-          });
-        } catch (error) {
-          if (isAxiosError(error) && error.response?.status === 403) {
-            return { data: [] };
-          }
-          throw error;
-        }
-      },
-    });
 
   const { data: patientAppointments, isLoading: isAppointmentsLoading } =
     useQuery({
@@ -157,16 +176,19 @@ function ReceptionistPatientsComponent() {
     });
   };
 
-  const recentRequests = patientServiceRequests?.data ?? [];
   const recentAppointments = patientAppointments?.data ?? [];
 
   const detailHeader = useMemo(() => {
     if (!patientDetail) return null;
+    const isDetail = isPatientDetailResponse(patientDetail);
+    const accountInfo = isDetail ? (patientDetail as any).accountInfo : null;
+    const firstName = accountInfo?.firstName || patientDetail.firstName;
+    const lastName = accountInfo?.lastName || patientDetail.lastName;
     const displayName =
-      (isPatientDetailResponse(patientDetail)
-        ? patientDetail.accountInfo?.username
-        : null) ||
-      getFullNameFromObject(patientDetail) ||
+      (firstName && lastName
+        ? `${firstName} ${lastName}`.trim()
+        : firstName || lastName) ||
+      accountInfo?.username ||
       patientDetail.patientCode ||
       "Patient detail";
     return {
@@ -248,6 +270,10 @@ function ReceptionistPatientsComponent() {
             <CardContent>
               {isLoading ? (
                 <div className="text-center py-8">Loading...</div>
+              ) : error ? (
+                <div className="text-center py-8 text-red-600">
+                  Error loading patients. Please try again.
+                </div>
               ) : (
                 <div className="space-y-4">
                   {patients.length ? (
@@ -257,7 +283,6 @@ function ReceptionistPatientsComponent() {
                           <thead>
                             <tr className="border-b">
                               <th className="text-left p-2">Patient</th>
-                              <th className="text-left p-2">Account</th>
                               <th className="text-left p-2">Contact</th>
                               <th className="text-left p-2">Actions</th>
                             </tr>
@@ -265,11 +290,18 @@ function ReceptionistPatientsComponent() {
                           <tbody>
                             {patients.map((patient) => {
                               const isDetail = isPatientDetailResponse(patient);
+                              const accountInfo = isDetail
+                                ? (patient as any).accountInfo
+                                : null;
+                              const firstName =
+                                accountInfo?.firstName || patient.firstName;
+                              const lastName =
+                                accountInfo?.lastName || patient.lastName;
                               const displayName =
-                                (isDetail
-                                  ? (patient as any).accountInfo?.username
-                                  : null) ||
-                                getFullNameFromObject(patient) ||
+                                (firstName && lastName
+                                  ? `${firstName} ${lastName}`.trim()
+                                  : firstName || lastName) ||
+                                accountInfo?.username ||
                                 patient.patientCode ||
                                 "Unknown";
                               return (
@@ -279,23 +311,8 @@ function ReceptionistPatientsComponent() {
                                       {displayName}
                                     </div>
                                     <div className="text-xs text-gray-500">
-                                      Patient ID: {getLast4Chars(patient.id)}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                      Blood type: {patient.bloodType || "N/A"}
-                                    </div>
-                                  </td>
-                                  <td className="p-2 text-sm text-gray-600">
-                                    <div>
-                                      Account ID:{" "}
-                                      {getLast4Chars(patient.accountId)}
-                                    </div>
-                                    <div className="text-xs">
-                                      Verified:{" "}
-                                      {isDetail &&
-                                      (patient as any).accountInfo?.isVerified
-                                        ? "Yes"
-                                        : "No"}
+                                      Patient code:{" "}
+                                      {patient.patientCode || "N/A"}
                                     </div>
                                   </td>
                                   <td className="p-2 text-sm text-gray-600">
@@ -514,47 +531,7 @@ function ReceptionistPatientsComponent() {
                       </Card>
                     </div>
 
-                    <div className="grid gap-6 lg:grid-cols-2">
-                      <Card>
-                        <CardHeader className="flex items-center justify-between">
-                          <CardTitle>Recent service requests</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3 text-sm text-gray-700">
-                          {isServiceRequestsLoading ? (
-                            <p className="text-gray-500">
-                              Loading service requests...
-                            </p>
-                          ) : recentRequests.length ? (
-                            recentRequests.map((request) => (
-                              <div
-                                key={request.id}
-                                className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
-                              >
-                                <div>
-                                  <p className="font-medium text-gray-900">
-                                    {request.requestCode || "General enquiry"}
-                                  </p>
-                                  <p className="text-xs text-gray-500">
-                                    Requested: {request.requestedDate || "—"}
-                                  </p>
-                                </div>
-                                <span
-                                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize ${statusBadgeClass(
-                                    request.status
-                                  )}`}
-                                >
-                                  {request.status || "pending"}
-                                </span>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-gray-500">
-                              No service requests logged for this patient yet.
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-
+                    <div className="grid gap-6">
                       <Card>
                         <CardHeader className="flex items-center justify-between">
                           <CardTitle>Appointments history</CardTitle>
@@ -597,51 +574,57 @@ function ReceptionistPatientsComponent() {
                       </Card>
                     </div>
 
-                    <Card>
+                    <Card className="border-gray-200">
                       <CardHeader>
-                        <CardTitle>Medical notes</CardTitle>
+                        <CardTitle className="text-base font-semibold text-gray-900">
+                          Medical notes
+                        </CardTitle>
                       </CardHeader>
-                      <CardContent className="grid gap-3 text-sm text-gray-700 md:grid-cols-2">
-                        <p>
-                          <span className="font-medium text-gray-900">
-                            Medical history:
-                          </span>{" "}
-                          {getPatientProperty(
+                      <CardContent className="grid gap-4">
+                        <DetailField
+                          label="Medical history"
+                          value={getPatientProperty(
                             patientDetail,
                             "medicalHistory",
-                            "Not recorded"
+                            null
                           )}
-                        </p>
-                        <p>
-                          <span className="font-medium text-gray-900">
-                            Allergies:
-                          </span>{" "}
-                          {getPatientProperty(
+                          placeholder="Not provided"
+                          multiline
+                        />
+                        <DetailField
+                          label="Allergies"
+                          value={getPatientProperty(
                             patientDetail,
                             "allergies",
-                            "None reported"
+                            null
                           )}
-                        </p>
-                        <p>
-                          <span className="font-medium text-gray-900">
-                            Occupation:
-                          </span>{" "}
-                          {getPatientProperty(
-                            patientDetail,
-                            "occupation",
-                            "Not available"
-                          )}
-                        </p>
-                        <p>
-                          <span className="font-medium text-gray-900">
-                            Notes:
-                          </span>{" "}
-                          {getPatientProperty(
-                            patientDetail,
-                            "notes",
-                            "No notes"
-                          )}
-                        </p>
+                          placeholder="Not provided"
+                          multiline
+                        />
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Notes
+                          </p>
+                          <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                            {getPatientProperty(
+                              patientDetail,
+                              "notes",
+                              null
+                            ) ? (
+                              <StructuredNote
+                                note={getPatientProperty(
+                                  patientDetail,
+                                  "notes",
+                                  null
+                                )}
+                              />
+                            ) : (
+                              <p className="text-sm text-gray-500">
+                                No additional notes
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </CardContent>
                     </Card>
                   </>

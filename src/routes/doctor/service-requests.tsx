@@ -47,7 +47,9 @@ function DoctorServiceRequestsComponent() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["doctor", "service-requests"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "service-requests"],
+      }),
     ]);
     setIsRefreshing(false);
   };
@@ -68,6 +70,8 @@ function DoctorServiceRequestsComponent() {
       },
     ],
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: () =>
       api.serviceRequest.getServiceRequests({
         pageNumber: page,
@@ -92,6 +96,8 @@ function DoctorServiceRequestsComponent() {
   const appointmentsQuery = useQuery({
     queryKey: ["appointments", "by-ids", appointmentIds],
     enabled: appointmentIds.length > 0,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async () => {
       const results: Record<string, Appointment & { patient?: Patient }> = {};
       await Promise.all(
@@ -164,6 +170,8 @@ function DoctorServiceRequestsComponent() {
     enabled:
       patientIds.length > 0 ||
       Object.keys(appointmentsQuery.data ?? {}).length > 0,
+    staleTime: 60000, // Cache for 1 minute
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     queryFn: async () => {
       const results: Record<string, Patient> = {};
 
@@ -226,32 +234,23 @@ function DoctorServiceRequestsComponent() {
         queryKey: ["doctor", "service-requests"],
       });
       const actionText =
-        variables.action === "reject"
-          ? "rejected"
-          : "completed";
+        variables.action === "reject" ? "rejected" : "completed";
       toast.success(`Service request ${actionText} successfully`);
-      
+
       // Send notification to patient
       if (response.data?.patientId) {
         const { sendServiceRequestNotification } = await import(
           "@/utils/notifications"
         );
-        const action =
-          variables.action === "reject"
-            ? "rejected"
-            : "completed";
-        
-        await sendServiceRequestNotification(
-          response.data.patientId,
-          action,
-          {
-            serviceRequestId: response.data.id,
-            serviceName: undefined, // Could fetch service details if needed
-            notes: response.data.notes || undefined,
-          }
-        );
+        const action = variables.action === "reject" ? "rejected" : "completed";
+
+        await sendServiceRequestNotification(response.data.patientId, action, {
+          serviceRequestId: response.data.id,
+          serviceName: undefined, // Could fetch service details if needed
+          notes: response.data.notes || undefined,
+        });
       }
-      
+
       setActionModal({ isOpen: false, requestId: null, action: null });
     },
     onError: (error: any) => {
@@ -261,10 +260,7 @@ function DoctorServiceRequestsComponent() {
     },
   });
 
-  const handleStatusAction = (
-    id: string,
-    action: "reject" | "complete"
-  ) => {
+  const handleStatusAction = (id: string, action: "reject" | "complete") => {
     setActionModal({ isOpen: true, requestId: id, action });
   };
 
@@ -292,7 +288,19 @@ function DoctorServiceRequestsComponent() {
     });
   };
 
-  const serviceRequests = data?.data ?? [];
+  // Sort service requests by createdAt (newest first)
+  const serviceRequests = useMemo(() => {
+    const rawRequests = data?.data ?? [];
+    return [...rawRequests].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
+
   const appointments = appointmentsQuery.data ?? {};
   const patients = patientsQuery.data ?? {};
   const metaData = data?.metaData;
@@ -314,7 +322,9 @@ function DoctorServiceRequestsComponent() {
                 onClick={handleRefresh}
                 disabled={isRefreshing}
               >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
                 Refresh
               </Button>
               <Button onClick={() => setIsCreateModalOpen(true)}>
@@ -458,19 +468,23 @@ function DoctorServiceRequestsComponent() {
                                       variant="destructive"
                                       size="sm"
                                       onClick={() =>
-                                        handleStatusAction(
-                                          request.id,
-                                          "reject"
-                                        )
+                                        handleStatusAction(request.id, "reject")
                                       }
-                                      disabled={
-                                        statusActionMutation.isPending
-                                      }
+                                      disabled={statusActionMutation.isPending}
                                     >
                                       Reject
                                     </Button>
                                   )}
-                                  {(request.status === "Approved" || request.status === "Pending") && (
+                                  {(() => {
+                                    const status =
+                                      request.status?.toLowerCase() || "";
+                                    return (
+                                      request.status === "Approved" ||
+                                      request.status === "Pending" ||
+                                      status === "inprocess" ||
+                                      status === "in progress"
+                                    );
+                                  })() && (
                                     <Button
                                       variant="default"
                                       size="sm"

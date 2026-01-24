@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { getServiceRequestStatusBadgeClass } from "@/utils/status-colors";
 import { cn } from "@/utils/cn";
 import { UpdateServiceRequestDetailImageForm } from "./UpdateServiceRequestDetailImageForm";
-import { Image as ImageIcon } from "lucide-react";
+import { Image as ImageIcon, Eye } from "lucide-react";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { getLast4Chars } from "@/utils/id-helpers";
 import { useAuth } from "@/contexts/AuthContext";
@@ -64,6 +64,10 @@ export function ServiceRequestDetailModal({
 
   const [selectedDetailForImage, setSelectedDetailForImage] =
     useState<ServiceRequestDetail | null>(null);
+  const [viewingImage, setViewingImage] = useState<{
+    url: string;
+    serviceName: string;
+  } | null>(null);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentGateway, setPaymentGateway] = useState<"PayOS">("PayOS");
@@ -399,6 +403,46 @@ export function ServiceRequestDetailModal({
     }
   };
 
+  // Handle view image - fetch image URL if not available
+  const handleViewImage = async (detail: ServiceRequestDetail) => {
+    let imageUrlToView =
+      mediaMap?.[detail.id] ||
+      detail.imageUrl ||
+      detail.fileUrl ||
+      "";
+
+    // If no URL but has mediaId, try to fetch it
+    if (!imageUrlToView && detail.mediaId) {
+      try {
+        const mediaResponse = await api.media.getMediaById(detail.mediaId);
+        if (mediaResponse.data) {
+          imageUrlToView =
+            mediaResponse.data.filePath ||
+            mediaResponse.data.fileUrl ||
+            "";
+        }
+      } catch (error) {
+        toast.error("Failed to load image");
+        return;
+      }
+    }
+
+    if (!imageUrlToView) {
+      toast.error("Image URL not available");
+      return;
+    }
+
+    const service = services?.[detail.serviceId ?? ""];
+    setViewingImage({
+      url: imageUrlToView,
+      serviceName:
+        detail.serviceName ??
+        service?.name ??
+        service?.serviceName ??
+        "Service",
+    });
+  };
+
   return (
     <Modal
       title="Service Request Details"
@@ -624,7 +668,13 @@ export function ServiceRequestDetailModal({
                           <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
                             Image
                           </th>
-                          {canUploadImage && (
+                          {(canUploadImage ||
+                            serviceDetails.some(
+                              (d) =>
+                                mediaMap?.[d.id] ||
+                                d.imageUrl ||
+                                d.fileUrl
+                            )) && (
                             <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
                               Actions
                             </th>
@@ -645,7 +695,8 @@ export function ServiceRequestDetailModal({
                             detail.imageUrl ||
                             detail.fileUrl ||
                             "";
-                          const hasImage = !!imageUrl;
+                          // Check if image exists: has URL or has mediaId (image was uploaded)
+                          const hasImage = !!imageUrl || !!detail.mediaId;
                           return (
                             <tr key={detail.id} className="border-b">
                               <td className="px-4 py-2 text-sm">
@@ -686,19 +737,35 @@ export function ServiceRequestDetailModal({
                                   </span>
                                 )}
                               </td>
-                              {canUploadImage && (
+                              {(canUploadImage ||
+                                hasImage) && (
                                 <td className="px-4 py-2 text-sm">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() =>
-                                      setSelectedDetailForImage(detail)
-                                    }
-                                  >
-                                    <ImageIcon className="h-4 w-4 mr-1" />
-                                    {hasImage ? "Update" : "Add"} Image
-                                  </Button>
+                                  <div className="flex items-center gap-2">
+                                    {hasImage && (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleViewImage(detail)}
+                                      >
+                                        <Eye className="h-4 w-4 mr-1" />
+                                        View Image
+                                      </Button>
+                                    )}
+                                    {canUploadImage && (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          setSelectedDetailForImage(detail)
+                                        }
+                                      >
+                                        <ImageIcon className="h-4 w-4 mr-1" />
+                                        {hasImage ? "Update" : "Add"} Image
+                                      </Button>
+                                    )}
+                                  </div>
                                 </td>
                               )}
                             </tr>
@@ -761,6 +828,37 @@ export function ServiceRequestDetailModal({
           }}
         />
       )}
+
+      {/* Image Viewer Modal */}
+      <Modal
+        isOpen={!!viewingImage}
+        onClose={() => setViewingImage(null)}
+        title={`View Image - ${viewingImage?.serviceName || "Service"}`}
+        description="View the uploaded image for this service"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {viewingImage && (
+            <div className="flex justify-center">
+              <img
+                src={viewingImage.url}
+                alt={viewingImage.serviceName || "Service image"}
+                className="max-w-full h-auto max-h-[70vh] object-contain rounded-lg border border-gray-200"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = "none";
+                  toast.error("Failed to load image");
+                }}
+              />
+            </div>
+          )}
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={() => setViewingImage(null)}>
+              Close
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Payment Method Selection Modal */}
       <Modal

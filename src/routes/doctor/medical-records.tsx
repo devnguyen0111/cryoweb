@@ -66,6 +66,9 @@ function DoctorMedicalRecordsComponent() {
       queryClient.invalidateQueries({
         queryKey: ["doctor", "medical-records"],
       }),
+      queryClient.invalidateQueries({
+        queryKey: ["appointment-detail", "for-medical-records"],
+      }),
     ]);
     setIsRefreshing(false);
   };
@@ -95,11 +98,15 @@ function DoctorMedicalRecordsComponent() {
         return createEmptyPaginatedResponse<MedicalRecord>();
       }
     },
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   const { data: selectedRecord } = useQuery<MedicalRecordDetailResponse>({
     queryKey: ["medical-record", selectedRecordId],
     enabled: !!selectedRecordId,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: async () => {
       if (!selectedRecordId) throw new Error("No record ID");
       const response =
@@ -112,6 +119,8 @@ function DoctorMedicalRecordsComponent() {
   const { data: mediaFiles, isLoading: mediaLoading } = useQuery<Media[]>({
     queryKey: ["media", "medical-record", selectedRecordId],
     enabled: !!selectedRecordId,
+    staleTime: 60000, // Cache for 1 minute
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     queryFn: async () => {
       if (!selectedRecordId) return [];
       try {
@@ -302,7 +311,19 @@ function DoctorMedicalRecordsComponent() {
     },
   });
 
-  const records = data?.data ?? [];
+  // Sort medical records by createdAt (newest first)
+  const records = useMemo(() => {
+    const rawRecords = data?.data ?? [];
+    return [...rawRecords].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
+
   const total = data?.metaData?.totalCount ?? 0;
   const totalPages = data?.metaData?.totalPages ?? 1;
 

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -14,6 +15,19 @@ function AdminAppointmentsComponent() {
     queryKey: ["appointments", { pageNumber: 1, pageSize: 20 }],
     queryFn: () => api.appointment.getAppointments({ pageNumber: 1, pageSize: 20 }),
   });
+
+  // Sort appointments by createdAt (newest first)
+  const sortedAppointments = useMemo(() => {
+    const rawAppointments = data?.data ?? [];
+    return [...rawAppointments].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
 
   return (
     <ProtectedRoute allowedRoles={["Admin"]}>
@@ -33,7 +47,7 @@ function AdminAppointmentsComponent() {
                 <div className="text-center py-8">Loading...</div>
               ) : (
                 <div className="space-y-4">
-                  {data?.data && data.data.length > 0 ? (
+                  {sortedAppointments.length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
@@ -46,7 +60,7 @@ function AdminAppointmentsComponent() {
                           </tr>
                         </thead>
                         <tbody>
-                          {data.data.map((appointment) => (
+                          {sortedAppointments.map((appointment) => (
                             <tr key={appointment.id} className="border-b">
                               <td className="p-2">{appointment.appointmentCode}</td>
                               <td className="p-2">{appointment.appointmentType}</td>

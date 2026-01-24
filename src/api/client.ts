@@ -27,12 +27,12 @@ import {
   PrescriptionApi,
   MedicineApi,
   MediaApi,
-  CryoPackageApi,
-  CryoStorageContractsApi,
+  CryoLocationApi,
+  CryoImportApi,
 } from "./modules";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://cryoferts.runasp.net/api";
+  import.meta.env.VITE_API_URL || "https://cryofert-bfbqgkgzf8b3e9ap.southeastasia-01.azurewebsites.net/api";
 
 /**
  * Create axios instance with default config
@@ -122,6 +122,9 @@ export class ApiClient {
   serviceRequest: ServiceRequestApi;
   serviceRequestDetails: ServiceRequestDetailsApi;
   slot: SlotApi;
+  cryoLocation: CryoLocationApi;
+  cryoImport: CryoImportApi;
+
   treatmentCycle: TreatmentCycleApi;
   treatment: TreatmentApi;
   cycleDocument: CycleDocumentApi;
@@ -136,8 +139,7 @@ export class ApiClient {
   prescription: PrescriptionApi;
   medicine: MedicineApi;
   media: MediaApi;
-  cyroPackage: CryoPackageApi;
-  cryoStorageContracts: CryoStorageContractsApi;
+  
 
   constructor() {
     this.auth = new AuthApi(client);
@@ -166,8 +168,9 @@ export class ApiClient {
     this.prescription = new PrescriptionApi(client);
     this.medicine = new MedicineApi(client);
     this.media = new MediaApi(client);
-    this.cyroPackage = new CryoPackageApi(client);
-    this.cryoStorageContracts = new CryoStorageContractsApi(client);
+    this.cryoLocation = new CryoLocationApi(client);
+    this.cryoImport = new CryoImportApi(client);
+    
   }
 }
 

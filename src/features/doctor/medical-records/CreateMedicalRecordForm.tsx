@@ -357,11 +357,11 @@ export function CreateMedicalRecordForm({
       onSuccess: async (medicalRecord) => {
         // Send notification to patient
         if (values.patientId && medicalRecord.data?.id) {
-          const { sendEncounterNotification } = await import(
+          const { sendTreatmentNotification } = await import(
             "@/utils/notifications"
           );
-          await sendEncounterNotification(values.patientId, "created", {
-            encounterId: medicalRecord.data.id,
+          await sendTreatmentNotification(values.patientId, "created", {
+            treatmentId: medicalRecord.data.id,
             appointmentId: values.appointmentId,
             diagnosis: values.diagnosis,
           });

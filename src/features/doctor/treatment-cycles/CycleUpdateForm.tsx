@@ -1924,6 +1924,12 @@ export function CycleUpdateForm({
                     queryClient.invalidateQueries({
                       queryKey: ["treatment-cycles", "patient"],
                     });
+                    // Invalidate current step query to refresh timeline
+                    if (currentCycle.treatmentId) {
+                      queryClient.invalidateQueries({
+                        queryKey: ["treatment-current-step", currentCycle.treatmentId],
+                      });
+                    }
 
                     // Send notification to patient
                     if (currentCycle.patientId) {

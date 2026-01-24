@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -181,7 +181,19 @@ function ReceptionistAppointmentsComponent() {
       }),
   });
 
-  const appointments = data?.data ?? [];
+  // Sort appointments by createdAt (newest first)
+  const appointments = useMemo(() => {
+    const rawAppointments = data?.data ?? [];
+    return [...rawAppointments].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
+
   const total = data?.metaData?.totalCount ?? 0;
   const totalPages = data?.metaData?.totalPages ?? 1;
 

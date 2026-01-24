@@ -53,7 +53,7 @@ export interface RolePermissions {
   canViewReports: boolean;
   canViewSettings: boolean;
   canManageSystem: boolean;
-  canManageEncounters: boolean;
+  canManageTreatments: boolean;
   canManageTreatmentCycles: boolean;
   canManagePrescriptions: boolean;
   canAccessCryobank: boolean;
@@ -84,7 +84,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: true,
     canManageSystem: true,
-    canManageEncounters: true,
+    canManageTreatments: true,
     canManageTreatmentCycles: true,
     canManagePrescriptions: true,
     canAccessCryobank: true,
@@ -110,7 +110,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: false,
     canManageSystem: false,
-    canManageEncounters: true,
+    canManageTreatments: true,
     canManageTreatmentCycles: true,
     canManagePrescriptions: true,
     canAccessCryobank: true,
@@ -136,7 +136,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: false,
     canManageSystem: false,
-    canManageEncounters: false,
+    canManageTreatments: false,
     canManageTreatmentCycles: false,
     canManagePrescriptions: false,
     canAccessCryobank: true,
@@ -162,7 +162,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true,
     canViewSettings: false,
     canManageSystem: false,
-    canManageEncounters: false,
+    canManageTreatments: false,
     canManageTreatmentCycles: false,
     canManagePrescriptions: false,
     canAccessCryobank: false,
@@ -214,7 +214,7 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       icon: "FileText",
       permission: "canManageSystem",
     },
-    
+
     {
       label: "Transaction",
       href: "/admin/transaction",
@@ -233,7 +233,6 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       icon: "ClipboardList",
       permission: "canManageSystem",
     },
-    
   ],
   Doctor: [
     { label: "Dashboard", href: "/doctor/dashboard", icon: "LayoutDashboard" },
@@ -253,19 +252,19 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       label: "Service Requests",
       href: "/doctor/service-requests",
       icon: "FileCheck",
-      permission: "canManageEncounters",
+      permission: "canManageTreatments",
     },
     {
-      label: "Encounters",
+      label: "Treatments",
       href: "/doctor/encounters",
       icon: "ClipboardList",
-      permission: "canManageEncounters",
+      permission: "canManageTreatments",
     },
     {
       label: "Medical Records",
       href: "/doctor/medical-records",
       icon: "FileText",
-      permission: "canManageEncounters",
+      permission: "canManageTreatments",
     },
     {
       label: "Treatment Cycles",
@@ -280,34 +279,10 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       permission: "canManagePrescriptions",
     },
     {
-      label: "Cryobank",
-      href: "/doctor/cryobank",
-      icon: "Snowflake",
-      permission: "canAccessCryobank",
-    },
-    {
       label: "Quality Check",
       href: "/doctor/quality-check",
       icon: "CheckCircle",
       permission: "canViewSamples",
-    },
-    {
-      label: "Embryo Culture",
-      href: "/doctor/embryo-culture",
-      icon: "FlaskConical",
-      permission: "canManageTreatmentCycles",
-    },
-    {
-      label: "Embryo Quality",
-      href: "/doctor/embryo-quality-check",
-      icon: "CheckCircle",
-      permission: "canViewSamples",
-    },
-    {
-      label: "Embryo Transfer",
-      href: "/doctor/embryo-transfer",
-      icon: "ArrowRight",
-      permission: "canManageTreatmentCycles",
     },
     {
       label: "Reports",
@@ -329,40 +304,40 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       icon: "LayoutDashboard",
     },
     {
-    label: "Receive Samples",
-    href: "/lab-technician/receive-sample",
-    icon: "FlaskConical",
-  },
-  {
-    label: "Lab Results",
-    href: "/lab-technician/lab-result",
-    icon: "FileText",
-  },
-  {
-    label: "Quality Control",
-    href: "/lab-technician/quality-check",
-    icon: "CheckCircle",
-  },
-  {
-    label: "Artificial Insemination",
-    href: "/lab-technician/artificial-insemination",
-    icon: "FlaskConical",
-  },
-  {
-    label: "Cryostorage",
-    href: "/lab-technician/cryostorage",
-    icon: "Snowflake",
-  },
-  {
-    label: "Thawing",
-    href: "/lab-technician/thawing",
-    icon: "Thermometer",
-  },
-  {
-    label: "Reports",
-    href: "/lab-technician/reports",
-    icon: "BarChart3",
-  },
+      label: "Receive Samples",
+      href: "/lab-technician/receive-sample",
+      icon: "FlaskConical",
+    },
+    {
+      label: "Lab Results",
+      href: "/lab-technician/lab-result",
+      icon: "FileText",
+    },
+    {
+      label: "Quality Control",
+      href: "/lab-technician/quality-check",
+      icon: "CheckCircle",
+    },
+    {
+      label: "Artificial Insemination",
+      href: "/lab-technician/artificial-insemination",
+      icon: "FlaskConical",
+    },
+    {
+      label: "Cryostorage",
+      href: "/lab-technician/cryostorage",
+      icon: "Snowflake",
+    },
+    {
+      label: "Thawing",
+      href: "/lab-technician/thawing",
+      icon: "Thermometer",
+    },
+    {
+      label: "Reports",
+      href: "/lab-technician/reports",
+      icon: "BarChart3",
+    },
   ],
   Receptionist: [
     {

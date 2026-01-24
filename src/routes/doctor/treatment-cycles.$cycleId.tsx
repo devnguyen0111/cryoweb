@@ -48,6 +48,8 @@ function DoctorTreatmentCycleDetail() {
       const response = await api.treatmentCycle.getTreatmentCycleById(cycleId);
       return response.data;
     },
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   useEffect(() => {
@@ -84,6 +86,12 @@ function DoctorTreatmentCycleDetail() {
       queryClient.invalidateQueries({
         queryKey: ["doctor", "treatment-cycles"],
       });
+      // Invalidate current step query to refresh timeline
+      if (cycle?.treatmentId) {
+        queryClient.invalidateQueries({
+          queryKey: ["treatment-current-step", cycle.treatmentId],
+        });
+      }
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.message || "Failed to update step");
@@ -186,7 +194,9 @@ function DoctorTreatmentCycleDetail() {
           return [];
         }
       },
-      enabled: !!cycle.patientId && !!cycleId,
+      enabled: !!cycle.patientId && !!cycleId && activeTab === "medical-records",
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     });
 
   const medicalRecords = medicalRecordsData || [];
@@ -234,6 +244,8 @@ function DoctorTreatmentCycleDetail() {
         }
       },
       enabled: !!cycle.patientId && activeTab === "oocytes",
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     });
 
   // Fetch sperm samples for this patient and cycle
@@ -256,6 +268,8 @@ function DoctorTreatmentCycleDetail() {
         }
       },
       enabled: !!cycleId && activeTab === "sperm",
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     });
 
   const oocyteSamples = oocyteSamplesData?.data || [];

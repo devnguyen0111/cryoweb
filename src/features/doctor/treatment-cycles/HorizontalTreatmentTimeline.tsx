@@ -6,9 +6,7 @@
  */
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/utils/cn";
-import { api } from "@/api/client";
 import {
   normalizeTreatmentCycleStatus,
   type TreatmentCycle,
@@ -337,35 +335,10 @@ export function HorizontalTreatmentTimeline({
   const isIUI = normalizedTreatmentType === "IUI";
   const steps = isIVF ? IVF_STEPS : isIUI ? IUI_STEPS : [];
 
-  // Fetch current step from backend API (most accurate source)
-  const { data: currentStepFromApi } = useQuery({
-    queryKey: [
-      "treatment-current-step",
-      cycle.treatmentId,
-      normalizedTreatmentType,
-    ],
-    queryFn: async () => {
-      if (!cycle.treatmentId || !normalizedTreatmentType) return null;
-      try {
-        if (isIUI) {
-          const response = await api.treatmentIUI.getCurrentStep(
-            cycle.treatmentId
-          );
-          return response.data ?? null;
-        } else if (isIVF) {
-          const response = await api.treatmentIVF.getCurrentStep(
-            cycle.treatmentId
-          );
-          return response.data ?? null;
-        }
-        return null;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!cycle.treatmentId && !!normalizedTreatmentType,
-    staleTime: 30000, // Cache for 30 seconds
-  });
+  // Disabled: No longer fetch current step from API to improve performance
+  // We use cycle data (stepType, cycleName, status) to determine current step instead
+  // This eliminates N API calls (one per patient card) and significantly speeds up page load
+  const currentStepFromApi = null;
 
   // Helper to convert step number from API to step ID
   // API returns 0-based index (0 = first step, 1 = second step, 2 = third step, etc.)
@@ -385,21 +358,13 @@ export function HorizontalTreatmentTimeline({
   const { currentStep, completedSteps, stepStatuses } = useMemo(() => {
     const treatmentCycles = allCycles.length > 0 ? allCycles : [cycle];
 
-    // Determine current step FIRST (before collecting completed steps)
-    let currentStepValue: IVFStep | IUIStep | undefined = undefined;
-
-    // PRIORITY 1: Use current step from backend API (most accurate)
-    if (currentStepFromApi !== null && currentStepFromApi !== undefined) {
-      const stepFromApi = getStepIdFromNumber(currentStepFromApi);
-      if (stepFromApi) {
-        currentStepValue = stepFromApi;
-      }
-    }
-
-    // Now collect completed steps, but EXCLUDE current step
+    // STEP 1: First, collect ALL completed steps and step statuses from cycles
+    // This must be done BEFORE determining current step to ensure completed cycles are properly marked
     const completedStepsSet = new Set<IVFStep | IUIStep>();
     // Map to store status for each step (Cancelled, Failed, Completed, etc.)
     const stepStatusMap = new Map<IVFStep | IUIStep, string>();
+    // Map to store stepId for each cycle (for later use)
+    const cycleStepMap = new Map<TreatmentCycle, IVFStep | IUIStep | null>();
 
     // Collect completed steps and step statuses from cycles
     for (const treatmentCycle of treatmentCycles) {
@@ -421,41 +386,48 @@ export function HorizontalTreatmentTimeline({
         );
       }
 
+      // Store stepId for this cycle
+      cycleStepMap.set(treatmentCycle, stepId);
+
       if (stepId) {
         // Store status for this step
         if (cycleStatus) {
           stepStatusMap.set(stepId, cycleStatus);
         }
 
-        // Add to completed steps if status is "Completed"
+        // CRITICAL: Mark ALL completed cycles as completed steps
+        // This ensures that when a cycle is completed, its step is marked as completed
+        // regardless of what the current step is
         if (cycleStatus === "Completed") {
-          // Only add if it's not the current step
-          if (stepId !== currentStepValue) {
-            completedStepsSet.add(stepId);
-          }
+          completedStepsSet.add(stepId);
         }
       }
 
       // Also check completedSteps field if available
       if (treatmentCycle.completedSteps) {
         treatmentCycle.completedSteps.forEach((step) => {
-          // Only add if it's not the current step
-          if (step !== currentStepValue) {
-            completedStepsSet.add(step);
-          }
+          completedStepsSet.add(step);
         });
       }
     }
 
-    // If we have current step from API, mark all steps BEFORE it as completed
-    if (currentStepValue) {
-      const currentStepIndex = steps.findIndex(
-        (s) => s.id === currentStepValue
-      );
-      if (currentStepIndex > 0) {
-        // Mark all steps before current step as completed
-        for (let i = 0; i < currentStepIndex; i++) {
-          completedStepsSet.add(steps[i].id);
+    // STEP 2: Determine current step
+    let currentStepValue: IVFStep | IUIStep | undefined = undefined;
+
+    // PRIORITY 1: Use current step from backend API (most accurate)
+    if (currentStepFromApi !== null && currentStepFromApi !== undefined) {
+      const stepFromApi = getStepIdFromNumber(currentStepFromApi);
+      if (stepFromApi) {
+        currentStepValue = stepFromApi;
+        // If we have current step from API, mark all steps BEFORE it as completed
+        const currentStepIndex = steps.findIndex(
+          (s) => s.id === currentStepValue
+        );
+        if (currentStepIndex > 0) {
+          // Mark all steps before current step as completed
+          for (let i = 0; i < currentStepIndex; i++) {
+            completedStepsSet.add(steps[i].id);
+          }
         }
       }
     }
@@ -478,21 +450,7 @@ export function HorizontalTreatmentTimeline({
       if (scheduledCycles.length > 0) {
         let maxStepIndex = -1;
         for (const scheduledCycle of scheduledCycles) {
-          // PRIORITY: Use stepType if available
-          let stepId: IVFStep | IUIStep | null = null;
-          if (scheduledCycle.stepType) {
-            stepId = mapStepTypeToStepId(
-              scheduledCycle.stepType,
-              scheduledCycle.treatmentType || cycle.treatmentType
-            );
-          }
-          // Fallback to cycleName
-          if (!stepId) {
-            stepId = mapCycleNameToStep(
-              scheduledCycle.cycleName,
-              scheduledCycle.treatmentType || cycle.treatmentType
-            );
-          }
+          const stepId = cycleStepMap.get(scheduledCycle);
           if (stepId && !completedStepsSet.has(stepId)) {
             const stepIndex = steps.findIndex((s) => s.id === stepId);
             if (stepIndex > maxStepIndex) {
@@ -513,21 +471,7 @@ export function HorizontalTreatmentTimeline({
         if (inProgressCycles.length > 0) {
           let maxStepIndex = -1;
           for (const inProgressCycle of inProgressCycles) {
-            // PRIORITY: Use stepType if available
-            let stepId: IVFStep | IUIStep | null = null;
-            if (inProgressCycle.stepType) {
-              stepId = mapStepTypeToStepId(
-                inProgressCycle.stepType,
-                inProgressCycle.treatmentType || cycle.treatmentType
-              );
-            }
-            // Fallback to cycleName
-            if (!stepId) {
-              stepId = mapCycleNameToStep(
-                inProgressCycle.cycleName,
-                inProgressCycle.treatmentType || cycle.treatmentType
-              );
-            }
+            const stepId = cycleStepMap.get(inProgressCycle);
             if (stepId && !completedStepsSet.has(stepId)) {
               const stepIndex = steps.findIndex((s) => s.id === stepId);
               if (stepIndex > maxStepIndex) {
@@ -550,21 +494,7 @@ export function HorizontalTreatmentTimeline({
             cycleStatus !== "Cancelled" &&
             cycleStatus !== "Failed"
           ) {
-            // PRIORITY: Use stepType if available
-            let stepId: IVFStep | IUIStep | null = null;
-            if (treatmentCycle.stepType) {
-              stepId = mapStepTypeToStepId(
-                treatmentCycle.stepType,
-                treatmentCycle.treatmentType || cycle.treatmentType
-              );
-            }
-            // Fallback to cycleName
-            if (!stepId) {
-              stepId = mapCycleNameToStep(
-                treatmentCycle.cycleName,
-                treatmentCycle.treatmentType || cycle.treatmentType
-              );
-            }
+            const stepId = cycleStepMap.get(treatmentCycle);
             if (stepId && !completedStepsSet.has(stepId)) {
               currentStepValue = stepId;
               break;
@@ -573,7 +503,8 @@ export function HorizontalTreatmentTimeline({
         }
       }
 
-      // If still no current step, calculate from completed steps
+      // CRITICAL: If still no current step, calculate from completed steps
+      // This handles the case where a cycle was just completed and the next cycle hasn't started yet
       if (!currentStepValue && completedStepsSet.size > 0) {
         const completedStepsArray = Array.from(completedStepsSet);
         let maxCompletedIndex = -1;
@@ -586,6 +517,9 @@ export function HorizontalTreatmentTimeline({
         // Move to next step after the last completed one
         if (maxCompletedIndex >= 0 && maxCompletedIndex < steps.length - 1) {
           currentStepValue = steps[maxCompletedIndex + 1].id;
+        } else if (maxCompletedIndex === steps.length - 1) {
+          // All steps are completed
+          currentStepValue = undefined;
         }
       }
 

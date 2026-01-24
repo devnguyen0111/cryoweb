@@ -1,6 +1,6 @@
 /**
- * Encounter Detail Page
- * View and edit encounter details
+ * Treatment Detail Page
+ * View and edit treatment details
  */
 
 import React, { useMemo } from "react";
@@ -17,7 +17,7 @@ import { api } from "@/api/client";
 import { getFullNameFromObject } from "@/utils/name-helpers";
 import { isPatientDetailResponse } from "@/utils/patient-helpers";
 
-type EncounterFormValues = {
+type TreatmentFormValues = {
   visitDate: string;
   chiefComplaint: string;
   history: string;
@@ -33,17 +33,17 @@ type EncounterFormValues = {
 };
 
 export const Route = createFileRoute("/doctor/encounters/$encounterId")({
-  component: EncounterDetailPage,
+  component: TreatmentDetailPage,
 });
 
-function EncounterDetailPage() {
+function TreatmentDetailPage() {
   const { encounterId } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Fetch encounter data
-  const { data: encounterData, isLoading } = useQuery({
-    queryKey: ["encounter", encounterId],
+  // Fetch treatment data
+  const { data: treatmentData, isLoading } = useQuery({
+    queryKey: ["treatment", encounterId],
     queryFn: async () => {
       const response = await api.treatment.getTreatmentById(encounterId);
       return response.data;
@@ -53,20 +53,20 @@ function EncounterDetailPage() {
 
   // Fetch patient details
   const { data: patientDetails } = useQuery({
-    queryKey: ["patient-details", encounterData?.patientId],
+    queryKey: ["patient-details", treatmentData?.patientId],
     queryFn: async () => {
-      if (!encounterData?.patientId) return null;
+      if (!treatmentData?.patientId) return null;
       // usePatientDetails hook handles the fallback logic
       // But we need the query structure here, so we use the same pattern
       try {
         const response = await api.patient.getPatientDetails(
-          encounterData.patientId
+          treatmentData.patientId
         );
         return response.data;
       } catch {
         try {
           const fallback = await api.patient.getPatientById(
-            encounterData.patientId
+            treatmentData.patientId
           );
           return fallback.data ?? null;
         } catch {
@@ -74,22 +74,22 @@ function EncounterDetailPage() {
         }
       }
     },
-    enabled: !!encounterData?.patientId,
+    enabled: !!treatmentData?.patientId,
   });
 
   // Fetch user/account details
   const { data: userDetails } = useQuery({
-    queryKey: ["user-details", encounterData?.patientId],
+    queryKey: ["user-details", treatmentData?.patientId],
     queryFn: async () => {
-      if (!encounterData?.patientId) return null;
+      if (!treatmentData?.patientId) return null;
       try {
-        const response = await api.user.getUserDetails(encounterData.patientId);
+        const response = await api.user.getUserDetails(treatmentData.patientId);
         return response.data;
       } catch {
         return null;
       }
     },
-    enabled: !!encounterData?.patientId,
+    enabled: !!treatmentData?.patientId,
   });
 
   // Merge patient information
@@ -163,8 +163,8 @@ function EncounterDetailPage() {
     };
   }, [patientDetails, userDetails]);
 
-  // Parse encounter data from notes (temporary solution)
-  const parseEncounterData = (notes?: string): Partial<EncounterFormValues> => {
+  // Parse treatment data from notes (temporary solution)
+  const parseTreatmentData = (notes?: string): Partial<TreatmentFormValues> => {
     if (!notes) return {};
     try {
       // Try to parse JSON from notes
@@ -174,7 +174,7 @@ function EncounterDetailPage() {
       }
       // If not JSON, try to extract structured data
       const lines = notes.split("\n");
-      const data: Partial<EncounterFormValues> = {};
+      const data: Partial<TreatmentFormValues> = {};
       let currentSection = "";
       let vitals: any = {};
 
@@ -208,15 +208,15 @@ function EncounterDetailPage() {
 
       return data;
     } catch (error) {
-      console.error("Error parsing encounter data:", error);
+      console.error("Error parsing treatment data:", error);
       return {};
     }
   };
 
-  const form = useForm<EncounterFormValues>({
+  const form = useForm<TreatmentFormValues>({
     defaultValues: {
-      visitDate: encounterData?.startDate
-        ? new Date(encounterData.startDate).toISOString().split("T")[0]
+      visitDate: treatmentData?.startDate
+        ? new Date(treatmentData.startDate).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0],
       chiefComplaint: "",
       history: "",
@@ -228,17 +228,17 @@ function EncounterDetailPage() {
       },
       physicalExam: "",
       notes: "",
-      status: encounterData?.status || "InProgress",
+      status: treatmentData?.status || "InProgress",
     },
   });
 
-  // Update form when encounter data loads
+  // Update form when treatment data loads
   React.useEffect(() => {
-    if (encounterData) {
-      const parsed = parseEncounterData(encounterData.notes);
+    if (treatmentData) {
+      const parsed = parseTreatmentData(treatmentData.notes);
       form.reset({
-        visitDate: encounterData.startDate
-          ? new Date(encounterData.startDate).toISOString().split("T")[0]
+        visitDate: treatmentData.startDate
+          ? new Date(treatmentData.startDate).toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0],
         chiefComplaint: parsed.chiefComplaint || "",
         history: parsed.history || "",
@@ -249,16 +249,16 @@ function EncounterDetailPage() {
           weight: "",
         },
         physicalExam: parsed.physicalExam || "",
-        notes: encounterData.notes || "",
-        status: encounterData.status || "InProgress",
+        notes: treatmentData.notes || "",
+        status: treatmentData.status || "InProgress",
       });
     }
-  }, [encounterData, form]);
+  }, [treatmentData, form]);
 
   const updateMutation = useMutation({
-    mutationFn: async (values: EncounterFormValues) => {
+    mutationFn: async (values: TreatmentFormValues) => {
       // Combine all data into notes (temporary solution)
-      const encounterData = {
+      const treatmentFormData = {
         visitDate: values.visitDate,
         chiefComplaint: values.chiefComplaint,
         history: values.history,
@@ -267,7 +267,7 @@ function EncounterDetailPage() {
         notes: values.notes,
       };
 
-      const notes = `Encounter Data:\n${JSON.stringify(encounterData, null, 2)}`;
+      const notes = `Treatment Data:\n${JSON.stringify(treatmentFormData, null, 2)}`;
 
       const response = await api.treatment.updateTreatment(encounterId, {
         startDate: new Date(`${values.visitDate}T00:00:00`).toISOString(),
@@ -278,18 +278,18 @@ function EncounterDetailPage() {
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["encounter", encounterId] });
-      queryClient.invalidateQueries({ queryKey: ["doctor-encounters"] });
-      toast.success("Encounter updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["treatment", encounterId] });
+      queryClient.invalidateQueries({ queryKey: ["doctor-treatments"] });
+      toast.success("Treatment updated successfully");
     },
     onError: (error: any) => {
       const message =
-        error?.response?.data?.message || "Failed to update encounter";
+        error?.response?.data?.message || "Failed to update treatment";
       toast.error(message);
     },
   });
 
-  const onSubmit = (values: EncounterFormValues) => {
+  const onSubmit = (values: TreatmentFormValues) => {
     updateMutation.mutate(values);
   };
 
@@ -298,22 +298,22 @@ function EncounterDetailPage() {
       <ProtectedRoute allowedRoles={["Doctor"]}>
         <DashboardLayout>
           <div className="flex items-center justify-center py-12">
-            <p className="text-gray-500">Loading encounter...</p>
+            <p className="text-gray-500">Loading treatment...</p>
           </div>
         </DashboardLayout>
       </ProtectedRoute>
     );
   }
 
-  if (!encounterData) {
+  if (!treatmentData) {
     return (
       <ProtectedRoute allowedRoles={["Doctor"]}>
         <DashboardLayout>
           <Card>
             <CardContent className="py-8 text-center">
-              <p className="text-gray-500 mb-4">Encounter not found</p>
+              <p className="text-gray-500 mb-4">Treatment not found</p>
               <Button onClick={() => navigate({ to: "/doctor/encounters" })}>
-                Back to Encounters
+                Back to Treatments
               </Button>
             </CardContent>
           </Card>
@@ -329,11 +329,11 @@ function EncounterDetailPage() {
           <section className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold">Encounter Details</h1>
+                <h1 className="text-3xl font-bold">Treatment Details</h1>
                 <p className="text-gray-600">
                   Code:{" "}
                   <span className="font-semibold">
-                    {encounterData.treatmentCode || encounterId}
+                    {treatmentData.treatmentCode || encounterId}
                   </span>
                 </p>
                 {patientInfo && (
@@ -365,14 +365,14 @@ function EncounterDetailPage() {
                 >
                   Back
                 </Button>
-                {encounterData.status === "InProgress" && (
+                {treatmentData.status === "InProgress" && (
                   <Button
                     onClick={() =>
                       navigate({
                         to: "/doctor/encounters/$encounterId/diagnosis",
                         params: { encounterId },
                         search: {
-                          patientId: encounterData.patientId,
+                          patientId: treatmentData.patientId,
                           treatmentId: encounterId,
                         },
                       })

@@ -1,28 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { CreateEncounterForm } from "@/features/doctor/encounters/CreateEncounterForm";
+import { CreateTreatmentForm } from "@/features/doctor/encounters/CreateTreatmentForm";
 
-type EncounterSearchState = {
+type TreatmentSearchState = {
   patientId?: string;
   appointmentId?: string;
 };
 
 export const Route = createFileRoute("/doctor/encounters/create")({
-  component: DoctorEncounterCreateComponent,
+  component: DoctorTreatmentCreateComponent,
   validateSearch: (
     search: { patientId?: string; appointmentId?: string } = {}
   ) => search,
 });
 
-function DoctorEncounterCreateComponent() {
-  const search = Route.useSearch() as EncounterSearchState;
+function DoctorTreatmentCreateComponent() {
+  const search = Route.useSearch() as TreatmentSearchState;
 
   return (
     <ProtectedRoute allowedRoles={["Doctor"]}>
       <DashboardLayout>
         <div className="space-y-8">
-          <CreateEncounterForm
+          <CreateTreatmentForm
             layout="page"
             defaultPatientId={search.patientId}
             defaultAppointmentId={search.appointmentId}

@@ -64,6 +64,9 @@ function DoctorAppointmentsComponent() {
     setIsRefreshing(true);
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["doctor", "appointments"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["doctor", "patient"],
+      }),
     ]);
     setIsRefreshing(false);
   };
@@ -94,6 +97,8 @@ function DoctorAppointmentsComponent() {
     ],
     enabled: !!doctorId,
     retry: false,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     queryFn: () =>
       api.appointment.getAppointments({
         doctorId: doctorId!,
@@ -134,8 +139,7 @@ function DoctorAppointmentsComponent() {
   }, [data?.data]);
 
   // Fetch patient data for all appointments
-  // Note: useQueries doesn't work well with custom hooks, so we keep the query here
-  // but use the same pattern as usePatientDetails
+  // Optimized: Batch fetch all patients in parallel using useQueries
   const patientQueries = useQueries({
     queries: patientIds.map((patientId) => ({
       queryKey: ["doctor", "patient", patientId, "appointment-list"],
@@ -153,8 +157,10 @@ function DoctorAppointmentsComponent() {
           }
         }
       },
+      enabled: !!patientId && patientIds.length > 0,
       retry: false,
-      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+      staleTime: 60000, // Cache for 1 minute
+      gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     })),
   });
 
@@ -228,6 +234,19 @@ function DoctorAppointmentsComponent() {
       toast.error(message);
     },
   });
+
+  // Sort appointments by createdAt (newest first)
+  const sortedAppointments = useMemo(() => {
+    const rawAppointments = data?.data ?? [];
+    return [...rawAppointments].sort((a, b) => {
+      const aCreatedAt = (a as any).createdAt || a.createdAt || "";
+      const bCreatedAt = (b as any).createdAt || b.createdAt || "";
+      if (!aCreatedAt && !bCreatedAt) return 0;
+      if (!aCreatedAt) return 1;
+      if (!bCreatedAt) return -1;
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  }, [data?.data]);
 
   const total = data?.metaData?.totalCount ?? 0;
   const totalPages = data?.metaData?.totalPages ?? 1;
@@ -303,7 +322,7 @@ function DoctorAppointmentsComponent() {
                 <h1 className="text-3xl font-bold">Appointment management</h1>
                 <p className="text-gray-600">
                   Monitor schedules, update statuses, and start patient
-                  encounters.
+                  treatments.
                 </p>
               </div>
               <Button
@@ -415,7 +434,7 @@ function DoctorAppointmentsComponent() {
                 <div className="py-12 text-center text-gray-500">
                   Loading data...
                 </div>
-              ) : data?.data?.length ? (
+              ) : sortedAppointments.length ? (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead>
@@ -430,7 +449,7 @@ function DoctorAppointmentsComponent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {data.data.map((appointment) => {
+                      {sortedAppointments.map((appointment) => {
                         // Get patientId from multiple possible sources
                         const rawAppointment = appointment as unknown as Record<
                           string,
@@ -590,7 +609,7 @@ function DoctorAppointmentsComponent() {
                                     })
                                   }
                                 >
-                                  Start encounter
+                                  Start treatment
                                 </Button>
                                 <select
                                   value={appointment.status || ""}
@@ -629,8 +648,8 @@ function DoctorAppointmentsComponent() {
 
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-500">
-                  Showing {data?.data?.length ?? 0} /{" "}
-                  {total || (data?.data?.length ?? 0)} appointments
+                  Showing {sortedAppointments.length} /{" "}
+                  {total || sortedAppointments.length} appointments
                 </div>
                 <div className="flex items-center gap-2">
                   <Button

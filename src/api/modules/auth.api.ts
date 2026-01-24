@@ -10,12 +10,21 @@ import type {
   EmailVerificationModel,
   EmailRequest,
   TokenModel,
+  
 } from "../types";
 
 /**
  * Authentication API
  * Matches Back-End API endpoints from /api/auth/*
  */
+export interface AdminCreateAccountRequest {
+  username: string;
+  email: string;
+  location?: string;
+  phone?: string;
+  roleId: string;
+  status: boolean;
+}
 export class AuthApi {
   constructor(private readonly client: AxiosInstance) {}
 
@@ -115,6 +124,20 @@ export class AuthApi {
   async verifyEmail(data: EmailVerificationModel): Promise<BaseResponse<void>> {
     const response = await this.client.post<BaseResponse<void>>(
       "/auth/verify-email",
+      data
+    );
+    return response.data;
+  }
+
+    /**
+   * Admin create user account
+   * POST /api/auth/admin/create-account
+   */
+  async createAdminAccount(
+    data: AdminCreateAccountRequest
+  ): Promise<BaseResponse<void>> {
+    const response = await this.client.post<BaseResponse<void>>(
+      "/auth/admin/create-account",
       data
     );
     return response.data;

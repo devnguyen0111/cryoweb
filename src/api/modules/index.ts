@@ -29,6 +29,7 @@ export { NotificationApi } from "./notification.api";
 export { PrescriptionApi } from "./prescription.api";
 export { MedicineApi } from "./medicine.api";
 export { MediaApi } from "./media.api";
+export { CryoPackageApi } from "./cryopackage.api";
+export { CryoStorageContractsApi } from "./cryo-storage-contracts.api";
 export { CryoLocationApi } from "./cryolocation.api";
 export { CryoImportApi } from "./cryo-import.api";
-

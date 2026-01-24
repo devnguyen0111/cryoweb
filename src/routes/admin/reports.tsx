@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ListToolbar } from "@/components/admin/ListToolbar";
@@ -114,13 +115,19 @@ function AdminReportsComponent() {
             ]}
             actions={
               <>
-                <Button variant="outline" onClick={() => window.print()}>
+                <Button variant="outline" onClick={() => {
+                  toast.info("Preparing PDF export");
+                  window.print();
+                  toast.success("PDF export initiated");
+                }}>
                   <Download className="mr-2 h-4 w-4" />
                   Export PDF
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => alert("CSV export queued and sent to your email.")}
+                  onClick={() => {
+                    toast.success("CSV export queued and sent to your email");
+                  }}
                 >
                   Export CSV
                 </Button>

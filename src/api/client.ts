@@ -27,6 +27,7 @@ import {
   PrescriptionApi,
   MedicineApi,
   MediaApi,
+  CryoPackageApi,
   CryoLocationApi,
   CryoImportApi,
 } from "./modules";
@@ -124,6 +125,7 @@ export class ApiClient {
   slot: SlotApi;
   cryoLocation: CryoLocationApi;
   cryoImport: CryoImportApi;
+  cryoPackage: CryoPackageApi;
 
   treatmentCycle: TreatmentCycleApi;
   treatment: TreatmentApi;
@@ -170,7 +172,7 @@ export class ApiClient {
     this.media = new MediaApi(client);
     this.cryoLocation = new CryoLocationApi(client);
     this.cryoImport = new CryoImportApi(client);
-    
+    this.cryoPackage = new CryoPackageApi(client);
   }
 }
 

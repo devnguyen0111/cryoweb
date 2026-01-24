@@ -70,4 +70,5 @@ export class RelationshipApi {
     );
     return response.data;
   }
+  
 }

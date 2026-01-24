@@ -17,6 +17,7 @@
     "@tanstack/react-query-devtools": "^5.87.1",
     "@tanstack/react-router": "^1.132.37",
     "@tanstack/router-plugin": "^1.132.37",
+    "antd": "^6.2.1",
     "axios": "^1.12.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@tanstack/react-router-devtools": "^1.132.37",
+    "@tanstack/router-cli": "^1.134.14",
     "@types/node": "^22.10.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
@@ -45,7 +47,6 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
-    "@tanstack/router-cli": "^1.134.14",
     "vitest": "^2.1.4"
   },
   "engines": {

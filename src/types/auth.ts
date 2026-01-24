@@ -327,17 +327,36 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       icon: "LayoutDashboard",
     },
     {
-      label: "Samples",
-      href: "/lab-technician/samples",
-      icon: "FlaskConical",
-      permission: "canViewSamples",
-    },
-    {
-      label: "Tests",
-      href: "/lab-technician/tests",
-      icon: "TestTube",
-      permission: "canViewSamples",
-    },
+    label: "Receive Samples",
+    href: "/lab-technician/receive-sample",
+    icon: "FlaskConical",
+  },
+  {
+    label: "Lab Results",
+    href: "/lab-technician/lab-result",
+    icon: "FileText",
+  },
+  {
+    label: "Quality Control",
+    href: "/lab-technician/quality-check",
+    icon: "CheckCircle",
+  },
+  {
+    label: "Artificial Insemination",
+    href: "/lab-technician/artificial-insemination",
+    icon: "FlaskConical",
+  },
+  {
+    label: "Cryostorage",
+    href: "/lab-technician/cryostorage",
+    icon: "Snowflake",
+  },
+  {
+    label: "Thawing",
+    href: "/lab-technician/thawing",
+    icon: "Thermometer",
+  },
+  
   ],
   Receptionist: [
     {

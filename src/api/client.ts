@@ -27,6 +27,8 @@ import {
   PrescriptionApi,
   MedicineApi,
   MediaApi,
+  CryoLocationApi,
+  CryoImportApi,
 } from "./modules";
 
 const API_BASE_URL =
@@ -120,6 +122,9 @@ export class ApiClient {
   serviceRequest: ServiceRequestApi;
   serviceRequestDetails: ServiceRequestDetailsApi;
   slot: SlotApi;
+  cryoLocation: CryoLocationApi;
+  cryoImport: CryoImportApi;
+
   treatmentCycle: TreatmentCycleApi;
   treatment: TreatmentApi;
   cycleDocument: CycleDocumentApi;
@@ -134,6 +139,7 @@ export class ApiClient {
   prescription: PrescriptionApi;
   medicine: MedicineApi;
   media: MediaApi;
+  
 
   constructor() {
     this.auth = new AuthApi(client);
@@ -162,6 +168,9 @@ export class ApiClient {
     this.prescription = new PrescriptionApi(client);
     this.medicine = new MedicineApi(client);
     this.media = new MediaApi(client);
+    this.cryoLocation = new CryoLocationApi(client);
+    this.cryoImport = new CryoImportApi(client);
+    
   }
 }
 

@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/api/client";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/lab-technician/lab-result")({
   component: LabResultPage,
@@ -551,8 +552,13 @@ function LabResultModal({
       return uploadFileToMedicalRecord(medicalRecordId, file);
     },
     onSuccess: () => {
+      toast.success("File uploaded successfully");
       setFile(null);
       onUploaded();
+    },
+    onError: (error: Error) => {
+      const message = error?.message || "Failed to upload file";
+      toast.error(message);
     },
   });
 
@@ -658,16 +664,6 @@ function LabResultModal({
               >
                 {uploadMutation.isPending ? "Uploading..." : "Upload"}
               </button>
-
-              {uploadMutation.isError ? (
-                <div className="text-sm text-red-600">
-                  {uploadMutation.error?.message || "Upload failed"}
-                </div>
-              ) : null}
-
-              {uploadMutation.isSuccess ? (
-                <div className="text-sm text-green-700">Uploaded successfully</div>
-              ) : null}
             </div>
 
             {mode !== "update" ? (

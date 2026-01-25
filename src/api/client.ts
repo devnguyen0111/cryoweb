@@ -30,6 +30,7 @@ import {
   CryoPackageApi,
   CryoLocationApi,
   CryoImportApi,
+  CryoExportApi,
 } from "./modules";
 
 const API_BASE_URL =
@@ -125,6 +126,7 @@ export class ApiClient {
   slot: SlotApi;
   cryoLocation: CryoLocationApi;
   cryoImport: CryoImportApi;
+  cryoExport: CryoExportApi;
   cryoPackage: CryoPackageApi;
 
   treatmentCycle: TreatmentCycleApi;
@@ -172,6 +174,8 @@ export class ApiClient {
     this.media = new MediaApi(client);
     this.cryoLocation = new CryoLocationApi(client);
     this.cryoImport = new CryoImportApi(client);
+    this.cryoExport = new CryoExportApi(client);
+    
     this.cryoPackage = new CryoPackageApi(client);
   }
 }

@@ -5,7 +5,7 @@ import type { DynamicResponse } from "@/api/types";
 ===================== */
 
 export type SampleType = "Oocyte" | "Sperm" | "Embryo";
-export type CryoLocationType = "Tank" | "Canister" | "Slot";
+export type CryoLocationType = "Tank" | "Canister" | "Golbet" | "Slot";
 
 export interface CryoExport {
   id: string;

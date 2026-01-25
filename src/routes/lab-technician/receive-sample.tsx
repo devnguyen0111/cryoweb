@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-query";
 import api from "@/api/client";
 import { SearchablePatientSelect } from "../../components/SearchablePatientSelect";
+import { toast } from "sonner";
 
 export const Route = createFileRoute(
   "/lab-technician/receive-sample",
@@ -108,6 +109,7 @@ function ReceiveSamplePage() {
   },
 
   onSuccess: () => {
+    toast.success("Sample created successfully");
     setIsReceiveOpen(false);
     setNewSamplePatientId("");
     setNewSampleType("Sperm");
@@ -115,6 +117,10 @@ function ReceiveSamplePage() {
     queryClient.invalidateQueries({
       queryKey: ["samples", "collected"],
     });
+  },
+  onError: (error: any) => {
+    const message = error?.response?.data?.message || error?.message || "Failed to create sample";
+    toast.error(message);
   },
 });
 

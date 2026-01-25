@@ -481,7 +481,7 @@ function ReceptionistTransactionsComponent() {
         <body>
           <div class="header">
             <h1>INVOICE</h1>
-            <p>FSCMS - Fertility Services Clinic Management System</p>
+            <p>CryoFert - Fertility Services Clinic Management System</p>
           </div>
 
           <div class="invoice-info">

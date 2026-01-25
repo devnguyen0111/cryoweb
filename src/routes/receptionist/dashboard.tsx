@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -54,9 +54,22 @@ function ReceptionistDashboardComponent() {
         );
       } catch (error) {
         console.error("Error fetching appointments:", error);
-        return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        return { 
+          data: [], 
+          metaData: { 
+            totalCount: 0, 
+            totalPages: 0,
+            pageNumber: 1,
+            pageSize: 5,
+            hasPrevious: false,
+            hasNext: false,
+          } 
+        };
       }
     },
+    retry: 1,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   const { data: patientsData } = useQuery({
@@ -68,9 +81,22 @@ function ReceptionistDashboardComponent() {
         );
       } catch (error) {
         console.error("Error fetching patients:", error);
-        return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        return { 
+          data: [], 
+          metaData: { 
+            totalCount: 0, 
+            totalPages: 0,
+            pageNumber: 1,
+            pageSize: 5,
+            hasPrevious: false,
+            hasNext: false,
+          } 
+        };
       }
     },
+    retry: 1,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   const { data: pendingRequestsData } = useQuery({
@@ -90,64 +116,31 @@ function ReceptionistDashboardComponent() {
         );
       } catch (error) {
         console.error("Error fetching service requests:", error);
-        return { data: [], metaData: { totalCount: 0, totalPages: 0 } };
+        return { 
+          data: [], 
+          metaData: { 
+            totalCount: 0, 
+            totalPages: 0,
+            pageNumber: 1,
+            pageSize: 5,
+            hasPrevious: false,
+            hasNext: false,
+          } 
+        };
       }
     },
+    retry: 1,
+    staleTime: 30000, // Cache for 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
-  // Helper function to extract totalCount from response
-  const getTotalCount = (response: any): number => {
-    if (!response) return 0;
-    // Try different possible response structures
-    if (response.metaData?.totalCount !== undefined) {
-      return response.metaData.totalCount;
-    }
-    if (response.metadata?.totalCount !== undefined) {
-      return response.metadata.totalCount;
-    }
-    if (response.totalCount !== undefined) {
-      return response.totalCount;
-    }
-    // If response has data array, we can't determine total from it
-    return 0;
-  };
-
   const pendingRequests = pendingRequestsData?.data ?? [];
-  const totalPendingRequests = getTotalCount(pendingRequestsData);
-
   const upcomingAppointments = appointmentsData?.data ?? [];
-  const totalAppointmentsToday = getTotalCount(appointmentsData);
-
   const recentPatients = patientsData?.data ?? [];
-  const totalPatients = getTotalCount(patientsData);
 
   const statusBadgeClass = (status?: string) => {
     return getServiceRequestStatusBadgeClass(status);
   };
-
-  const quickStats = useMemo(
-    () => [
-      {
-        title: "Pending service requests",
-        value: totalPendingRequests,
-        action: () => navigate({ to: "/receptionist/service-requests" }),
-        description: "Awaiting receptionist confirmation",
-      },
-      {
-        title: "Upcoming scheduled appointments",
-        value: totalAppointmentsToday,
-        action: () => navigate({ to: "/receptionist/appointments" }),
-        description: "Scheduled with upcoming start times",
-      },
-      {
-        title: "Total patients",
-        value: totalPatients,
-        action: () => navigate({ to: "/receptionist/patients" }),
-        description: "Managed profiles in the system",
-      },
-    ],
-    [navigate, totalPendingRequests, totalAppointmentsToday, totalPatients]
-  );
 
   return (
     <ProtectedRoute allowedRoles={["Receptionist"]}>
@@ -173,67 +166,6 @@ function ReceptionistDashboardComponent() {
             </Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {quickStats.map((stat) => (
-              <Card key={stat.title}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    {stat.title}
-                  </CardTitle>
-                  <Button variant="ghost" size="sm" onClick={stat.action}>
-                    View
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">{stat.value}</div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {stat.description}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Appointment Schedule
-                </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate({ to: "/receptionist/schedule" })}
-                >
-                  View
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">—</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Manage appointments and assign doctors
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Transactions
-                </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate({ to: "/receptionist/transactions" })}
-                >
-                  View
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">—</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  View and manage payments
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
           <div className="grid gap-6 xl:grid-cols-2">
             <Card>
               <CardHeader className="flex items-center justify-between">
@@ -250,63 +182,66 @@ function ReceptionistDashboardComponent() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-gray-700">
                 {pendingRequests.length ? (
-                  pendingRequests.map((request) => (
-                    <div
-                      key={request.id}
-                      className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          #{getLast4Chars(request.id)}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Patient ID:{" "}
-                          {request.patientId
-                            ? getLast4Chars(request.patientId)
-                            : "—"}{" "}
-                          · Preferred date:{" "}
-                          {(() => {
-                            const dateStr =
-                              request.requestDate || request.requestedDate;
-                            if (!dateStr) return "—";
-                            try {
-                              const date = new Date(dateStr);
-                              if (isNaN(date.getTime())) return dateStr;
-                              return date.toLocaleDateString("en-GB", {
-                                day: "2-digit",
-                                month: "2-digit",
-                                year: "numeric",
-                              });
-                            } catch {
-                              return dateStr.split("T")[0] || dateStr;
+                  pendingRequests.map((request) => {
+                    if (!request.id) return null; // Skip invalid requests
+                    return (
+                      <div
+                        key={request.id}
+                        className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            #{getLast4Chars(request.id)}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Patient ID:{" "}
+                            {request.patientId
+                              ? getLast4Chars(request.patientId)
+                              : "—"}{" "}
+                            · Preferred date:{" "}
+                            {(() => {
+                              const dateStr =
+                                request.requestDate || request.requestedDate;
+                              if (!dateStr) return "—";
+                              try {
+                                const date = new Date(dateStr);
+                                if (isNaN(date.getTime())) return dateStr;
+                                return date.toLocaleDateString("en-GB", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                });
+                              } catch {
+                                return dateStr.split("T")[0] || dateStr;
+                              }
+                            })()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize",
+                              statusBadgeClass(request.status)
+                            )}
+                          >
+                            {request.status || "pending"}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              navigate({
+                                to: "/receptionist/service-requests/$serviceRequestId",
+                                params: { serviceRequestId: request.id },
+                              })
                             }
-                          })()}
-                        </p>
+                          >
+                            Open
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize",
-                            statusBadgeClass(request.status)
-                          )}
-                        >
-                          {request.status || "pending"}
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            navigate({
-                              to: "/receptionist/service-requests/$serviceRequestId",
-                              params: { serviceRequestId: request.id },
-                            })
-                          }
-                        >
-                          Open
-                        </Button>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <p className="text-gray-500">
                     All caught up—no pending requests.
@@ -328,53 +263,60 @@ function ReceptionistDashboardComponent() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-gray-700">
                 {upcomingAppointments.length ? (
-                  upcomingAppointments.map((appointment, index) => (
-                    <div
-                      key={appointment.id}
-                      className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {appointment.appointmentCode ||
-                            `appointment #${index + 1}`}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {(() => {
-                            if (!appointment.appointmentDate) return "—";
-                            try {
-                              const date = new Date(
-                                appointment.appointmentDate
-                              );
-                              if (isNaN(date.getTime()))
-                                return appointment.appointmentDate;
-                              return date.toLocaleDateString("en-GB", {
-                                day: "2-digit",
-                                month: "2-digit",
-                                year: "numeric",
-                              });
-                            } catch {
-                              return (
-                                appointment.appointmentDate.split("T")[0] ||
-                                appointment.appointmentDate
-                              );
-                            }
-                          })()}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          navigate({
-                            to: "/receptionist/appointments/$appointmentId",
-                            params: { appointmentId: appointment.id },
-                          })
-                        }
+                  upcomingAppointments.map((appointment, index) => {
+                    // Ensure unique key even if id is missing
+                    const uniqueKey = appointment.id || `appointment-${index}`;
+                    return (
+                      <div
+                        key={uniqueKey}
+                        className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
                       >
-                        Details
-                      </Button>
-                    </div>
-                  ))
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {appointment.appointmentCode ||
+                              `appointment #${index + 1}`}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {(() => {
+                              if (!appointment.appointmentDate) return "—";
+                              try {
+                                const date = new Date(
+                                  appointment.appointmentDate
+                                );
+                                if (isNaN(date.getTime()))
+                                  return appointment.appointmentDate;
+                                return date.toLocaleDateString("en-GB", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                });
+                              } catch {
+                                return (
+                                  appointment.appointmentDate.split("T")[0] ||
+                                  appointment.appointmentDate
+                                );
+                              }
+                            })()}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (appointment.id) {
+                              navigate({
+                                to: "/receptionist/appointments/$appointmentId",
+                                params: { appointmentId: appointment.id },
+                              });
+                            }
+                          }}
+                          disabled={!appointment.id}
+                        >
+                          Details
+                        </Button>
+                      </div>
+                    );
+                  })
                 ) : (
                   <p className="text-gray-500">
                     No scheduled appointments in the queue. Create one to get
@@ -398,52 +340,54 @@ function ReceptionistDashboardComponent() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-gray-700">
               {recentPatients.length ? (
-                recentPatients.map((patient) => (
-                  <div
-                    key={patient.id}
-                    className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {getFullNameFromObject(patient) ||
-                          patient.patientCode ||
-                          `Patient ${getLast4Chars(patient.id)}`}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Email:{" "}
-                        {(() => {
-                          const patientAny = patient as any;
-                          return (
-                            patientAny?.accountInfo?.email ||
-                            patient.email ||
-                            "—"
-                          );
-                        })()}{" "}
-                        · Phone:{" "}
-                        {(() => {
-                          const patientAny = patient as any;
-                          return (
-                            patientAny?.accountInfo?.phone ||
-                            patient.phoneNumber ||
-                            "—"
-                          );
-                        })()}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        navigate({
-                          to: "/receptionist/patients/$patientId",
-                          params: { patientId: patient.id },
-                        })
-                      }
+                recentPatients
+                  .filter((patient) => patient.id) // Filter out invalid patients
+                  .map((patient) => (
+                    <div
+                      key={patient.id}
+                      className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
                     >
-                      View
-                    </Button>
-                  </div>
-                ))
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {getFullNameFromObject(patient) ||
+                            patient.patientCode ||
+                            `Patient ${getLast4Chars(patient.id)}`}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Email:{" "}
+                          {(() => {
+                            const patientAny = patient as any;
+                            return (
+                              patientAny?.accountInfo?.email ||
+                              patient.email ||
+                              "—"
+                            );
+                          })()}{" "}
+                          · Phone:{" "}
+                          {(() => {
+                            const patientAny = patient as any;
+                            return (
+                              patientAny?.accountInfo?.phone ||
+                              patient.phoneNumber ||
+                              "—"
+                            );
+                          })()}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          navigate({
+                            to: "/receptionist/patients/$patientId",
+                            params: { patientId: patient.id },
+                          })
+                        }
+                      >
+                        View
+                      </Button>
+                    </div>
+                  ))
               ) : (
                 <p className="text-gray-500">
                   No new patient accounts this week.

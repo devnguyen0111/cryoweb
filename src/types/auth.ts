@@ -363,11 +363,11 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       icon: "Clock",
       permission: "canViewAppointments",
     },
-    {
-      label: "Transactions",
-      href: "/receptionist/transactions",
-      icon: "CreditCard",
-    },
+    // {
+    //   label: "Transactions",
+    //   href: "/receptionist/transactions",
+    //   icon: "CreditCard",
+    // },
     {
       label: "Reports",
       href: "/receptionist/reports",

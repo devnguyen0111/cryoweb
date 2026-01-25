@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { toast } from "sonner";
 import { ROLE_DASHBOARD_ROUTES } from "@/types/auth";
+import logoIcon from "@/assets/logo/Cryofert-icon.svg";
 
 export const Route = createFileRoute("/login")({
   component: LoginComponent,
@@ -71,9 +72,16 @@ function LoginComponent() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">
-            FSCMS
-          </CardTitle>
+          <div className="flex flex-col items-center gap-4">
+            <img 
+              src={logoIcon} 
+              alt="Cryofert Logo" 
+              className="h-20 w-20"
+            />
+            <CardTitle className="text-2xl font-bold text-center">
+              CryoFert
+            </CardTitle>
+          </div>
           <CardDescription className="text-center">
             Fertility Service & Cryobank Management System
           </CardDescription>

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/utils/cn";
 import { getFullNameFromObject } from "@/utils/name-helpers";
+import logoIcon from "@/assets/logo/Cryofert-icon.svg";
 
 // Icon mapping
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -312,7 +313,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-            <h1 className="text-xl font-bold text-primary">FSCMS</h1>
+            <Link to="/" className="flex items-center gap-3">
+              <img 
+                src={logoIcon} 
+                alt="Cryofert Logo" 
+                className="h-12 w-12"
+              />
+              <h1 className="text-xl font-bold text-primary">CryoFert</h1>
+            </Link>
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden text-gray-500 hover:text-gray-700"
@@ -372,12 +380,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="lg:pl-64">
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-white border-b border-gray-200 h-16 flex items-center px-6">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden text-gray-500 hover:text-gray-700"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden text-gray-500 hover:text-gray-700"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <Link to="/" className="lg:hidden flex items-center gap-2">
+              <img 
+                src={logoIcon} 
+                alt="Cryofert Logo" 
+                className="h-10 w-10"
+              />
+              <span className="text-lg font-bold text-primary">CryoFert</span>
+            </Link>
+          </div>
           <div className="ml-auto flex items-center gap-4">
             <span className="text-sm text-gray-600">
               {getFullNameFromObject(user) || user?.email}

@@ -275,9 +275,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const updateProfile = async (data: Partial<User>) => {
     try {
       const response = await api.user.updateProfile({
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phoneNumber: data.phoneNumber ?? undefined,
+        firstName: data.firstName || user?.firstName || "",
+        lastName: data.lastName || user?.lastName || "",
+        userName: user?.userName || user?.email?.split("@")[0] || "",
+        phone: data.phoneNumber ?? undefined,
+        roleId: user?.roleId || "",
+        status: user?.status ?? true,
       });
       if (response.data) {
         const userData = mapUserResponse(

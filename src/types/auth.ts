@@ -209,26 +209,27 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       permission: "canManageSystem",
     },
     {
-      label: "Content",
-      href: "/admin/content",
+      label: "Service",
+      href: "/admin/service",
       icon: "FileText",
       permission: "canManageSystem",
     },
+
     {
-      label: "Reports",
-      href: "/admin/reports",
-      icon: "BarChart3",
-      permission: "canViewReports",
-    },
-    {
-      label: "Settings",
-      href: "/admin/settings",
+      label: "Transaction",
+      href: "/admin/transaction",
       icon: "Settings",
       permission: "canViewSettings",
     },
     {
-      label: "Audit logs",
-      href: "/admin/logs",
+      label: "Medicine",
+      href: "/admin/medicine",
+      icon: "Pill",
+      permission: "canManageSystem",
+    },
+    {
+      label: "Cryo Package",
+      href: "/admin/cryo-package",
       icon: "ClipboardList",
       permission: "canManageSystem",
     },
@@ -303,36 +304,40 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       icon: "LayoutDashboard",
     },
     {
-    label: "Receive Samples",
-    href: "/lab-technician/receive-sample",
-    icon: "FlaskConical",
-  },
-  {
-    label: "Lab Results",
-    href: "/lab-technician/lab-result",
-    icon: "FileText",
-  },
-  {
-    label: "Quality Control",
-    href: "/lab-technician/quality-check",
-    icon: "CheckCircle",
-  },
-  {
-    label: "Artificial Insemination",
-    href: "/lab-technician/artificial-insemination",
-    icon: "FlaskConical",
-  },
-  {
-    label: "Cryostorage",
-    href: "/lab-technician/cryostorage",
-    icon: "Snowflake",
-  },
-  {
-    label: "Thawing",
-    href: "/lab-technician/thawing",
-    icon: "Thermometer",
-  },
-  
+      label: "Receive Samples",
+      href: "/lab-technician/receive-sample",
+      icon: "FlaskConical",
+    },
+    {
+      label: "Lab Results",
+      href: "/lab-technician/lab-result",
+      icon: "FileText",
+    },
+    {
+      label: "Quality Control",
+      href: "/lab-technician/quality-check",
+      icon: "CheckCircle",
+    },
+    {
+      label: "Artificial Insemination",
+      href: "/lab-technician/artificial-insemination",
+      icon: "FlaskConical",
+    },
+    {
+      label: "Cryostorage",
+      href: "/lab-technician/cryostorage",
+      icon: "Snowflake",
+    },
+    {
+      label: "Thawing",
+      href: "/lab-technician/thawing",
+      icon: "Thermometer",
+    },
+    {
+      label: "Reports",
+      href: "/lab-technician/reports",
+      icon: "BarChart3",
+    },
   ],
   Receptionist: [
     {

@@ -1,10 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -19,96 +15,151 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/admin/categories")({
-  component: AdminCategoriesComponent,
+import type { RelationshipType } from "@/api/types";
+
+export const Route = createFileRoute("/admin/relationship")({
+  component: AdminRelationshipPage,
 });
 
 type ModalMode = "none" | "view" | "create" | "edit" | "delete";
 
-function AdminCategoriesComponent() {
+/**
+ * Cố gắng lấy axios client từ `api` mà không phá cấu trúc dự án của bạn.
+ * Nếu dự án bạn export axios instance là `api` -> dùng được luôn.
+ * Nếu dự án bạn có `api.client` -> dùng `api.client`.
+ */
+function getHttpClient(): any {
+  const anyApi = api as any;
+  return anyApi?.client ?? anyApi;
+}
+
+/**
+ * LIST ALL: GET /api/relationship  -> trong client sẽ là GET /relationship
+ * Dạng response có thể là BaseResponse, DynamicResponse, hoặc array thẳng.
+ * Mình normalize cho chắc.
+ */
+async function listAllRelationships(): Promise<any[]> {
+  const client = getHttpClient();
+  const res = await client.get("/relationship");
+  const payload = res?.data;
+
+  // normalize các kiểu thường gặp
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.result)) return payload.result;
+
+  return [];
+}
+
+function AdminRelationshipPage() {
   const queryClient = useQueryClient();
 
+  // Search hiển thị trong ListToolbar (lọc local)
   const [searchTerm, setSearchTerm] = useState("");
+
+  // PatientId filter (để gọi endpoint /relationship/patient/{patientId} nếu cần)
+  const [patientIdFilter, setPatientIdFilter] = useState("");
+
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">(
     "all",
   );
 
   const [modalMode, setModalMode] = useState<ModalMode>("none");
-  const [selectedCategory, setSelectedCategory] = useState<any>(null);
+  const [selectedRelationship, setSelectedRelationship] = useState<any>(null);
 
+  /**
+   * Form tối thiểu, không nhét fromUserId/toUserId nữa vì model của bạn không có.
+   * Bạn map field theo backend bằng 2 input "Payload JSON" là xong.
+   */
   const [formData, setFormData] = useState<{
-    name: string;
-    description: string;
+    relationshipType?: RelationshipType;
+    note: string;
     isActive: boolean;
+    payloadJson: string; // cho bạn paste payload đúng field backend
   }>({
-    name: "",
-    description: "",
+    relationshipType: undefined,
+    note: "",
     isActive: true,
+    payloadJson: "",
   });
 
   const closeModal = () => {
     setModalMode("none");
-    setSelectedCategory(null);
+    setSelectedRelationship(null);
   };
 
   const openCreate = () => {
-    toast.info("Opening category creation form");
-    setSelectedCategory(null);
-    setFormData({ name: "", description: "", isActive: true });
+    toast.info("Opening relationship creation form");
+    setSelectedRelationship(null);
+    setFormData({
+      relationshipType: undefined,
+      note: "",
+      isActive: true,
+      payloadJson: "",
+    });
     setModalMode("create");
   };
 
-  const openView = (category: any) => {
-    toast.info("Loading category details");
-    setSelectedCategory(category);
+  const openView = (item: any) => {
+    toast.info("Loading relationship details");
+    setSelectedRelationship(item);
     setFormData({
-      name: (category?.name ?? category?.categoryName ?? "") as string,
-      description: (category?.description ?? "") as string,
-      isActive: Boolean(category?.isActive ?? true),
+      relationshipType: item?.relationshipType as RelationshipType | undefined,
+      note: item?.note ?? "",
+      isActive: Boolean(item?.isActive),
+      payloadJson: JSON.stringify(item ?? {}, null, 2),
     });
     setModalMode("view");
   };
 
-  const openEdit = (category: any) => {
-    toast.info("Loading category for editing");
-    setSelectedCategory(category);
+  const openEdit = (item: any) => {
+    toast.info("Loading relationship for editing");
+    setSelectedRelationship(item);
     setFormData({
-      name: (category?.name ?? category?.categoryName ?? "") as string,
-      description: (category?.description ?? "") as string,
-      isActive: Boolean(category?.isActive ?? true),
+      relationshipType: item?.relationshipType as RelationshipType | undefined,
+      note: item?.note ?? "",
+      isActive: Boolean(item?.isActive),
+      payloadJson: JSON.stringify(item ?? {}, null, 2),
     });
     setModalMode("edit");
   };
 
-  const openDelete = (category: any) => {
-    toast.info("Preparing to delete category");
-    setSelectedCategory(category);
+  const openDelete = (item: any) => {
+    toast.info("Preparing to delete relationship");
+    setSelectedRelationship(item);
     setModalMode("delete");
   };
 
+  /**
+   * Query:
+   * - Nếu có patientIdFilter -> dùng api.relationship.getRelationships(patientId)
+   * - Nếu không -> GET /relationship (list all)
+   */
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["serviceCategories", { SearchTerm: searchTerm }],
-    queryFn: () =>
-      api.serviceCategory.getServiceCategories({
-        Page: 1,
-        Size: 50,
-        SearchTerm: searchTerm || undefined,
-      }),
+    queryKey: ["relationships", { patientIdFilter }],
+    queryFn: async () => {
+      if (patientIdFilter.trim()) {
+        const res = await api.relationship.getRelationships(patientIdFilter.trim());
+        return (res as any)?.data ?? [];
+      }
+      return await listAllRelationships();
+    },
   });
 
-  const categories = (data?.data ?? []) as any[];
+  const relationships = (data ?? []) as any[];
 
-  const filteredCategories = useMemo(() => {
-    return categories.filter((category) => {
-      const name = (category?.name ?? category?.categoryName ?? "") as string;
-      const desc = (category?.description ?? "") as string;
+  const filteredRelationships = useMemo(() => {
+    return relationships.filter((item) => {
+      const type = String(item?.relationshipType ?? "").toLowerCase();
+      const note = String(item?.note ?? "").toLowerCase();
 
       const matchesSearch =
         !searchTerm ||
-        name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        desc.toLowerCase().includes(searchTerm.toLowerCase());
+        type.includes(searchTerm.toLowerCase()) ||
+        note.includes(searchTerm.toLowerCase());
 
-      const isActive = Boolean(category?.isActive);
+      const isActive = Boolean(item?.isActive);
 
       const matchesStatus =
         statusFilter === "all" ||
@@ -117,22 +168,41 @@ function AdminCategoriesComponent() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [categories, searchTerm, statusFilter]);
+  }, [relationships, searchTerm, statusFilter]);
+
+  function buildPayloadFromForm(): any {
+    // payload cơ bản
+    const basePayload: any = {
+      relationshipType: formData.relationshipType,
+      note: formData.note || undefined,
+      isActive: formData.isActive,
+    };
+
+    // nếu user paste JSON thì merge vào
+    const raw = formData.payloadJson?.trim();
+    if (!raw) return basePayload;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        return { ...parsed, ...basePayload };
+      }
+      return basePayload;
+    } catch {
+      // JSON sai thì cứ gửi basePayload, đồng thời cảnh báo
+      toast.error("Payload JSON không hợp lệ, hệ thống sẽ dùng dữ liệu cơ bản");
+      return basePayload;
+    }
+  }
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
-        name: formData.name?.trim(),
-        categoryName: formData.name?.trim(),
-        description: formData.description?.trim() || undefined,
-        isActive: formData.isActive,
-      } as any;
-
-      return api.serviceCategory.createServiceCategory(payload);
+      const payload = buildPayloadFromForm();
+      return api.relationship.createRelationship(payload as any);
     },
     onSuccess: () => {
-      toast.success("Created category successfully");
-      queryClient.invalidateQueries({ queryKey: ["serviceCategories"] });
+      toast.success("Created relationship successfully");
+      queryClient.invalidateQueries({ queryKey: ["relationships"] });
       closeModal();
     },
     onError: (e: any) => {
@@ -142,19 +212,13 @@ function AdminCategoriesComponent() {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const id = selectedCategory?.id as string;
-      const payload = {
-        name: formData.name?.trim(),
-        categoryName: formData.name?.trim(),
-        description: formData.description?.trim() || undefined,
-        isActive: formData.isActive,
-      } as any;
-
-      return api.serviceCategory.updateServiceCategory(id, payload);
+      const id = selectedRelationship?.id as string;
+      const payload = buildPayloadFromForm();
+      return api.relationship.updateRelationship(id, payload as any);
     },
     onSuccess: () => {
-      toast.success("Updated category successfully");
-      queryClient.invalidateQueries({ queryKey: ["serviceCategories"] });
+      toast.success("Updated relationship successfully");
+      queryClient.invalidateQueries({ queryKey: ["relationships"] });
       closeModal();
     },
     onError: (e: any) => {
@@ -164,12 +228,12 @@ function AdminCategoriesComponent() {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const id = selectedCategory?.id as string;
-      return api.serviceCategory.deleteServiceCategory(id);
+      const id = selectedRelationship?.id as string;
+      return api.relationship.deleteRelationship(id);
     },
     onSuccess: () => {
-      toast.success("Deleted category successfully");
-      queryClient.invalidateQueries({ queryKey: ["serviceCategories"] });
+      toast.success("Deleted relationship successfully");
+      queryClient.invalidateQueries({ queryKey: ["relationships"] });
       closeModal();
     },
     onError: (e: any) => {
@@ -178,24 +242,15 @@ function AdminCategoriesComponent() {
   });
 
   const toggleActiveMutation = useMutation({
-    mutationFn: async (category: any) => {
-      const id = category?.id as string;
-      const nextIsActive = !Boolean(category?.isActive);
-
-      const name = (category?.name ?? category?.categoryName ?? "") as string;
-
-      const payload = {
-        name: name,
-        categoryName: name,
-        description: (category?.description ?? "") as string,
-        isActive: nextIsActive,
-      } as any;
-
-      return api.serviceCategory.updateServiceCategory(id, payload);
+    mutationFn: async (item: any) => {
+      return api.relationship.updateRelationship(item.id, {
+        ...item,
+        isActive: !Boolean(item?.isActive),
+      } as any);
     },
     onSuccess: () => {
-      toast.success("Category status updated successfully");
-      queryClient.invalidateQueries({ queryKey: ["serviceCategories"] });
+      toast.success("Relationship status updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["relationships"] });
     },
     onError: (e: any) => {
       toast.error(e?.message ?? "Toggle failed");
@@ -203,7 +258,7 @@ function AdminCategoriesComponent() {
   });
 
   const canSubmit =
-    formData.name.trim().length > 0 &&
+    !!formData.relationshipType &&
     !createMutation.isPending &&
     !updateMutation.isPending;
 
@@ -212,31 +267,32 @@ function AdminCategoriesComponent() {
       <DashboardLayout>
         <div className="space-y-8">
           <AdminPageHeader
-            title="Category Management"
-            description="Maintain service groupings, descriptions, and activation states."
+            title="User Relationship Management"
+            description="Create and manage user relationships."
             breadcrumbs={[
               { label: "Dashboard", href: "/admin/dashboard" },
-              { label: "Service categories" },
+              { label: "Relationships" },
             ]}
-            actions={
-              <>
-                <Button onClick={openCreate}>New category</Button>
-              </>
-            }
+            actions={<Button onClick={openCreate}>New relationship</Button>}
           />
 
           <ListToolbar
             searchValue={searchTerm}
             onSearchChange={setSearchTerm}
-            placeholder="Search by category name or description"
+            placeholder="Search by relationship type or note"
             filters={
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  className="h-10 w-64 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  value={patientIdFilter}
+                  onChange={(e) => setPatientIdFilter(e.target.value)}
+                  placeholder="Filter by Patient ID (optional)"
+                />
+
                 <select
                   className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   value={statusFilter}
-                  onChange={(event) =>
-                    setStatusFilter(event.target.value as any)
-                  }
+                  onChange={(event) => setStatusFilter(event.target.value as any)}
                 >
                   <option value="all">All status</option>
                   <option value="active">Active</option>
@@ -246,9 +302,7 @@ function AdminCategoriesComponent() {
                 <Button
                   variant="outline"
                   onClick={() =>
-                    queryClient.invalidateQueries({
-                      queryKey: ["serviceCategories"],
-                    })
+                    queryClient.invalidateQueries({ queryKey: ["relationships"] })
                   }
                   disabled={isFetching}
                 >
@@ -259,18 +313,21 @@ function AdminCategoriesComponent() {
           />
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Category catalog</CardTitle>
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-base">Relationship catalog</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                List uses GET /relationship, you can optionally filter by patient via /relationship/patient or by local search.
+              </p>
             </CardHeader>
 
-            <CardContent>
+            <CardContent className="space-y-4">
               {isLoading ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">
-                  Loading categories…
+                  Loading relationships…
                 </div>
-              ) : filteredCategories.length === 0 ? (
+              ) : filteredRelationships.length === 0 ? (
                 <EmptyState
-                  title="No categories match your filters"
+                  title="No relationships match your filters"
                   description="Try broadening your search criteria."
                   action={
                     <Button
@@ -278,6 +335,7 @@ function AdminCategoriesComponent() {
                       onClick={() => {
                         setSearchTerm("");
                         setStatusFilter("all");
+                        setPatientIdFilter("");
                       }}
                     >
                       Reset filters
@@ -285,14 +343,13 @@ function AdminCategoriesComponent() {
                   }
                 />
               ) : (
-                <div className="overflow-x-auto rounded-lg border">
+                <div className="overflow-hidden rounded-lg border">
                   <table className="w-full border-collapse text-sm">
                     <thead className="bg-muted/40">
                       <tr>
                         <th className="p-3 text-left font-medium text-muted-foreground">
-                          Category
+                          Relationship
                         </th>
-                        
                         <th className="p-3 text-left font-medium text-muted-foreground">
                           Status
                         </th>
@@ -306,25 +363,20 @@ function AdminCategoriesComponent() {
                     </thead>
 
                     <tbody>
-                      {filteredCategories.map((category) => {
-                        const name = (category?.name ??
-                          category?.categoryName ??
-                          "-") as string;
-
-                        const isActive = Boolean(category?.isActive);
-
+                      {filteredRelationships.map((item) => {
+                        const isActive = Boolean(item?.isActive);
                         return (
                           <tr
-                            key={category.id}
+                            key={item.id}
                             className="border-t bg-background hover:bg-muted/30"
                           >
                             <td className="p-3">
                               <div className="font-medium text-foreground">
-                                {name}
+                                {String(item?.relationshipType ?? "-")}
                               </div>
-                              {category?.description ? (
+                              {item?.note ? (
                                 <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                                  {category.description}
+                                  {String(item.note)}
                                 </p>
                               ) : null}
                             </td>
@@ -340,7 +392,7 @@ function AdminCategoriesComponent() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => toggleActiveMutation.mutate(category)}
+                                onClick={() => toggleActiveMutation.mutate(item)}
                                 disabled={toggleActiveMutation.isPending}
                               >
                                 {isActive ? "Disable" : "Enable"}
@@ -352,21 +404,21 @@ function AdminCategoriesComponent() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => openView(category)}
+                                  onClick={() => openView(item)}
                                 >
                                   View
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => openEdit(category)}
+                                  onClick={() => openEdit(item)}
                                 >
                                   Edit
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => openDelete(category)}
+                                  onClick={() => openDelete(item)}
                                 >
                                   Delete
                                 </Button>
@@ -388,10 +440,10 @@ function AdminCategoriesComponent() {
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
                     <div className="text-lg font-semibold">
-                      {modalMode === "create" && "Create category"}
-                      {modalMode === "edit" && "Edit category"}
-                      {modalMode === "view" && "Category details"}
-                      {modalMode === "delete" && "Delete category"}
+                      {modalMode === "create" && "Create relationship"}
+                      {modalMode === "edit" && "Edit relationship"}
+                      {modalMode === "view" && "Relationship details"}
+                      {modalMode === "delete" && "Delete relationship"}
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">
                       {modalMode === "delete"
@@ -409,13 +461,11 @@ function AdminCategoriesComponent() {
                   <div className="space-y-4">
                     <div className="rounded-md border p-3 text-sm">
                       <div className="font-medium">
-                        {(selectedCategory?.name ??
-                          selectedCategory?.categoryName ??
-                          "-") as string}
+                        {String(selectedRelationship?.relationshipType ?? "-")}
                       </div>
-                      {selectedCategory?.description ? (
+                      {selectedRelationship?.note ? (
                         <div className="mt-1 text-muted-foreground">
-                          {String(selectedCategory.description)}
+                          {String(selectedRelationship.note)}
                         </div>
                       ) : null}
                     </div>
@@ -436,37 +486,38 @@ function AdminCategoriesComponent() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-12 items-center gap-3">
                       <label className="col-span-4 text-sm font-medium">
-                        Name
+                        Relationship type
                       </label>
                       <div className="col-span-8">
                         <input
                           className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                          value={formData.name}
+                          value={String(formData.relationshipType ?? "")}
                           disabled={modalMode === "view"}
                           onChange={(e) =>
                             setFormData((prev) => ({
                               ...prev,
-                              name: e.target.value,
+                              relationshipType: e.target.value as any,
                             }))
                           }
+                          placeholder="Must match RelationshipType enum"
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-12 items-start gap-3">
                       <label className="col-span-4 pt-2 text-sm font-medium">
-                        Description
+                        Note
                       </label>
                       <div className="col-span-8">
                         <textarea
                           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                          rows={4}
-                          value={formData.description}
+                          rows={3}
+                          value={formData.note}
                           disabled={modalMode === "view"}
                           onChange={(e) =>
                             setFormData((prev) => ({
                               ...prev,
-                              description: e.target.value,
+                              note: e.target.value,
                             }))
                           }
                         />
@@ -490,8 +541,32 @@ function AdminCategoriesComponent() {
                           }
                         />
                         <span className="text-sm text-muted-foreground">
-                          Enable category
+                          Enable relationship
                         </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-12 items-start gap-3">
+                      <label className="col-span-4 pt-2 text-sm font-medium">
+                        Payload JSON
+                      </label>
+                      <div className="col-span-8">
+                        <textarea
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          rows={7}
+                          value={formData.payloadJson}
+                          disabled={modalMode === "view"}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              payloadJson: e.target.value,
+                            }))
+                          }
+                          placeholder='Paste extra fields needed by backend, example: {"patientId":"...","doctorId":"..."}'
+                        />
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Nếu backend yêu cầu patientId, doctorId, relativeId thì paste vào đây.
+                        </p>
                       </div>
                     </div>
 
@@ -510,7 +585,7 @@ function AdminCategoriesComponent() {
                       ) : modalMode === "edit" ? (
                         <Button
                           onClick={() => updateMutation.mutate()}
-                          disabled={!canSubmit || !selectedCategory?.id}
+                          disabled={!canSubmit || !selectedRelationship?.id}
                         >
                           Save
                         </Button>
@@ -526,3 +601,5 @@ function AdminCategoriesComponent() {
     </ProtectedRoute>
   );
 }
+
+export default AdminRelationshipPage;

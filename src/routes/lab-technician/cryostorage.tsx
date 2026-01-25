@@ -380,7 +380,12 @@ function CryostoragePage() {
           ${selectedSlot?.id === node.id ? "bg-blue-50" : "hover:bg-gray-50"}`}
           onClick={() => void handleNodeClick(node)}
         >
-          {!isSlot ? <span>{isExpanded ? "📂" : "📁"}</span> : <span>🧊</span>}
+          <span>
+  {!isSlot && node.type === "Tank" && (isExpanded ? "🛢️" : "🗄️")}
+  {!isSlot && node.type === "Canister" && "🧊"}
+  {!isSlot && node.type === "Goblet" && "🧪"}
+  {isSlot && "🔲"}
+</span>
           <span>{node.name}</span>
           {node.type === "Slot" && typeof node.sampleCount === "number" && (
             <span className="ml-auto text-xs text-gray-400">count: {node.sampleCount}</span>

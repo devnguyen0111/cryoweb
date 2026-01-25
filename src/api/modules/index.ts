@@ -31,4 +31,5 @@ export { MedicineApi } from "./medicine.api";
 export { MediaApi } from "./media.api";
 export { CryoLocationApi } from "./cryolocation.api";
 export { CryoImportApi } from "./cryo-import.api";
+export { CryoExportApi } from "./cryo-exports";
 

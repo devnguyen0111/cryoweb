@@ -333,11 +333,6 @@ export const ROLE_NAVIGATION: Record<UserRole, NavigationItem[]> = {
       href: "/lab-technician/thawing",
       icon: "Thermometer",
     },
-    {
-      label: "Reports",
-      href: "/lab-technician/reports",
-      icon: "BarChart3",
-    },
   ],
   Receptionist: [
     {
